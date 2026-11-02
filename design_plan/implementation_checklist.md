@@ -1,13 +1,13 @@
 # Outlook Email Collector — Implementation Checklist
 
-Build a local Windows application using Node.js, Express, React, TypeScript, Vite, and SQLite. Connect one personal Outlook.com account and collect Inbox emails from an editable list of exact sender addresses.
+Build a local Windows application using Node.js, Express, React, JavaScript, Vite, and SQLite. Connect one personal Outlook.com account and collect Inbox emails from an editable list of exact sender addresses.
 
 ## 1. Project foundation
 
-- [ ] Initialize the Node.js project with a lockfile and TypeScript configuration.
+- [ ] Initialize the Node.js project with a lockfile and JavaScript ES module configuration; use `.js` for server modules and `.jsx` for React components.
 - [ ] Set up Express for the local API and React with Vite for the dashboard.
-- [ ] Define shared types for connection status, collection runs, sender settings, emails, and paginated responses.
-- [ ] Add development, test, production build, and production start scripts.
+- [ ] Document shared data shapes for connection status, collection runs, sender settings, emails, and paginated responses using JSDoc.
+- [ ] Add development, lint, test, production build, and production start scripts.
 - [ ] Serve the production React build and API from the same loopback origin.
 - [ ] Add configuration validation, structured error handling, and logs that exclude tokens and message contents.
 - [ ] Ignore dependencies, build output, local configuration, databases, and token caches in Git.
@@ -65,7 +65,7 @@ Build a local Windows application using Node.js, Express, React, TypeScript, Vit
 
 ## 6. Local API and dashboard
 
-- [ ] Add typed API endpoints for connection status, setup, sign-in/sign-out, sender management, email listing/search, and email details.
+- [ ] Add JavaScript API endpoints with documented request and response shapes for connection status, setup, sign-in/sign-out, sender management, email listing/search, and email details.
 - [ ] Validate requests and bound pagination parameters.
 - [ ] Bind only to loopback and protect state-changing requests against cross-origin access.
 - [ ] Display connection status, startup cutoff, last successful check, current-run email count, and total saved count.
@@ -98,7 +98,7 @@ Build a local Windows application using Node.js, Express, React, TypeScript, Vit
 - [ ] Test connection loss, throttling, transient server errors, authentication expiry, and recovery without duplicate inserts.
 - [ ] Test account isolation, persistence after restart, API validation, and cross-origin request protection.
 - [ ] Test dashboard search, current-run/history filters, message details, local time display, and safe text rendering.
-- [ ] Run TypeScript checks, automated tests, and a production build.
+- [ ] Run JavaScript/React lint checks, automated tests, and a production build.
 
 ## 9. Live acceptance check
 
