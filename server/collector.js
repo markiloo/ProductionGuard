@@ -1,15 +1,14 @@
 import { db } from './db.js';
-import { authState, getAccessToken, requireInteractiveSignIn } from './auth.js';
+import { authState, getCredentials } from './auth.js';
 import { createCollector } from './collector-core.js';
 
-/** Fresh UTC cutoff is recorded on module load, before setup or sign-in is complete. */
+/** Fresh UTC cutoff is recorded on module load, before Gmail setup is complete. */
 export const startupCutoff = new Date().toISOString();
 const collector = createCollector({
   db,
   cutoff: startupCutoff,
-  getAccessToken,
+  getCredentials,
   getAccountId: () => authState().account?.id || null,
-  onInteractionRequired: requireInteractiveSignIn,
 });
 
 export const collectionState = () => collector.state();

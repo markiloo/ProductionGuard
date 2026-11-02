@@ -26,3 +26,11 @@ export function getEmail(db, accountId, messageId) {
   const row = db.prepare('SELECT message_id AS id,sender_address AS senderAddress,sender_name AS senderName,recipients,subject,received_at AS receivedAt,preview,body,has_attachments AS hasAttachments FROM emails WHERE account_id = ? AND message_id = ?').get(accountId, messageId);
   return row ? { ...row, recipients: JSON.parse(row.recipients) } : null;
 }
+
+/** Delete an account's local mail and record a cutoff so older Inbox mail stays cleared. */
+export function clearSavedEmails(db, accountId, clearedAt) {
+  return db.transaction(() => {
+    db.prepare('INSERT INTO account_clears(account_id,cleared_at) VALUES(?,?) ON CONFLICT(account_id) DO UPDATE SET cleared_at=max(account_clears.cleared_at,excluded.cleared_at)').run(accountId, clearedAt);
+    return db.prepare('DELETE FROM emails WHERE account_id=?').run(accountId).changes;
+  })();
+}

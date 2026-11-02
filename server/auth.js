@@ -1,76 +1,74 @@
-import path from 'node:path';
-import os from 'node:os';
 import fs from 'node:fs';
-import { PublicClientApplication } from '@azure/msal-node';
-import { PersistenceCachePlugin, PersistenceCreator, DataProtectionScope } from '@azure/msal-node-extensions';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { ImapFlow } from 'imapflow';
 
-let app;
-let account = null;
-let deviceFlow = null;
-let cachePlugin = null;
-let interactiveRequired = false;
-let authGeneration = 0;
+const dataDir = process.env.DATA_DIR || path.resolve('data');
+const credentialPath = path.join(dataDir, 'gmail-credential.dpapi');
+let credential = null;
+let authError = null;
 
-/** Create a public client with an OS encrypted cache; startup fails closed if encryption is unavailable. */
-export async function configureAuth(clientId) {
-  cancelSignIn('reconfigure');
-  app = null;
-  account = null;
-  if (!clientId) return;
-  const cachePath = path.join(process.env.APPDATA || os.homedir(), 'POChecker', 'msal-cache.bin');
-  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-  const persistence = await PersistenceCreator.createPersistence({ cachePath, dataProtectionScope: DataProtectionScope.CurrentUser, usePlaintextFileOnLinux: false });
-  cachePlugin = new PersistenceCachePlugin(persistence);
-  const configuredApp = new PublicClientApplication({ auth: { clientId, authority: 'https://login.microsoftonline.com/consumers' }, cache: { cachePlugin } });
-  const accounts = await configuredApp.getTokenCache().getAllAccounts();
-  app = configuredApp;
-  account = accounts[0] || null;
-  interactiveRequired = false;
+export function protectWithWindowsUser(value, encrypt) {
+  if (process.platform !== 'win32') throw new Error('This local build requires Windows credential protection.');
+  const operation = encrypt
+    ? '$result=[Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($value),$entropy,[Security.Cryptography.DataProtectionScope]::CurrentUser);[Console]::Out.Write([Convert]::ToBase64String($result))'
+    : '$result=[Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($value),$entropy,[Security.Cryptography.DataProtectionScope]::CurrentUser);[Console]::Out.Write([Text.Encoding]::UTF8.GetString($result))';
+  const script = `Add-Type -AssemblyName System.Security;$value=[Console]::In.ReadToEnd();$entropy=[Text.Encoding]::UTF8.GetBytes('PO Checker Gmail local credential');${operation}`;
+  return new Promise((resolve, reject) => {
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
+    let output = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (part) => { output += part; });
+    child.on('error', () => reject(new Error('Windows credential protection is unavailable.')));
+    child.on('close', (code) => code === 0 ? resolve(output) : reject(new Error('Windows credential protection failed.')));
+    child.stdin.end(value);
+  });
+}
+
+export async function restoreGmail() {
+  if (!fs.existsSync(credentialPath)) return;
+  try {
+    credential = JSON.parse(await protectWithWindowsUser(fs.readFileSync(credentialPath, 'utf8'), false));
+    authError = null;
+  } catch {
+    credential = null;
+    authError = 'Saved Gmail credentials could not be opened by this Windows user. Connect again.';
+  }
 }
 
 export function authState() {
-  return { configured: Boolean(app), connected: Boolean(account), account: account ? { id: account.homeAccountId, name: account.name || '', username: account.username || '' } : null, signingIn: Boolean(deviceFlow), needsInteractiveSignIn: interactiveRequired };
+  return {
+    configured: Boolean(credential), connected: Boolean(credential),
+    account: credential ? { id: `gmail:${credential.email.toLowerCase()}`, name: '', username: credential.email } : null,
+    signingIn: false, needsInteractiveSignIn: false, error: authError,
+  };
 }
 
-export async function beginSignIn(onCode, onComplete) {
-  if (!app) throw new Error('Save a Microsoft application client ID first.');
-  if (deviceFlow) throw new Error('Sign-in is already in progress.');
-  const client = app;
-  const existingAccountId = account?.homeAccountId || null;
-  const flowGeneration = ++authGeneration;
-  const request = { scopes: ['Mail.Read'], cancel: false, deviceCodeCallback: (response) => onCode({ message: response.message, userCode: response.userCode, verificationUri: response.verificationUri, expiresOn: response.expiresOn }) };
-  deviceFlow = request;
+export function getCredentials() { return credential; }
+
+export async function connectGmail(email, appPassword) {
+  const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user: email, pass: appPassword }, logger: false });
   try {
-    const result = await client.acquireTokenByDeviceCode(request);
-    if (!result) throw new Error('Sign-in was cancelled.');
-    if (flowGeneration !== authGeneration) {
-      if (result.account && (request.cancelReason === 'signout' || result.account.homeAccountId !== existingAccountId)) await client.getTokenCache().removeAccount(result.account);
-      throw new Error('Sign-in was cancelled.');
-    }
-    account = result.account;
-    interactiveRequired = false;
-    onComplete(null);
-  } catch (error) { onComplete(error); }
-  finally { if (deviceFlow === request) deviceFlow = null; }
+    await client.connect();
+    const lock = await client.getMailboxLock('INBOX', { readOnly: true });
+    lock.release();
+    await client.logout();
+  } catch (error) {
+    try { client.close(); } catch { /* Connection may already be closed. */ }
+    const isAuthError = /AUTHENTICATIONFAILED|Invalid credentials|Application-specific password|Login failed|Invalid login/i.test(String(error?.message || ''));
+    throw new Error(isAuthError
+      ? 'Gmail rejected the sign-in. Check the address, app password, and 2-Step Verification.'
+      : 'Could not reach Gmail or open Inbox. Check the network connection and try again.');
+  }
+  const protectedValue = await protectWithWindowsUser(JSON.stringify({ email, password: appPassword }), true);
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(credentialPath, protectedValue, { encoding: 'utf8', mode: 0o600 });
+  credential = { email, password: appPassword };
+  authError = null;
 }
 
-export function cancelSignIn(reason = 'cancel') {
-  authGeneration += 1;
-  if (deviceFlow) {
-    deviceFlow.cancel = true;
-    if (reason === 'signout' || deviceFlow.cancelReason !== 'signout') deviceFlow.cancelReason = reason;
-  }
-}
-export function requireInteractiveSignIn() { interactiveRequired = true; }
-export async function signOut() {
-  cancelSignIn('signout');
-  const signedAccount = account;
-  account = null;
-  interactiveRequired = false;
-  if (app && signedAccount) await app.getTokenCache().removeAccount(signedAccount);
-}
-export async function getAccessToken() {
-  if (!app || !account) return null;
-  try { return (await app.acquireTokenSilent({ account, scopes: ['Mail.Read'] })).accessToken; }
-  catch (error) { if (error.name === 'InteractionRequiredAuthError') { interactiveRequired = true; return null; } throw error; }
+export function signOut() {
+  credential = null;
+  authError = null;
+  fs.rmSync(credentialPath, { force: true });
 }

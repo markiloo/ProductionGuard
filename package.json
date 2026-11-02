@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Local Outlook Inbox sender collector",
+  "description": "Local Gmail Inbox sender collector",
   "scripts": {
     "dev": "concurrently -k \"node --watch server/index.js\" \"vite --host 127.0.0.1\"",
     "lint": "eslint server client/src vite.config.js",
@@ -12,10 +12,10 @@
     "start": "node server/index.js"
   },
   "dependencies": {
-    "@azure/msal-node": "^3.8.3",
-    "@azure/msal-node-extensions": "^1.5.7",
     "better-sqlite3": "^12.2.0",
     "express": "^5.1.0",
+    "html-to-text": "^9.0.5",
+    "imapflow": "^1.0.200",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

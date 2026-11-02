@@ -1,31 +1,34 @@
-# PO Checker
+# PO Checker — Gmail Inbox collector
 
-A local Windows dashboard that saves new Inbox messages from exact sender addresses during the current server run. Message history and sender settings are stored in a local SQLite database. Microsoft tokens are kept separately in the current Windows user's encrypted cache.
+A local Windows dashboard that saves new Gmail Inbox messages from exact sender addresses during each server run. It uses Gmail's IMAP service, so there is no Microsoft Graph, Microsoft account, or Google Cloud app registration.
 
-## Prerequisites and setup
+## Gmail setup
 
-- Install a current Node.js LTS release.
-- In the [Microsoft Entra admin center](https://entra.microsoft.com), open **Identity → Applications → App registrations → New registration**. Choose **Personal Microsoft accounts** as the supported account type, register the app, and copy its Application (client) ID. Microsoft documents the [registration and account-type choices](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app?tabs=client-secret).
-- In the app registration, open **Authentication → Advanced settings** and enable **Allow public client flows** for device-code sign-in. Under **API permissions**, add **Microsoft Graph → Delegated permissions → `Mail.Read`**. The app uses a public-client flow, so do not create a client secret. See Microsoft's [public client and device-code guidance](https://learn.microsoft.com/en-us/entra/identity-platform/msal-client-applications) and [Graph permissions reference](https://learn.microsoft.com/en-us/graph/permissions-reference).
-- Install dependencies with `npm install`, then run `npm run build` and `npm start`. Open `http://127.0.0.1:4174`, enter the app's client ID, and complete device-code sign-in.
+1. Turn on [Google 2-Step Verification](https://myaccount.google.com/security).
+2. Create a [Google app password](https://myaccount.google.com/apppasswords) for this local collector. Google may not offer app passwords for some managed or Advanced Protection accounts; see [Google's guidance](https://support.google.com/accounts/answer/185833?hl=en).
+3. Install Node.js, run `npm install` and `npm run build` from this directory, then run `launch.bat`. In the dashboard enter your Gmail address and the app password. Do not enter your normal Google password.
 
-`npm run dev` runs Express and Vite for development. `npm run lint` and `npm test` run lint and automated checks. `launch.bat` starts the production server and opens the dashboard when the API is ready. Closing the browser leaves collection running; stopping the server ends that collection run.
+Gmail IMAP is enabled automatically for personal accounts according to [Gmail Help](https://support.google.com/mail/answer/7126229?hl=en). The app connects only to `imap.gmail.com:993` over TLS and opens `INBOX` read-only.
 
-## Collection behavior
+## Commands
 
-The server records a fresh UTC cutoff as soon as it starts. Only Inbox messages received strictly after that time can be saved. Browser refreshes, reconnects, and sender changes do not reset it. A server restart creates a new cutoff; messages received while stopped stay excluded. New senders are checked against the entire current run window. Matching uses the exact sender email address, ignoring case, and never the display name. Inbox-only polling may miss messages moved elsewhere before a check. The collector does not download attachments, mark mail read, send mail, or modify Outlook messages.
+- `npm run dev`: Express API and Vite dashboard for development.
+- `npm run lint`, `npm test`, `npm run build`: checks and production bundle.
+- `npm start`: production server at `http://127.0.0.1:4174`.
+- `launch.bat`: starts the production server and opens the dashboard after it is ready.
+
+Closing the browser leaves collection running. Stop the server console to end the run. Each server start records a fresh UTC cutoff; only mail received strictly after it can be saved. Restarting excludes mail received while the server was stopped. Adding a sender checks the whole current-run window. Exact sender addresses are matched, not domains or display names. Inbox-only polling can miss messages moved out before a check.
 
 ## Local data and privacy
 
-The database is `data/po-checker.db` under the app directory (or `DATA_DIR` if set). The MSAL token cache is stored under `%APPDATA%\POChecker\msal-cache.bin` and uses Windows current-user encryption through [Microsoft Authentication Extensions for Node](https://learn.microsoft.com/en-us/entra/identity-platform/msal-node-extensions). History remains on disk after sign-out, but the dashboard hides it until the same account reconnects. To erase local data, stop the server, delete the app's `data` directory, and remove `%APPDATA%\POChecker`. Do not copy either location into source control.
+Saved mail and sender settings live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
+
+The collector does not download attachment parts, mark mail read, send mail, or modify messages. Text is displayed as escaped text and cannot load remote email content.
 
 ## Troubleshooting
 
-- If sign-in fails, verify the client ID, supported account types, public-client setting, and delegated `Mail.Read` consent.
-- If secure cache initialization fails, confirm the app runs under a normal Windows user profile. The app fails closed rather than saving tokens without encryption.
-- If Graph reports expired sign-in, sign out and sign in again.
-- If a message is missing, confirm it is still in Inbox, arrived after the displayed run cutoff, and its actual sender address is on the allowlist.
+- For an app-password error, verify 2-Step Verification and create a new app password. A changed Google account password can revoke existing app passwords.
+- Check that the message is still in Gmail Inbox, came after the displayed run cutoff, and its actual From address is on the allowlist.
+- A transient connection error is retried on later checks; verify network access to `imap.gmail.com:993`.
 
-The local endpoint shapes and request parameters are documented in [docs/API.md](docs/API.md).
-
-The API binds only to loopback. State-changing API calls reject foreign browser origins. Email bodies are displayed as plain text.
+See [docs/API.md](docs/API.md) for endpoint shapes.

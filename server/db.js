@@ -38,6 +38,7 @@ export function migrate() {
      CREATE TABLE emails (account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, message_id TEXT NOT NULL, run_id TEXT NOT NULL REFERENCES runs(id), sender_address TEXT NOT NULL, sender_name TEXT NOT NULL DEFAULT '', recipients TEXT NOT NULL DEFAULT '[]', subject TEXT NOT NULL DEFAULT '', received_at TEXT NOT NULL, preview TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', has_attachments INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(account_id, message_id));
      CREATE INDEX emails_received ON emails(account_id, received_at DESC);
      CREATE INDEX emails_run ON emails(account_id, run_id);`,
+    `CREATE TABLE account_clears (account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, cleared_at TEXT NOT NULL);`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;

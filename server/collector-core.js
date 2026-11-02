@@ -1,119 +1,117 @@
 import crypto from 'node:crypto';
-import { isEligibleMessage } from './rules.js';
+import { ImapFlow } from 'imapflow';
+import { htmlToText } from 'html-to-text';
+import { normalizeSender } from './rules.js';
 
-/**
- * Build a single-account, single-run Graph Inbox collector. Dependencies are injected so
- * polling, cancellation, pagination, retry, and account isolation can be exercised offline.
- */
-export function createCollector({ db, cutoff, getAccessToken, getAccountId, onInteractionRequired = () => {}, fetchImpl = fetch, now = () => new Date().toISOString(), waitImpl = wait }) {
+const now = () => new Date().toISOString();
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Collect Gmail INBOX mail during one server run. Dependencies may be injected for offline checks. */
+export function createCollector({ db, cutoff, getAccountId, getCredentials, createClient = (credentials) => new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user: credentials.email, pass: credentials.password }, logger: false }), clock = now, sleep = wait }) {
   const runId = crypto.randomUUID();
-  let timer = null;
-  let active = false;
-  let generation = 0;
-  let rerunRequested = false;
-  let activeAbortController = null;
-  let lastError = null;
-  db.prepare("INSERT INTO runs(id, cutoff, started_at, status) VALUES (?, ?, ?, 'waiting')").run(runId, cutoff, now());
-
-  function currentAccount() { return getAccountId() || null; }
-  function state() {
-    const run = db.prepare('SELECT * FROM runs WHERE id = ?').get(runId);
-    const count = db.prepare('SELECT COUNT(*) AS count FROM emails WHERE account_id = ? AND received_at > ?').get(currentAccount() || '', cutoff).count;
-    return { runId, cutoff, lastSuccessAt: run.last_success_at, error: lastError, collecting: active, currentRunCount: count };
-  }
-  function begin() {
-    if (timer) return;
-    timer = setInterval(() => { collect().catch(() => {}); }, 15_000);
-    collect({ rerunIfActive: true }).catch(() => {});
-  }
-  function stop() {
-    clearInterval(timer);
-    timer = null;
-    generation += 1;
-    rerunRequested = false;
-    activeAbortController?.abort();
-  }
+  db.prepare("INSERT INTO runs(id, cutoff, started_at, status) VALUES (?, ?, ?, 'waiting')").run(runId, cutoff, clock());
+  let timer = null; let active = false; let generation = 0; let rerun = false; let client = null; let error = null;
+  const account = () => getAccountId() || null;
+  const state = () => {
+    const run = db.prepare('SELECT last_success_at FROM runs WHERE id=?').get(runId);
+    const currentRunCount = db.prepare('SELECT COUNT(*) count FROM emails WHERE account_id=? AND run_id=?').get(account() || '', runId).count;
+    return { runId, cutoff, lastSuccessAt: run.last_success_at, error, collecting: active, currentRunCount };
+  };
+  const stop = () => { clearInterval(timer); timer = null; generation += 1; rerun = false; if (client) client.close(); };
+  const begin = () => { if (timer) return; timer = setInterval(() => collect().catch(() => {}), 15_000); collect({ rerunIfActive: true }).catch(() => {}); };
   async function collect({ rerunIfActive = false } = {}) {
-    if (active) { if (rerunIfActive) rerunRequested = true; return; }
+    if (active) { if (rerunIfActive) rerun = true; return; }
     active = true;
-    const controller = new AbortController();
-    activeAbortController = controller;
-    const thisGeneration = generation;
-    const accountId = currentAccount();
+    const version = generation;
+    const accountId = account();
     try {
       if (!accountId) return;
-      const senders = db.prepare('SELECT address, normalized_address FROM senders WHERE account_id = ?').all(accountId);
-      const token = await getAccessToken();
-      if (generation !== thisGeneration || currentAccount() !== accountId || !token || !senders.length) return;
-      lastError = null;
-      db.prepare("UPDATE runs SET account_id = ?, status = 'running' WHERE id = ?").run(accountId, runId);
-      const headers = { Authorization: `Bearer ${token}`, Prefer: 'IdType="ImmutableId", outlook.body-content-type="text"' };
-      for (const sender of senders) {
-        let next = new URL('https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages');
-        next.searchParams.set('$filter', `receivedDateTime gt ${cutoff} and from/emailAddress/address eq '${sender.address.replaceAll("'", "''")}'`);
-        next.searchParams.set('$select', 'id,from,toRecipients,ccRecipients,bccRecipients,subject,receivedDateTime,bodyPreview,hasAttachments');
-        next.searchParams.set('$top', '50');
-        while (next) {
-          const page = await graphFetch(next.toString(), headers, controller.signal, fetchImpl, waitImpl, onInteractionRequired);
-          for (const item of page.value || []) {
-            if (controller.signal.aborted || generation !== thisGeneration) return;
-            const messageSender = item.from?.emailAddress?.address || '';
-            if (!isEligibleMessage(item, [sender.address], cutoff)) continue;
-            const allowed = db.prepare('SELECT 1 FROM senders WHERE account_id = ? AND normalized_address = ?').get(accountId, messageSender.toLowerCase());
-            if (!allowed || currentAccount() !== accountId || generation !== thisGeneration) continue;
-            if (db.prepare('SELECT 1 FROM emails WHERE account_id = ? AND message_id = ?').get(accountId, item.id)) continue;
-            const full = await graphFetch(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(item.id)}?$select=id,body`, headers, controller.signal, fetchImpl, waitImpl, onInteractionRequired);
-            if (controller.signal.aborted || generation !== thisGeneration || currentAccount() !== accountId || !db.prepare('SELECT 1 FROM senders WHERE account_id = ? AND normalized_address = ?').get(accountId, messageSender.toLowerCase())) continue;
-            const recipients = [
-              ...(item.toRecipients || []).map((recipient) => ({ type: 'To', recipient })),
-              ...(item.ccRecipients || []).map((recipient) => ({ type: 'Cc', recipient })),
-              ...(item.bccRecipients || []).map((recipient) => ({ type: 'Bcc', recipient })),
-            ].map(({ type, recipient }) => ({ type, name: recipient.emailAddress?.name || '', address: recipient.emailAddress?.address || '' }));
-            db.prepare('INSERT OR IGNORE INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(accountId, item.id, runId, messageSender, item.from?.emailAddress?.name || '', JSON.stringify(recipients), item.subject || '', item.receivedDateTime, item.bodyPreview || '', full.body?.content || '', item.hasAttachments ? 1 : 0);
-          }
-          next = page['@odata.nextLink'] ? new URL(page['@odata.nextLink']) : null;
+      const senders = db.prepare('SELECT address,normalized_address FROM senders WHERE account_id=?').all(accountId);
+      const credentials = getCredentials();
+      if (!senders.length || !credentials) return;
+      error = null;
+      db.prepare("UPDATE runs SET account_id=?,status='running' WHERE id=?").run(accountId, runId);
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          client = createClient(credentials);
+          await client.connect();
+          if (version !== generation || account() !== accountId) return;
+          const lock = await client.getMailboxLock('INBOX', { readOnly: true });
+          try {
+            for (const sender of senders) {
+              const uids = await client.search({ since: new Date(cutoff), from: sender.address }, { uid: true }) || [];
+              for (const uid of uids) {
+                if (version !== generation || account() !== accountId) return;
+                const message = await client.fetchOne(uid, { uid: true, emailId: true, envelope: true, internalDate: true, bodyStructure: true }, { uid: true });
+                if (!message) continue;
+                const from = message.envelope?.from?.[0];
+                const receivedTime = new Date(message.internalDate);
+                if (Number.isNaN(receivedTime.getTime())) continue;
+                const receivedAt = receivedTime.toISOString();
+                if (Date.parse(receivedAt) <= Date.parse(cutoff) || normalizeSender(from?.address) !== sender.normalized_address) continue;
+                const id = String(message.emailId || `${client.mailbox.uidValidity}:${uid}`);
+                if (db.prepare('SELECT 1 FROM emails WHERE account_id=? AND message_id=?').get(accountId, id)) continue;
+                if (!allowed(accountId, from.address, receivedAt, version)) continue;
+                const parts = inspectParts(message.bodyStructure);
+                let body = '';
+                const chosen = parts.plain || parts.html;
+                if (chosen) {
+                  const downloaded = await client.download(uid, chosen, { uid: true });
+                  if (downloaded.content) {
+                    const chunks = [];
+                    for await (const chunk of downloaded.content) chunks.push(chunk);
+                    body = Buffer.concat(chunks).toString('utf8');
+                    if (!parts.plain) body = htmlToText(body, { wordwrap: false });
+                  }
+                }
+                if (!allowed(accountId, from.address, receivedAt, version)) continue;
+                const recipients = ['to', 'cc', 'bcc'].flatMap((type) => (message.envelope?.[type] || []).map((item) => ({ type: type === 'to' ? 'To' : type === 'cc' ? 'Cc' : 'Bcc', name: item.name || '', address: item.address || '' })));
+                db.prepare('INSERT OR IGNORE INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(accountId, id, runId, from.address, from.name || '', JSON.stringify(recipients), message.envelope.subject || '', receivedAt, body.slice(0, 200), body, parts.hasAttachments ? 1 : 0);
+              }
+            }
+          } finally { lock.release(); }
+          if (version === generation && account() === accountId) db.prepare("UPDATE runs SET last_success_at=?,error=NULL WHERE id=?").run(clock(), runId);
+          return;
+        } catch (failure) {
+          if (version !== generation || account() !== accountId) return;
+          if (isAuthError(failure) || attempt === 2) throw failure;
+          await sleep(1000 * 2 ** attempt);
+        } finally {
+          try { await client?.logout(); } catch { /* Broken connections close themselves. */ }
+          client = null;
         }
       }
-      if (generation === thisGeneration && currentAccount() === accountId) db.prepare("UPDATE runs SET last_success_at = ?, status = 'running', error = NULL WHERE id = ?").run(now(), runId);
-    } catch (error) {
-      if (generation !== thisGeneration || currentAccount() !== accountId) return;
-      lastError = safeError(error);
-      console.error(JSON.stringify({ level: 'error', event: 'collection_failed', message: lastError }));
-      db.prepare('UPDATE runs SET error = ? WHERE id = ?').run(lastError, runId);
-      throw error;
+    } catch (failure) {
+      if (version !== generation || account() !== accountId) return;
+      error = isAuthError(failure) ? 'Gmail sign-in failed. Check or replace the app password.' : 'Gmail connection failed. The collector will retry.';
+      db.prepare('UPDATE runs SET error=? WHERE id=?').run(error, runId);
+      console.error(JSON.stringify({ level: 'error', event: 'collection_failed', message: error }));
     } finally {
-      if (activeAbortController === controller) activeAbortController = null;
       active = false;
-      if (rerunRequested) { rerunRequested = false; queueMicrotask(() => collect().catch(() => {})); }
+      if (rerun) { rerun = false; queueMicrotask(() => collect().catch(() => {})); }
     }
   }
-  return { runId, state, begin, stop, collect };
+  function allowed(accountId, address, receivedAt, version) {
+    return version === generation && account() === accountId
+      && Boolean(db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(address)))
+      && !db.prepare('SELECT 1 FROM account_clears WHERE account_id=? AND cleared_at>=?').get(accountId, receivedAt);
+  }
+  return { runId, state, stop, begin, collect };
 }
 
-async function graphFetch(url, headers, signal, fetchImpl, waitImpl, onInteractionRequired) {
-  let delay = 1000;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    if (signal.aborted) throw new Error('Collection cancelled.');
-    let response;
-    try { response = await fetchImpl(url, { headers, signal }); }
-    catch (error) { if (signal.aborted) throw error; if (attempt === 4) throw new Error(`Microsoft Graph connection failed: ${error.message}`); await waitImpl(delay, signal); delay = Math.min(delay * 2, 30_000); continue; }
-    if (response.ok) return response.json();
-    if (response.status === 401) { onInteractionRequired(); throw new Error('Microsoft sign-in expired. Sign in again.'); }
-    if (![429, 500, 502, 503, 504].includes(response.status) || attempt === 4) throw new Error(`Microsoft Graph request failed (${response.status}).`);
-    const retryValue = response.headers.get('retry-after');
-    const retrySeconds = Number(retryValue);
-    const retry = Number.isFinite(retrySeconds) ? retrySeconds : retryValue ? Math.max(0, (Date.parse(retryValue) - Date.now()) / 1000) : 0;
-    await waitImpl(retry ? retry * 1000 : delay, signal);
-    delay = Math.min(delay * 2, 30_000);
+function inspectParts(root) {
+  const result = { plain: null, html: null, hasAttachments: false };
+  function visit(part) {
+    if (!part) return;
+    const type = String(part.type || '').toLowerCase();
+    const disposition = String(part.disposition || '').toLowerCase();
+    const attached = disposition === 'attachment' || Boolean(part.parameters?.name || part.dispositionParameters?.filename);
+    if (attached) { result.hasAttachments = true; return; }
+    if (type === 'text/plain' && !result.plain) result.plain = part.part || '1';
+    if (type === 'text/html' && !result.html) result.html = part.part || '1';
+    for (const child of part.childNodes || []) visit(child);
   }
+  visit(root);
+  return result;
 }
-function wait(milliseconds, signal) {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) { reject(new Error('Collection cancelled.')); return; }
-    const timerId = setTimeout(finish, milliseconds);
-    function finish() { signal.removeEventListener('abort', abort); resolve(); }
-    function abort() { clearTimeout(timerId); signal.removeEventListener('abort', abort); reject(new Error('Collection cancelled.')); }
-    signal.addEventListener('abort', abort, { once: true });
-  });
-}
-function safeError(error) { return error?.message?.slice(0, 240) || 'Collection failed.'; }
+function isAuthError(failure) { return /AUTHENTICATIONFAILED|Invalid credentials|Application-specific password|Login failed|Invalid login/i.test(String(failure?.message || '')); }

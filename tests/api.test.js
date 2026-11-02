@@ -50,9 +50,9 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     const refreshed = await (await fetch(`${base}/api/status`)).json();
     assert.equal(refreshed.collection.cutoff, status.collection.cutoff, 'status refresh must preserve the startup cutoff');
 
-    const invalidSetup = await fetch(`${base}/api/setup`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: 'bad' }) });
+    const invalidSetup = await fetch(`${base}/api/setup`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'bad', appPassword: '' }) });
     assert.equal(invalidSetup.status, 400);
-    assert.deepEqual(await invalidSetup.json(), { error: 'Enter a valid Microsoft application client ID.' });
+    assert.deepEqual(await invalidSetup.json(), { error: 'Enter a Gmail address and app password.' });
 
     const deniedOrigin = await fetch(`${base}/api/sign-out`, { method: 'POST', headers: { Origin: 'https://attacker.invalid', 'Content-Type': 'application/json' }, body: '{}' });
     assert.equal(deniedOrigin.status, 403);
@@ -64,9 +64,6 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     const unauthenticatedEmails = await fetch(`${base}/api/emails`);
     assert.equal(unauthenticatedEmails.status, 401);
     await unauthenticatedEmails.arrayBuffer();
-    const signIn = await fetch(`${base}/api/sign-in`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: '{}' });
-    assert.equal(signIn.status, 400);
-    await signIn.arrayBuffer();
 
     const stopped = once(child, 'exit');
     child.kill('SIGTERM');
