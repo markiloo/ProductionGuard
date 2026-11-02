@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.*
+data/
+*.db
+*.db-shm
+*.db-wal
+token-cache/
+.cache/
