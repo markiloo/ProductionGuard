@@ -46,6 +46,7 @@ export function migrate() {
      ALTER TABLE emails ADD COLUMN eta TEXT;
      ALTER TABLE emails ADD COLUMN po_status TEXT;
      ALTER TABLE emails ADD COLUMN po_error TEXT;`,
+    `ALTER TABLE emails ADD COLUMN supplier TEXT;`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;
@@ -56,6 +57,13 @@ export function migrate() {
         for (const row of db.prepare('SELECT account_id,message_id,subject,body FROM emails').all()) if (isPoSubject(row.subject)) {
           const po = parsePo(row.body);
           update.run(po.item, po.quantity, po.unit, po.eta, po.poStatus, po.poError, row.account_id, row.message_id);
+        }
+      }
+      if (version === 4) {
+        const update = db.prepare('UPDATE emails SET item=?,quantity=?,unit=?,eta=?,supplier=?,po_status=?,po_error=? WHERE account_id=? AND message_id=?');
+        for (const row of db.prepare('SELECT account_id,message_id,subject,body FROM emails').all()) if (isPoSubject(row.subject)) {
+          const po = parsePo(row.body);
+          update.run(po.item, po.quantity, po.unit, po.eta, po.supplier, po.poStatus, po.poError, row.account_id, row.message_id);
         }
       }
       db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)').run(version, new Date().toISOString());

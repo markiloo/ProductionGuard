@@ -37,6 +37,7 @@
  * @property {number|null} quantity Parsed positive whole-number quantity.
  * @property {'kg'|'units'|null} unit Parsed unit.
  * @property {'1 week'|'2 weeks'|null} eta Parsed ETA.
+ * @property {string|null} supplier Parsed supplier name.
  * @property {'valid'|'needs_review'} poStatus Parsing result.
  * @property {string|null} poError Parsing problems for review.
  */

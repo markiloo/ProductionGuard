@@ -101,6 +101,6 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 ## Purchase order update
 
 - [x] Save approved-sender Gmail Inbox messages only when the trimmed, case-insensitive subject is `PO`.
-- [x] Parse `ITEM`, `Quantity`, `Unit`, and `ETA`; retain malformed PO mail with a review reason.
+- [x] Parse `ITEM`, `QUANTITY`, `UNIT`, `ETA`, and `SUPPLIER`; retain malformed PO mail with a review reason.
 - [x] Convert previously saved PO messages, hide unrelated legacy mail from the PO view, and show structured fields in the dashboard and API.
 - [x] Clear locally saved POs without changing Gmail, and document the new behavior.

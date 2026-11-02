@@ -68,7 +68,7 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
                 if (!allowed(accountId, from.address, receivedAt, version)) continue;
                 const recipients = ['to', 'cc', 'bcc'].flatMap((type) => (message.envelope?.[type] || []).map((item) => ({ type: type === 'to' ? 'To' : type === 'cc' ? 'Cc' : 'Bcc', name: item.name || '', address: item.address || '' })));
                 const po = parsePo(body);
-                db.prepare('INSERT OR IGNORE INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments,item,quantity,unit,eta,po_status,po_error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(accountId, id, runId, from.address, from.name || '', JSON.stringify(recipients), message.envelope.subject || '', receivedAt, body.slice(0, 200), body, parts.hasAttachments ? 1 : 0, po.item, po.quantity, po.unit, po.eta, po.poStatus, po.poError);
+                db.prepare('INSERT OR IGNORE INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments,item,quantity,unit,eta,supplier,po_status,po_error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(accountId, id, runId, from.address, from.name || '', JSON.stringify(recipients), message.envelope.subject || '', receivedAt, body.slice(0, 200), body, parts.hasAttachments ? 1 : 0, po.item, po.quantity, po.unit, po.eta, po.supplier, po.poStatus, po.poError);
               }
             }
           } finally { lock.release(); }

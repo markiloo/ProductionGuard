@@ -6,12 +6,13 @@ Each PO email should contain these fields in order:
 
 ```text
 ITEM: Steel
-Quantity: 2
-Unit: kg
+QUANTITY: 2
+UNIT: kg
 ETA: 1 week
+SUPPLIER: Acme Supply
 ```
 
-Quantity must be a positive whole number, unit must be `kg` or `units`, and ETA must be `1 week` or `2 weeks`. Labels are case-insensitive and extra whitespace is accepted. A qualifying email with invalid fields is saved and marked **Needs review**. Previously saved subject-PO emails are converted when the app starts; unrelated saved emails remain stored but are hidden from the PO view.
+Quantity must be a positive whole number, unit must be `kg` or `units`, ETA must be `1 week` or `2 weeks`, and supplier must be a nonempty string. Labels are case-insensitive and extra whitespace is accepted. A qualifying email with invalid fields is saved and marked **Needs review**. Previously saved subject-PO emails are reprocessed when the database is upgraded; unrelated saved emails remain stored but are hidden from the PO view.
 
 ## Gmail setup
 
