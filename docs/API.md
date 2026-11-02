@@ -4,7 +4,7 @@ All routes are served from the same loopback origin as the dashboard. State-chan
 
 | Method and route | Request | Response |
 | --- | --- | --- |
-| `GET /api/status` | None | `{ auth, collection, senders: string[], totalCount }` |
+| `GET /api/status` | None | `{ auth, collection, senders: string[], totalCount, features: { clearSavedInbox: boolean } }` |
 | `POST /api/setup` | `{ email: string, appPassword: string }` | `{ ok: true }` after Gmail IMAP connection succeeds |
 | `POST /api/sign-out` | `{}` | `{ ok: true }` |
 | `POST /api/senders` | `{ address: string }` | `{ ok: true }`; rejects invalid or duplicate addresses |

@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import Database from 'better-sqlite3';
 import { createCollector } from '../server/collector-core.js';
+import { clearSavedEmails } from '../server/email-queries.js';
 
 const cutoff = '2026-11-02T09:00:00.000Z';
 const message = (uid, at, address = 'orders@example.com') => ({ uid, emailId: `gmail-${uid}`, internalDate: new Date(at), envelope: { from: [{ address, name: 'Orders' }], to: [{ address: 'buyer@example.com' }], subject: `Subject ${uid}` }, bodyStructure: { type: 'multipart/mixed', childNodes: [{ part: '1', type: 'text/plain' }, { part: '2', type: 'application/pdf', disposition: 'attachment' }] } });
 
 function fixture(fetchMessage, download = async () => ({ content: Readable.from([Buffer.from('Full text')]) })) {
   const db = new Database(':memory:');
-  db.exec("CREATE TABLE runs(id TEXT PRIMARY KEY,account_id TEXT,cutoff TEXT,started_at TEXT,last_success_at TEXT,error TEXT,status TEXT);CREATE TABLE senders(account_id TEXT,address TEXT,normalized_address TEXT,created_at TEXT,PRIMARY KEY(account_id,normalized_address));CREATE TABLE emails(account_id TEXT,message_id TEXT,run_id TEXT,sender_address TEXT,sender_name TEXT,recipients TEXT,subject TEXT,received_at TEXT,preview TEXT,body TEXT,has_attachments INTEGER,PRIMARY KEY(account_id,message_id));");
+  db.exec("CREATE TABLE runs(id TEXT PRIMARY KEY,account_id TEXT,cutoff TEXT,started_at TEXT,last_success_at TEXT,error TEXT,status TEXT);CREATE TABLE senders(account_id TEXT,address TEXT,normalized_address TEXT,created_at TEXT,PRIMARY KEY(account_id,normalized_address));CREATE TABLE emails(account_id TEXT,message_id TEXT,run_id TEXT,sender_address TEXT,sender_name TEXT,recipients TEXT,subject TEXT,received_at TEXT,preview TEXT,body TEXT,has_attachments INTEGER,PRIMARY KEY(account_id,message_id));CREATE TABLE account_clears(account_id TEXT PRIMARY KEY,cleared_at TEXT NOT NULL);");
   db.prepare('INSERT INTO senders VALUES(?,?,?,?)').run('gmail:a@gmail.com', 'orders@example.com', 'orders@example.com', cutoff);
   let account = 'gmail:a@gmail.com';
   const calls = { searches: [], downloads: [], closes: 0 };
@@ -71,5 +72,37 @@ test('new sender checks the current cutoff window and uses the same Gmail accoun
     await data.collector.collect();
     assert.equal(data.count(), 1);
     assert.equal(data.collector.state().cutoff, cutoff);
+  } finally { data.collector.stop(); data.db.close(); }
+});
+
+test('clearing local mail keeps old Inbox messages cleared and accepts newer mail', async () => {
+  let incoming = message(4, '2026-11-02T09:02:00Z');
+  const data = fixture(() => incoming);
+  try {
+    await data.collector.collect();
+    assert.equal(data.count(), 1);
+    assert.equal(clearSavedEmails(data.db, 'gmail:a@gmail.com', '2026-11-02T09:03:00Z'), 1);
+    assert.equal(data.count(), 0);
+    await data.collector.collect();
+    assert.equal(data.count(), 0);
+    incoming = message(5, '2026-11-02T09:04:00Z');
+    await data.collector.collect();
+    assert.equal(data.count(), 1);
+    assert.equal(data.db.prepare('SELECT message_id FROM emails').get().message_id, 'gmail-5');
+  } finally { data.collector.stop(); data.db.close(); }
+});
+
+test('clear during a text download blocks the pending insert', async () => {
+  let finish;
+  let started;
+  const downloading = new Promise((resolve) => { started = resolve; });
+  const data = fixture(() => message(4, '2026-11-02T09:02:00Z'), async () => { started(); return new Promise((resolve) => { finish = resolve; }); });
+  try {
+    const pending = data.collector.collect();
+    await downloading;
+    assert.equal(clearSavedEmails(data.db, 'gmail:a@gmail.com', '2026-11-02T09:03:00Z'), 0);
+    finish({ content: Readable.from([Buffer.from('old text')]) });
+    await pending;
+    assert.equal(data.count(), 0);
   } finally { data.collector.stop(); data.db.close(); }
 });

@@ -53,8 +53,8 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 
 ## 6. API and dashboard
 
-- [ ] Add a confirmed Clear saved inbox action for the connected account; remove local saved mail without changing Gmail.
-- [ ] Keep messages received before the clear time from reappearing during later polls while collecting newer eligible mail.
+- [x] Add a confirmed Clear saved inbox action for the connected account; remove local saved mail without changing Gmail.
+- [x] Keep messages received before the clear time from reappearing during later polls while collecting newer eligible mail.
 - [x] Provide documented local endpoints for status, Gmail connection/sign-out, sender settings, email list/search, and message details.
 - [x] Validate requests, bound pagination, bind to loopback, and reject cross-origin writes.
 - [x] Display connection status, startup cutoff, last check, current-run count, and total saved count.

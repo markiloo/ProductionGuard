@@ -8,6 +8,10 @@
 .inbox-head .eyebrow{display:block;margin-bottom:7px}
 .inbox-head h2{line-height:1.25}
 .inbox-head .count{flex:none;padding-top:4px;white-space:nowrap}
+.inbox-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:flex-end}
+.inbox-actions .count{margin-right:2px}
+.clear-inbox{background:#fff;color:#9a4050;border-color:#ebc8ce;padding:7px 10px}
+.clear-inbox:hover:not(:disabled){background:#fff1f2;color:#853647}
 
 /* A short Inbox should not leave a large blank card. */
 .email-list{min-height:160px}
@@ -28,6 +32,8 @@
   .connection{max-width:100%;overflow-wrap:anywhere;text-align:left;justify-content:flex-start}
   .inbox-head{flex-wrap:wrap;gap:4px}
   .inbox-head .count{width:100%;padding-top:0}
+  .inbox-actions{width:100%;justify-content:space-between;gap:8px}
+  .inbox-head .count{width:auto}
   .tools select{width:100%}
   .email-meta{white-space:normal;text-align:right;max-width:92px}
   .detail-meta div{grid-template-columns:1fr;gap:3px}

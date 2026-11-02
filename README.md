@@ -23,6 +23,8 @@ Closing the browser leaves collection running. Stop the server console to end th
 
 Saved mail and sender settings live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
 
+The **Clear saved inbox** button deletes the connected account's locally saved messages after confirmation. It does not delete or change anything in Gmail. Mail received before the clear time stays excluded from later polls; newer eligible mail can still appear.
+
 The collector does not download attachment parts, mark mail read, send mail, or modify messages. Text is displayed as escaped text and cannot load remote email content.
 
 ## Troubleshooting

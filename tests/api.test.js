@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
+import Database from 'better-sqlite3';
+import { protectWithWindowsUser } from '../server/auth.js';
 
 async function availablePort() {
   const listener = net.createServer();
@@ -38,6 +40,7 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     const status = await (await fetch(`${base}/api/status`)).json();
     assert.ok(Number.isFinite(Date.parse(status.collection.cutoff)));
     assert.equal(status.auth.connected, false);
+    assert.equal(status.features.clearSavedInbox, true);
     const duplicate = spawn(process.execPath, ['--input-type=module', '-e', "import('./server/db.js')"], {
       cwd: process.cwd(), env: { ...process.env, DATA_DIR: directory }, stdio: ['ignore', 'ignore', 'pipe'],
     });
@@ -64,15 +67,40 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     const unauthenticatedEmails = await fetch(`${base}/api/emails`);
     assert.equal(unauthenticatedEmails.status, 401);
     await unauthenticatedEmails.arrayBuffer();
+    const unauthenticatedClear = await fetch(`${base}/api/emails`, { method: 'DELETE', headers: { Origin: base } });
+    assert.equal(unauthenticatedClear.status, 401);
+    await unauthenticatedClear.arrayBuffer();
 
     const stopped = once(child, 'exit');
     child.kill('SIGTERM');
     await stopped;
     await new Promise((resolve) => setTimeout(resolve, 10));
+    const fakeCredential = await protectWithWindowsUser(JSON.stringify({ email: 'test@gmail.com', password: 'dummy' }), true);
+    fs.writeFileSync(path.join(directory, 'gmail-credential.dpapi'), fakeCredential);
+    const seeded = new Database(path.join(directory, 'po-checker.db'));
+    seeded.prepare('INSERT INTO accounts(id,display_name,email,created_at) VALUES(?,?,?,?)').run('gmail:test@gmail.com', '', 'test@gmail.com', status.collection.cutoff);
+    seeded.prepare('INSERT INTO runs(id,account_id,cutoff,started_at,status) VALUES(?,?,?,?,?)').run('seed-run', 'gmail:test@gmail.com', status.collection.cutoff, status.collection.cutoff, 'stopped');
+    seeded.prepare('INSERT INTO emails(account_id,message_id,run_id,sender_address,received_at) VALUES(?,?,?,?,?)').run('gmail:test@gmail.com', 'seed-message', 'seed-run', 'sender@example.com', status.collection.cutoff);
+    seeded.close();
     child = launch();
     await waitUntilReady();
-    const restarted = await (await fetch(`${base}/api/status`)).json();
+    let restarted;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      restarted = await (await fetch(`${base}/api/status`)).json();
+      if (restarted.auth.connected) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(restarted.auth.connected, true);
     assert.notEqual(restarted.collection.cutoff, status.collection.cutoff, 'restart must establish a fresh cutoff');
+    assert.equal(restarted.totalCount, 1);
+    const clear = await fetch(`${base}/api/emails`, { method: 'DELETE', headers: { Origin: base } });
+    assert.equal(clear.status, 200);
+    assert.deepEqual(await clear.json(), { ok: true, deletedCount: 1 });
+    const cleared = await (await fetch(`${base}/api/status`)).json();
+    assert.equal(cleared.totalCount, 0);
+    const clearedDatabase = new Database(path.join(directory, 'po-checker.db'), { readonly: true });
+    assert.ok(clearedDatabase.prepare('SELECT cleared_at FROM account_clears WHERE account_id=?').get('gmail:test@gmail.com').cleared_at);
+    clearedDatabase.close();
   } finally {
     if (child.exitCode === null) {
       const exited = once(child, 'exit');
