@@ -1,6 +1,6 @@
 # Gmail Inbox Collector — Implementation Checklist
 
-Build a local Windows application using Node.js, Express, React, JavaScript, Vite, and SQLite. Connect one Gmail account through IMAP with a Google app password and collect Inbox emails from an editable list of exact sender addresses. No Microsoft Graph, Entra registration, or Microsoft sign-in is required.
+Build a local Windows application using Node.js, Express, React, JavaScript, Vite, and SQLite. Connect one Gmail account through IMAP with a Google app password and collect subject-`PO` Inbox emails from an editable list of exact sender addresses. No Microsoft Graph, Entra registration, or Microsoft sign-in is required.
 
 ## 1. Project foundation
 
@@ -96,4 +96,11 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 
 - One Gmail account connected at a time; Inbox only; exact sender addresses only.
 - Local retained history and attachment indicators only.
-- No hosted deployment, sending, mailbox changes, attachment downloads, or purchase-order processing.
+- No hosted deployment, sending, mailbox changes, or attachment downloads.
+
+## Purchase order update
+
+- [x] Save approved-sender Gmail Inbox messages only when the trimmed, case-insensitive subject is `PO`.
+- [x] Parse `ITEM`, `Quantity`, `Unit`, and `ETA`; retain malformed PO mail with a review reason.
+- [x] Convert previously saved PO messages, hide unrelated legacy mail from the PO view, and show structured fields in the dashboard and API.
+- [x] Clear locally saved POs without changing Gmail, and document the new behavior.

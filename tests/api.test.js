@@ -80,7 +80,7 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     const seeded = new Database(path.join(directory, 'po-checker.db'));
     seeded.prepare('INSERT INTO accounts(id,display_name,email,created_at) VALUES(?,?,?,?)').run('gmail:test@gmail.com', '', 'test@gmail.com', status.collection.cutoff);
     seeded.prepare('INSERT INTO runs(id,account_id,cutoff,started_at,status) VALUES(?,?,?,?,?)').run('seed-run', 'gmail:test@gmail.com', status.collection.cutoff, status.collection.cutoff, 'stopped');
-    seeded.prepare('INSERT INTO emails(account_id,message_id,run_id,sender_address,received_at) VALUES(?,?,?,?,?)').run('gmail:test@gmail.com', 'seed-message', 'seed-run', 'sender@example.com', status.collection.cutoff);
+    seeded.prepare('INSERT INTO emails(account_id,message_id,run_id,sender_address,received_at,subject,po_status) VALUES(?,?,?,?,?,?,?)').run('gmail:test@gmail.com', 'seed-message', 'seed-run', 'sender@example.com', status.collection.cutoff, 'PO', 'needs_review');
     seeded.close();
     child = launch();
     await waitUntilReady();

@@ -5,9 +5,9 @@ import { getEmail, listEmails, parsePagination } from '../server/email-queries.j
 
 function store() {
   const db = new Database(':memory:');
-  db.exec(`CREATE TABLE emails(account_id TEXT NOT NULL,message_id TEXT NOT NULL,sender_address TEXT NOT NULL,sender_name TEXT NOT NULL,recipients TEXT NOT NULL,subject TEXT NOT NULL,received_at TEXT NOT NULL,preview TEXT NOT NULL,body TEXT NOT NULL,has_attachments INTEGER NOT NULL,PRIMARY KEY(account_id,message_id));`);
+  db.exec(`CREATE TABLE emails(account_id TEXT NOT NULL,message_id TEXT NOT NULL,sender_address TEXT NOT NULL,sender_name TEXT NOT NULL,recipients TEXT NOT NULL,subject TEXT NOT NULL,received_at TEXT NOT NULL,preview TEXT NOT NULL,body TEXT NOT NULL,has_attachments INTEGER NOT NULL,item TEXT,quantity INTEGER,unit TEXT,eta TEXT,po_status TEXT,po_error TEXT,PRIMARY KEY(account_id,message_id));`);
   const insert = db.prepare('INSERT INTO emails(account_id,message_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments) VALUES(?,?,?,?,?,?,?,?,?,?)');
-  const email = (account, id, received, subject, body = '', sender = 'orders@example.com', name = 'Orders') => insert.run(account, id, sender, name, JSON.stringify([{ type: 'To', name: 'Buyer', address: 'buyer@example.com' }]), subject, received, 'preview', body, 1);
+  const email = (account, id, received, subject, body = '', sender = 'orders@example.com', name = 'Orders') => { insert.run(account, id, sender, name, JSON.stringify([{ type: 'To', name: 'Buyer', address: 'buyer@example.com' }]), subject, received, 'preview', body, 1); db.prepare('UPDATE emails SET po_status=?,item=? WHERE account_id=? AND message_id=?').run('valid', subject, account, id); };
   email('acct-a', 'old', '2026-01-14T10:00:00.000Z', 'Old subject', 'old history');
   email('acct-a', 'one', '2026-01-16T10:00:00.000Z', 'Subject one', 'body needle');
   email('acct-a', 'two', '2026-01-17T10:00:00.000Z', 'Subject two', 'other body');
@@ -25,6 +25,7 @@ test('email listing is account-scoped, newest-first, searchable, and correctly p
     assert.deepEqual(listEmails(db, { accountId: 'acct-a', cutoff: '2026-01-15T00:00:00.000Z', query: 'needle' }).items.map((item) => item.id), ['one']);
     assert.deepEqual(listEmails(db, { accountId: 'acct-a', cutoff: '2026-01-15T00:00:00.000Z', query: 'billing@example.com' }).items.map((item) => item.id), ['three']);
     assert.deepEqual(listEmails(db, { accountId: 'acct-a', cutoff: '2026-01-15T00:00:00.000Z', query: 'Billing Team' }).items.map((item) => item.id), ['three']);
+    assert.deepEqual(listEmails(db, { accountId: 'acct-a', cutoff: '2026-01-15T00:00:00.000Z', query: 'Subject three' }).items.map((item) => item.id), ['three']);
     assert.equal(listEmails(db, { accountId: 'acct-a', cutoff: '2026-01-15T00:00:00.000Z', scope: 'all' }).total, 4);
     assert.equal(listEmails(db, { accountId: 'acct-b', cutoff: '2026-01-15T00:00:00.000Z', scope: 'all' }).total, 1);
   } finally { db.close(); }

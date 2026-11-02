@@ -30,7 +30,7 @@ app.get('/api/status', (_req, res) => {
   const state = authState();
   const account = state.account;
   const senders = account ? db.prepare('SELECT address FROM senders WHERE account_id = ? ORDER BY normalized_address').all(account.id).map((row) => row.address) : [];
-  const total = account ? db.prepare('SELECT COUNT(*) AS count FROM emails WHERE account_id = ?').get(account.id).count : 0;
+  const total = account ? db.prepare('SELECT COUNT(*) AS count FROM emails WHERE account_id = ? AND po_status IS NOT NULL').get(account.id).count : 0;
   res.json({ auth: state, collection: collectionState(), senders, totalCount: total, features: { clearSavedInbox: true } });
 });
 app.post('/api/setup', async (req, res) => {

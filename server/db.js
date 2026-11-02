@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
+import { isPoSubject, parsePo } from './po.js';
 
 const dataDir = process.env.DATA_DIR || path.resolve('data');
 fs.mkdirSync(dataDir, { recursive: true });
@@ -39,10 +40,26 @@ export function migrate() {
      CREATE INDEX emails_received ON emails(account_id, received_at DESC);
      CREATE INDEX emails_run ON emails(account_id, run_id);`,
     `CREATE TABLE account_clears (account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, cleared_at TEXT NOT NULL);`,
+    `ALTER TABLE emails ADD COLUMN item TEXT;
+     ALTER TABLE emails ADD COLUMN quantity INTEGER;
+     ALTER TABLE emails ADD COLUMN unit TEXT;
+     ALTER TABLE emails ADD COLUMN eta TEXT;
+     ALTER TABLE emails ADD COLUMN po_status TEXT;
+     ALTER TABLE emails ADD COLUMN po_error TEXT;`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;
-    if (!done.has(version)) db.transaction(() => { db.exec(migrations[i]); db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)').run(version, new Date().toISOString()); })();
+    if (!done.has(version)) db.transaction(() => {
+      db.exec(migrations[i]);
+      if (version === 3) {
+        const update = db.prepare('UPDATE emails SET item=?,quantity=?,unit=?,eta=?,po_status=?,po_error=? WHERE account_id=? AND message_id=?');
+        for (const row of db.prepare('SELECT account_id,message_id,subject,body FROM emails').all()) if (isPoSubject(row.subject)) {
+          const po = parsePo(row.body);
+          update.run(po.item, po.quantity, po.unit, po.eta, po.poStatus, po.poError, row.account_id, row.message_id);
+        }
+      }
+      db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)').run(version, new Date().toISOString());
+    })();
   }
 }
 

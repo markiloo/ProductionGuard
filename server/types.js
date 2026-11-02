@@ -33,6 +33,12 @@
  * @property {string} preview Plain text preview.
  * @property {string} [body] Full plain-text message body on detail responses.
  * @property {number} hasAttachments Whether MIME structure contains attachments.
+ * @property {string|null} item Parsed item name.
+ * @property {number|null} quantity Parsed positive whole-number quantity.
+ * @property {'kg'|'units'|null} unit Parsed unit.
+ * @property {'1 week'|'2 weeks'|null} eta Parsed ETA.
+ * @property {'valid'|'needs_review'} poStatus Parsing result.
+ * @property {string|null} poError Parsing problems for review.
  */
 
 /** @template T @typedef {{ items: T[], total: number, limit: number, offset: number }} PaginatedResponse */

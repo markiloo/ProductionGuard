@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { ImapFlow } from 'imapflow';
 import { htmlToText } from 'html-to-text';
 import { normalizeSender } from './rules.js';
+import { isPoSubject, parsePo } from './po.js';
 
 const now = () => new Date().toISOString();
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -14,7 +15,7 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
   const account = () => getAccountId() || null;
   const state = () => {
     const run = db.prepare('SELECT last_success_at FROM runs WHERE id=?').get(runId);
-    const currentRunCount = db.prepare('SELECT COUNT(*) count FROM emails WHERE account_id=? AND run_id=?').get(account() || '', runId).count;
+    const currentRunCount = db.prepare('SELECT COUNT(*) count FROM emails WHERE account_id=? AND run_id=? AND po_status IS NOT NULL').get(account() || '', runId).count;
     return { runId, cutoff, lastSuccessAt: run.last_success_at, error, collecting: active, currentRunCount };
   };
   const stop = () => { clearInterval(timer); timer = null; generation += 1; rerun = false; if (client) client.close(); };
@@ -48,7 +49,7 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
                 const receivedTime = new Date(message.internalDate);
                 if (Number.isNaN(receivedTime.getTime())) continue;
                 const receivedAt = receivedTime.toISOString();
-                if (Date.parse(receivedAt) <= Date.parse(cutoff) || normalizeSender(from?.address) !== sender.normalized_address) continue;
+                if (Date.parse(receivedAt) <= Date.parse(cutoff) || normalizeSender(from?.address) !== sender.normalized_address || !isPoSubject(message.envelope?.subject)) continue;
                 const id = String(message.emailId || `${client.mailbox.uidValidity}:${uid}`);
                 if (db.prepare('SELECT 1 FROM emails WHERE account_id=? AND message_id=?').get(accountId, id)) continue;
                 if (!allowed(accountId, from.address, receivedAt, version)) continue;
@@ -66,7 +67,8 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
                 }
                 if (!allowed(accountId, from.address, receivedAt, version)) continue;
                 const recipients = ['to', 'cc', 'bcc'].flatMap((type) => (message.envelope?.[type] || []).map((item) => ({ type: type === 'to' ? 'To' : type === 'cc' ? 'Cc' : 'Bcc', name: item.name || '', address: item.address || '' })));
-                db.prepare('INSERT OR IGNORE INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(accountId, id, runId, from.address, from.name || '', JSON.stringify(recipients), message.envelope.subject || '', receivedAt, body.slice(0, 200), body, parts.hasAttachments ? 1 : 0);
+                const po = parsePo(body);
+                db.prepare('INSERT OR IGNORE INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments,item,quantity,unit,eta,po_status,po_error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(accountId, id, runId, from.address, from.name || '', JSON.stringify(recipients), message.envelope.subject || '', receivedAt, body.slice(0, 200), body, parts.hasAttachments ? 1 : 0, po.item, po.quantity, po.unit, po.eta, po.poStatus, po.poError);
               }
             }
           } finally { lock.release(); }

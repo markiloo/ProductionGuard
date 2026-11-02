@@ -1,6 +1,17 @@
-# PO Checker — Gmail Inbox collector
+# PO Checker — purchase order collector
 
-A local Windows dashboard that saves new Gmail Inbox messages from exact sender addresses during each server run. It uses Gmail's IMAP service, so there is no Microsoft Graph, Microsoft account, or Google Cloud app registration.
+A local Windows dashboard that saves purchase orders from Gmail Inbox messages sent by approved addresses during each server run. A message qualifies when its subject is `PO` (ignoring case and surrounding spaces). It uses Gmail's IMAP service, so there is no Microsoft Graph, Microsoft account, or Google Cloud app registration.
+
+Each PO email should contain these fields in order:
+
+```text
+ITEM: Steel
+Quantity: 2
+Unit: kg
+ETA: 1 week
+```
+
+Quantity must be a positive whole number, unit must be `kg` or `units`, and ETA must be `1 week` or `2 weeks`. Labels are case-insensitive and extra whitespace is accepted. A qualifying email with invalid fields is saved and marked **Needs review**. Previously saved subject-PO emails are converted when the app starts; unrelated saved emails remain stored but are hidden from the PO view.
 
 ## Gmail setup
 
@@ -23,14 +34,14 @@ Closing the browser leaves collection running. Stop the server console to end th
 
 Saved mail and sender settings live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
 
-The **Clear saved inbox** button deletes the connected account's locally saved messages after confirmation. It does not delete or change anything in Gmail. Mail received before the clear time stays excluded from later polls; newer eligible mail can still appear.
+The **Clear saved orders** button deletes the connected account's locally saved purchase orders after confirmation. It does not delete or change anything in Gmail. Mail received before the clear time stays excluded from later polls; newer eligible mail can still appear.
 
 The collector does not download attachment parts, mark mail read, send mail, or modify messages. Text is displayed as escaped text and cannot load remote email content.
 
 ## Troubleshooting
 
 - For an app-password error, verify 2-Step Verification and create a new app password. A changed Google account password can revoke existing app passwords.
-- Check that the message is still in Gmail Inbox, came after the displayed run cutoff, and its actual From address is on the allowlist.
+- Check that the message is still in Gmail Inbox, came after the displayed run cutoff, has subject `PO`, and its actual From address is on the allowlist.
 - A transient connection error is retried on later checks; verify network access to `imap.gmail.com:993`.
 
 See [docs/API.md](docs/API.md) for endpoint shapes.

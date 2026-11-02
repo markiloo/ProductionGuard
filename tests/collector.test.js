@@ -6,11 +6,11 @@ import { createCollector } from '../server/collector-core.js';
 import { clearSavedEmails } from '../server/email-queries.js';
 
 const cutoff = '2026-11-02T09:00:00.000Z';
-const message = (uid, at, address = 'orders@example.com') => ({ uid, emailId: `gmail-${uid}`, internalDate: new Date(at), envelope: { from: [{ address, name: 'Orders' }], to: [{ address: 'buyer@example.com' }], subject: `Subject ${uid}` }, bodyStructure: { type: 'multipart/mixed', childNodes: [{ part: '1', type: 'text/plain' }, { part: '2', type: 'application/pdf', disposition: 'attachment' }] } });
+const message = (uid, at, address = 'orders@example.com', subject = 'PO') => ({ uid, emailId: `gmail-${uid}`, internalDate: new Date(at), envelope: { from: [{ address, name: 'Orders' }], to: [{ address: 'buyer@example.com' }], subject }, bodyStructure: { type: 'multipart/mixed', childNodes: [{ part: '1', type: 'text/plain' }, { part: '2', type: 'application/pdf', disposition: 'attachment' }] } });
 
-function fixture(fetchMessage, download = async () => ({ content: Readable.from([Buffer.from('Full text')]) })) {
+function fixture(fetchMessage, download = async () => ({ content: Readable.from([Buffer.from('ITEM: Steel\nQuantity: 2\nUnit: kg\nETA: 1 week')]) })) {
   const db = new Database(':memory:');
-  db.exec("CREATE TABLE runs(id TEXT PRIMARY KEY,account_id TEXT,cutoff TEXT,started_at TEXT,last_success_at TEXT,error TEXT,status TEXT);CREATE TABLE senders(account_id TEXT,address TEXT,normalized_address TEXT,created_at TEXT,PRIMARY KEY(account_id,normalized_address));CREATE TABLE emails(account_id TEXT,message_id TEXT,run_id TEXT,sender_address TEXT,sender_name TEXT,recipients TEXT,subject TEXT,received_at TEXT,preview TEXT,body TEXT,has_attachments INTEGER,PRIMARY KEY(account_id,message_id));CREATE TABLE account_clears(account_id TEXT PRIMARY KEY,cleared_at TEXT NOT NULL);");
+  db.exec("CREATE TABLE runs(id TEXT PRIMARY KEY,account_id TEXT,cutoff TEXT,started_at TEXT,last_success_at TEXT,error TEXT,status TEXT);CREATE TABLE senders(account_id TEXT,address TEXT,normalized_address TEXT,created_at TEXT,PRIMARY KEY(account_id,normalized_address));CREATE TABLE emails(account_id TEXT,message_id TEXT,run_id TEXT,sender_address TEXT,sender_name TEXT,recipients TEXT,subject TEXT,received_at TEXT,preview TEXT,body TEXT,has_attachments INTEGER,item TEXT,quantity INTEGER,unit TEXT,eta TEXT,po_status TEXT,po_error TEXT,PRIMARY KEY(account_id,message_id));CREATE TABLE account_clears(account_id TEXT PRIMARY KEY,cleared_at TEXT NOT NULL);");
   db.prepare('INSERT INTO senders VALUES(?,?,?,?)').run('gmail:a@gmail.com', 'orders@example.com', 'orders@example.com', cutoff);
   let account = 'gmail:a@gmail.com';
   const calls = { searches: [], downloads: [], closes: 0 };
@@ -26,11 +26,36 @@ test('Gmail collector applies strict received cutoff, exact From address, and do
     assert.deepEqual(data.calls.downloads, [{ uid: 4, part: '1' }]);
     const saved = data.db.prepare('SELECT * FROM emails').get();
     assert.equal(saved.message_id, 'gmail-4');
-    assert.equal(saved.body, 'Full text');
+    assert.equal(saved.item, 'Steel');
+    assert.equal(saved.quantity, 2);
+    assert.equal(saved.po_status, 'valid');
     assert.equal(saved.has_attachments, 1);
     assert.equal(JSON.parse(saved.recipients)[0].address, 'buyer@example.com');
     assert.equal(data.calls.searches[0].from, 'orders@example.com');
     assert.equal(data.collector.state().currentRunCount, 1);
+  } finally { data.collector.stop(); data.db.close(); }
+});
+
+test('collector ignores non-PO subjects before downloading text', async () => {
+  const data = fixture(() => message(4, '2026-11-02T09:02:00Z', 'orders@example.com', 'PO 123'));
+  try {
+    await data.collector.collect();
+    assert.equal(data.count(), 0);
+    assert.equal(data.calls.downloads.length, 0);
+  } finally { data.collector.stop(); data.db.close(); }
+});
+
+test('collector saves malformed PO mail for review', async () => {
+  const data = fixture(() => message(4, '2026-11-02T09:02:00Z', 'orders@example.com', ' po '), async () => ({ content: Readable.from([Buffer.from('ITEM: Bolts\nQuantity: zero\nUnit: boxes')]) }));
+  try {
+    await data.collector.collect();
+    const saved = data.db.prepare('SELECT item,quantity,po_status,po_error FROM emails').get();
+    assert.equal(saved.item, 'Bolts');
+    assert.equal(saved.quantity, null);
+    assert.equal(saved.po_status, 'needs_review');
+    assert.match(saved.po_error, /Quantity/);
+    assert.match(saved.po_error, /Unit/);
+    assert.match(saved.po_error, /ETA/);
   } finally { data.collector.stop(); data.db.close(); }
 });
 
