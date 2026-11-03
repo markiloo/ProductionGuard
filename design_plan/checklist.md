@@ -118,3 +118,5 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Store run number, item, quantity, unit, status, scheduled date, and notes in SQLite.
 - [x] Allow adding and editing production runs with unique run numbers per account.
 - [x] Document the production endpoints, fields, and local-storage behavior.
+- [x] Delete inventory items and production runs from their edit sheets after confirmation.
+- [x] Auto-generate sequential `PR-####` production run numbers.

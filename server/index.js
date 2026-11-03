@@ -6,8 +6,8 @@ import { restoreGmail, connectGmail, authState, signOut } from './auth.js';
 import { beginCollector, stopCollector, collectionState, startupCutoff, collect } from './collector.js';
 import { normalizeSender, isValidSender } from './rules.js';
 import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email-queries.js';
-import { listInventory, createInventoryItem, updateInventoryItem, parseInventoryInput } from './inventory.js';
-import { listProductionRuns, createProductionRun, updateProductionRun, parseProductionInput } from './production.js';
+import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
+import { listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -119,6 +119,16 @@ app.put('/api/inventory/:id', (req, res) => {
   if (!item) return res.status(404).json({ error: 'Inventory item not found.' });
   res.json({ ok: true, item });
 });
+app.delete('/api/inventory/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  if (!deleteInventoryItem(db, aid, req.params.id)) return res.status(404).json({ error: 'Inventory item not found.' });
+  res.json({ ok: true });
+});
+
+app.get('/api/production-runs/next-number', (_req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  res.json({ runNumber: nextProductionRunNumber(db, aid) });
+});
 
 app.get('/api/production-runs', (_req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
@@ -143,6 +153,11 @@ app.put('/api/production-runs/:id', (req, res) => {
   } catch (failure) {
     sendProductionError(res, failure);
   }
+});
+app.delete('/api/production-runs/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  if (!deleteProductionRun(db, aid, req.params.id)) return res.status(404).json({ error: 'Production run not found.' });
+  res.json({ ok: true });
 });
 
 const dist = path.resolve(__dirname, '../dist');

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { parseInventoryInput, listInventory, createInventoryItem, updateInventoryItem } from '../server/inventory.js';
+import { parseInventoryInput, listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem } from '../server/inventory.js';
 
 function store() {
   const db = new Database(':memory:');
@@ -92,6 +92,11 @@ test('inventory is account-scoped and supports create and edit', () => {
     assert.equal(updated.updatedAt, '2026-11-04T09:00:00.000Z');
     assert.equal(updateInventoryItem(db, 'acct-b', created.id, parseInventoryInput({ item: 'Stolen', quantity: 1, unit: 'units' }), now), null);
     assert.deepEqual(listInventory(db, 'acct-a').map((item) => item.item), ['Bearings']);
+    assert.equal(deleteInventoryItem(db, 'acct-b', created.id), false);
+    assert.equal(listInventory(db, 'acct-a').length, 1);
+    assert.equal(deleteInventoryItem(db, 'acct-a', created.id), true);
+    assert.equal(listInventory(db, 'acct-a').length, 0);
+    assert.equal(deleteInventoryItem(db, 'acct-a', created.id), false);
   } finally {
     db.close();
   }

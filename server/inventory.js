@@ -72,3 +72,8 @@ export function updateInventoryItem(db, accountId, id, input, now) {
   );
   return result.changes ? getInventoryItem(db, accountId, id) : null;
 }
+
+/** Delete an account-owned inventory item. */
+export function deleteInventoryItem(db, accountId, id) {
+  return db.prepare('DELETE FROM inventory WHERE account_id = ? AND id = ?').run(accountId, id).changes > 0;
+}

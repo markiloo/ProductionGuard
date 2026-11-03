@@ -86,3 +86,18 @@ export function updateProductionRun(db, accountId, id, input, now) {
   );
   return result.changes ? getProductionRun(db, accountId, id) : null;
 }
+
+/** Delete an account-owned production run. */
+export function deleteProductionRun(db, accountId, id) {
+  return db.prepare('DELETE FROM production_runs WHERE account_id = ? AND id = ?').run(accountId, id).changes > 0;
+}
+
+/** Suggest the next sequential PR-#### run number for one account. */
+export function nextProductionRunNumber(db, accountId) {
+  let maximum = 0;
+  for (const row of db.prepare('SELECT run_number FROM production_runs WHERE account_id = ?').all(accountId)) {
+    const match = /^PR-(\d+)$/i.exec(row.run_number);
+    if (match) maximum = Math.max(maximum, Number(match[1]));
+  }
+  return `PR-${String(maximum + 1).padStart(4, '0')}`;
+}

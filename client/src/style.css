@@ -804,7 +804,10 @@ summary:focus-visible,
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-grid .field { margin-bottom: 0; }
 .field-wide { grid-column: 1 / -1; }
+.field-hint { margin-top: 2px; color: var(--ink-3); font-size: 11px; line-height: 1.4; }
+input[readonly] { background: var(--surface-2); color: var(--ink-2); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.dialog-delete { margin-right: auto; }
 .form-error {
   padding: 8px 10px;
   border: 1px solid color-mix(in oklab, var(--rose) 28%, var(--line));

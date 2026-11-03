@@ -461,7 +461,7 @@ function InventoryView({ items, onAdd, onEdit }) {
   );
 }
 
-function InventoryDialog({ draft, busy, onClose, onSave }) {
+function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
   const dialogRef = useSheetDialog(onClose);
   const editing = Boolean(draft.id);
   const [item, setItem] = useState(draft.item || '');
@@ -486,6 +486,16 @@ function InventoryDialog({ draft, busy, onClose, onSave }) {
         reorderLevel: reorderLevel === '' ? null : Number(reorderLevel),
         notes,
       });
+    } catch (failure) {
+      setFormError(failure.message);
+    }
+  }
+
+  async function remove() {
+    if (!globalThis.confirm(`Delete “${item}” from inventory? This cannot be undone.`)) return;
+    setFormError('');
+    try {
+      await onDelete();
     } catch (failure) {
       setFormError(failure.message);
     }
@@ -575,6 +585,9 @@ function InventoryDialog({ draft, busy, onClose, onSave }) {
         </div>
         {formError ? <p className="form-error" role="alert">{formError}</p> : null}
         <div className="dialog-actions">
+          {editing ? (
+            <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button>
+          ) : null}
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="button button-primary" disabled={busy}>
             {busy ? 'Saving…' : editing ? 'Save changes' : 'Add item'}
@@ -671,10 +684,10 @@ function ProductionView({ runs, onAdd, onEdit }) {
   );
 }
 
-function ProductionDialog({ draft, busy, onClose, onSave }) {
+function ProductionDialog({ draft, busy, onClose, onSave, onDelete }) {
   const dialogRef = useSheetDialog(onClose);
   const editing = Boolean(draft.id);
-  const [runNumber, setRunNumber] = useState(draft.runNumber || '');
+  const runNumber = draft.runNumber || '';
   const [item, setItem] = useState(draft.item || '');
   const [quantity, setQuantity] = useState(String(draft.quantity ?? 1));
   const [unit, setUnit] = useState(draft.unit || 'units');
@@ -701,6 +714,16 @@ function ProductionDialog({ draft, busy, onClose, onSave }) {
     }
   }
 
+  async function remove() {
+    if (!globalThis.confirm(`Delete run ${draft.runNumber} for “${item}”? This cannot be undone.`)) return;
+    setFormError('');
+    try {
+      await onDelete();
+    } catch (failure) {
+      setFormError(failure.message);
+    }
+  }
+
   return (
     <dialog
       ref={dialogRef}
@@ -722,12 +745,11 @@ function ProductionDialog({ draft, busy, onClose, onSave }) {
             <input
               id="production-run"
               value={runNumber}
-              onChange={(event) => setRunNumber(event.target.value)}
-              maxLength={40}
-              placeholder="e.g. PR-1042"
+              readOnly
+              aria-readonly="true"
               required
-              autoFocus
             />
+            <p className="field-hint">{editing ? 'Run numbers stay fixed.' : 'Generated automatically.'}</p>
           </div>
           <div className="field">
             <label htmlFor="production-status">Status</label>
@@ -739,7 +761,7 @@ function ProductionDialog({ draft, busy, onClose, onSave }) {
           </div>
           <div className="field field-wide">
             <label htmlFor="production-item">Item</label>
-            <input id="production-item" value={item} onChange={(event) => setItem(event.target.value)} maxLength={120} placeholder="e.g. Bearings" required />
+            <input id="production-item" value={item} onChange={(event) => setItem(event.target.value)} maxLength={120} placeholder="e.g. Bearings" required autoFocus />
           </div>
           <div className="field">
             <label htmlFor="production-quantity">Quantity</label>
@@ -787,6 +809,9 @@ function ProductionDialog({ draft, busy, onClose, onSave }) {
         </div>
         {formError ? <p className="form-error" role="alert">{formError}</p> : null}
         <div className="dialog-actions">
+          {editing ? (
+            <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button>
+          ) : null}
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="button button-primary" disabled={busy}>
             {busy ? 'Saving…' : editing ? 'Save changes' : 'Add run'}
@@ -1066,17 +1091,34 @@ export function App() {
     }
   }
 
-  function openNewProductionRun() {
-    setProductionDraft({
-      id: null,
-      runNumber: '',
-      item: '',
-      quantity: 1,
-      unit: 'units',
-      status: 'scheduled',
-      scheduledDate: todayDate(),
-      notes: '',
-    });
+  async function removeInventoryItem() {
+    if (!inventoryDraft?.id) return;
+    setInventoryBusy(true);
+    try {
+      await api(`/api/inventory/${encodeURIComponent(inventoryDraft.id)}`, { method: 'DELETE' });
+      setInventoryDraft(null);
+      setInventoryRevision((revision) => revision + 1);
+    } finally {
+      setInventoryBusy(false);
+    }
+  }
+
+  async function openNewProductionRun() {
+    try {
+      const data = await api('/api/production-runs/next-number');
+      setProductionDraft({
+        id: null,
+        runNumber: data.runNumber,
+        item: '',
+        quantity: 1,
+        unit: 'units',
+        status: 'scheduled',
+        scheduledDate: todayDate(),
+        notes: '',
+      });
+    } catch (failure) {
+      setError(failure.message);
+    }
   }
 
   function openProductionRun(run) {
@@ -1089,6 +1131,18 @@ export function App() {
       const editing = Boolean(productionDraft?.id);
       const url = editing ? `/api/production-runs/${encodeURIComponent(productionDraft.id)}` : '/api/production-runs';
       await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
+      setProductionDraft(null);
+      setProductionRevision((revision) => revision + 1);
+    } finally {
+      setProductionBusy(false);
+    }
+  }
+
+  async function removeProductionRun() {
+    if (!productionDraft?.id) return;
+    setProductionBusy(true);
+    try {
+      await api(`/api/production-runs/${encodeURIComponent(productionDraft.id)}`, { method: 'DELETE' });
       setProductionDraft(null);
       setProductionRevision((revision) => revision + 1);
     } finally {
@@ -1279,6 +1333,7 @@ export function App() {
           busy={inventoryBusy}
           onClose={() => { if (!inventoryBusy) setInventoryDraft(null); }}
           onSave={saveInventory}
+          onDelete={removeInventoryItem}
         />
       ) : null}
       {productionDraft ? (
@@ -1287,6 +1342,7 @@ export function App() {
           busy={productionBusy}
           onClose={() => { if (!productionBusy) setProductionDraft(null); }}
           onSave={saveProductionRun}
+          onDelete={removeProductionRun}
         />
       ) : null}
     </main>

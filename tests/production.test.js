@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { parseProductionInput, listProductionRuns, createProductionRun, updateProductionRun } from '../server/production.js';
+import { parseProductionInput, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber } from '../server/production.js';
 
 function store() {
   const db = new Database(':memory:');
@@ -66,6 +66,7 @@ test('production input rejects missing, malformed, or impossible values', () => 
 test('production runs are account-scoped, ordered, and editable', () => {
   const db = store();
   try {
+    assert.equal(nextProductionRunNumber(db, 'acct-a'), 'PR-0001');
     const scheduled = createProductionRun(db, 'acct-a', parseProductionInput({
       runNumber: 'PR-200', item: 'Bearings', quantity: 40, unit: 'units', scheduledDate: '2026-11-10', notes: ' line 3 ',
     }), now);
@@ -81,6 +82,8 @@ test('production runs are account-scoped, ordered, and editable', () => {
 
     assert.deepEqual(listProductionRuns(db, 'acct-a').map((run) => run.runNumber), ['PR-100', 'PR-200', 'PR-050']);
     assert.deepEqual(listProductionRuns(db, 'acct-b').map((run) => run.item), ['Other account']);
+    assert.equal(nextProductionRunNumber(db, 'acct-a'), 'PR-0201');
+    assert.equal(nextProductionRunNumber(db, 'acct-b'), 'PR-0101');
 
     assert.throws(
       () => createProductionRun(db, 'acct-a', parseProductionInput({
@@ -101,6 +104,10 @@ test('production runs are account-scoped, ordered, and editable', () => {
     assert.equal(updateProductionRun(db, 'acct-b', active.id, parseProductionInput({
       runNumber: 'PR-999', item: 'Stolen', quantity: 1, unit: 'units', scheduledDate: '2026-11-09',
     }), now), null);
+    assert.equal(deleteProductionRun(db, 'acct-b', active.id), false);
+    assert.equal(deleteProductionRun(db, 'acct-a', active.id), true);
+    assert.equal(listProductionRuns(db, 'acct-a').some((run) => run.id === active.id), false);
+    assert.equal(deleteProductionRun(db, 'acct-a', active.id), false);
   } finally {
     db.close();
   }

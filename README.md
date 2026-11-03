@@ -16,11 +16,11 @@ Quantity must be a positive whole number, unit must be `kg` or `units`, ETA must
 
 ## Inventory
 
-The **Inventory** view keeps a local stock list for the connected Gmail account. Add or edit an item's name, SKU, quantity, unit, supplier, reorder level, and notes. Items at or below their reorder level are marked **Low stock**. Inventory lives in the same local SQLite database and is never sent to Gmail.
+The **Inventory** view keeps a local stock list for the connected Gmail account. Add, edit, or delete an item's name, SKU, quantity, unit, supplier, reorder level, and notes. Items at or below their reorder level are marked **Low stock**. Inventory lives in the same local SQLite database and is never sent to Gmail.
 
 ## Production schedule
 
-The **Production** view shows existing production runs for the connected account. Each run has a run number, item, planned quantity and unit, scheduled date, status (Scheduled, In progress, Completed, On hold), and optional notes. Run numbers must be unique per account. Add or edit runs from the view; active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
+The **Production** view shows existing production runs for the connected account. Each run has a run number, item, planned quantity and unit, scheduled date, status (Scheduled, In progress, Completed, On hold), and optional notes. Run numbers are generated automatically as sequential `PR-####` values and are read-only. Add, edit, or delete runs from the view; active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
 
 The header has an explicit **Light / Dark** selector. Light is the default, and the choice is remembered in the browser.
 
