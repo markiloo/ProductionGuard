@@ -22,9 +22,13 @@ The **Orders** view lists Pending Review, Unverified, Approved, Ordered / Incomi
 
 Approve keeps the ETA provisional; reject requires a reason and preserves the history. An Approved PO can be set to **Ordered / Incoming**, which fixes the expected arrival (ordered date + ETA) and creates exactly one linked delivery. A Rejected PO can be corrected and resubmitted on the same record. Ordered POs cannot be moved backward.
 
+## Item definition
+
+The **Item definition** view, next to Production, is the plant's master data. **SKUs and items** define every item code, its display name, and its unit; inventory can only be created from these definitions. **Items to make** define what the plant produces and the material requirement template (SKU, quantity, unit) used when a production run selects that item. A SKU cannot be deleted while inventory, deliveries, demand, a production item, or a PO still uses it, and a production item cannot be deleted while a run references it. Existing inventory and demand SKUs are seeded into the definitions during the database upgrade. A PO can be mapped to a defined SKU even before that SKU has an inventory record; it then shows **Manual Review Required — Missing Inventory** until you add stock in Inventory.
+
 ## Inventory
 
-The **Inventory** view keeps a local stock list for the connected Gmail account. Add, edit, or delete an item's name, required unique SKU (the item code), quantity, unit, supplier, reorder level, and notes. The SKU is the join key for POs, deliveries, and production demand. Items at or below their reorder level are marked **Low stock**. Inventory lives in the same local SQLite database and is never sent to Gmail.
+The **Inventory** view keeps a local stock list for the connected Gmail account. Add an inventory item by selecting a defined SKU; its name and unit come from Item definition. Then set quantity on hand, supplier, reorder level, and notes. Items at or below their reorder level are marked **Low stock**. Inventory lives in the same local SQLite database and is never sent to Gmail.
 
 ## Incoming deliveries
 
@@ -32,9 +36,9 @@ The **Deliveries** view lists incoming and received deliveries with their item S
 
 ## Production schedule
 
-The **Production** view shows existing production runs for the connected account. Each run has a run number, status, scheduled date, optional notes, and one or more material requirement rows (item SKU, quantity, unit, and outstanding or consumed status). Run numbers are generated automatically as sequential `PR-####` values and are read-only. Only outstanding requirements from non-completed runs count as demand. Active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
+The **Production** view shows existing production runs for the connected account. Each run selects a defined production item, takes its name, unit, and default material requirement rows from Item definition, and adds a planned quantity, status, scheduled date, and optional notes. The per-run requirement copies can be adjusted without changing the definition. Run numbers are generated automatically as sequential `PR-####` values and are read-only. Only outstanding requirements from non-completed runs count as demand. Active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
 
-The header has an explicit **Light / Dark** selector. Light is the default, and the choice is remembered in the browser. The Orders sidebar stores the plant time zone used for provisional ETAs and calendar-day checks.
+The header has an explicit **Light / Dark** selector. Light is the default, and the choice is remembered in the browser. The **Settings** view, opened from the header next to **Sign out**, holds the sender allowlist and the plant time zone. The plant time zone defaults to **Asia/Manila** and drives provisional ETAs and calendar-day checks.
 
 ## Gmail setup
 

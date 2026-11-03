@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { getProductionItem } from './production-items.js';
 
 const MAX_RUN_NUMBER = 40;
 const MAX_ITEM = 120;
@@ -8,7 +9,7 @@ const MAX_QUANTITY = 1_000_000_000;
 const STATUSES = new Set(['scheduled', 'in_progress', 'completed', 'on_hold']);
 const REQUIREMENT_STATUSES = new Set(['outstanding', 'completed']);
 
-const columns = 'id, run_number AS runNumber, item, quantity, unit, status, scheduled_date AS scheduledDate, notes, created_at AS createdAt, updated_at AS updatedAt';
+const columns = 'id, run_number AS runNumber, item, quantity, unit, status, scheduled_date AS scheduledDate, notes, production_item_id AS productionItemId, created_at AS createdAt, updated_at AS updatedAt';
 
 function text(value) {
   return String(value ?? '').trim();
@@ -47,6 +48,7 @@ export function parseProductionInput(body) {
   const scheduledDate = text(value.scheduledDate);
   const notes = text(value.notes);
   const requirementInputs = Array.isArray(value.requirements) ? value.requirements.map(parseRequirementRow) : null;
+  const productionItemId = text(value.productionItemId);
   let item = text(value.item);
   let unit = text(value.unit);
   let quantityValue = value.quantity;
@@ -58,9 +60,9 @@ export function parseProductionInput(body) {
 
   if (!runNumber) throw new Error('Enter a run number.');
   if (runNumber.length > MAX_RUN_NUMBER) throw new Error(`Run numbers must be ${MAX_RUN_NUMBER} characters or fewer.`);
-  if (!item) throw new Error('Enter an item name.');
+  if (!item && !productionItemId) throw new Error('Enter an item name.');
   if (item.length > MAX_ITEM) throw new Error(`Item names must be ${MAX_ITEM} characters or fewer.`);
-  if (!unit) throw new Error('Enter a unit.');
+  if (!unit && !productionItemId) throw new Error('Enter a unit.');
   if (unit.length > MAX_UNIT) throw new Error(`Units must be ${MAX_UNIT} characters or fewer.`);
   if (!STATUSES.has(status)) throw new Error('Choose a valid production status.');
   if (notes.length > MAX_NOTES) throw new Error(`Notes must be ${MAX_NOTES} characters or fewer.`);
@@ -71,24 +73,55 @@ export function parseProductionInput(body) {
     throw new Error('Choose a valid scheduled date.');
   }
 
-  if (quantityValue === '' || quantityValue === null || quantityValue === undefined) throw new Error('Enter the production quantity.');
+  if (quantityValue === '' || quantityValue === null || quantityValue === undefined) {
+    if (productionItemId) quantityValue = 1;
+    else throw new Error('Enter the production quantity.');
+  }
   if (typeof quantityValue !== 'number' && typeof quantityValue !== 'string') throw new Error('Quantity must be a whole number greater than 0.');
   const quantity = Number(quantityValue);
   if (!Number.isInteger(quantity) || quantity <= 0 || quantity > MAX_QUANTITY) throw new Error('Quantity must be a whole number greater than 0.');
 
   const result = { runNumber, item, quantity, unit, status, scheduledDate, notes };
+  if (productionItemId) result.productionItemId = productionItemId;
   const requirements = requirementInputs?.length ? requirementInputs : [{ itemSku: item, quantity, unit, status: status === 'completed' ? 'completed' : 'outstanding' }];
-  if (requirementInputs) result.requirements = requirements;
+  if (requirementInputs?.length) result.requirements = requirements;
   Object.defineProperty(result, 'effectiveRequirements', { value: requirements, enumerable: false });
   return result;
 }
 
+function invalid(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
+
+function resolveProductionItem(db, accountId, input) {
+  if (!input.productionItemId) return { ...input, effectiveRequirements: input.effectiveRequirements || [], productionItemId: null };
+  const productionItem = getProductionItem(db, accountId, input.productionItemId);
+  if (!productionItem) {
+    throw invalid('Choose a defined production item from Item definition.');
+  }
+  const requirements = input.requirements?.length
+    ? input.effectiveRequirements
+    : productionItem.requirements.map((requirement) => ({ itemSku: requirement.itemSku, quantity: requirement.quantity, unit: requirement.unit, status: 'outstanding' }));
+  return { ...input, item: productionItem.name, unit: productionItem.unit, effectiveRequirements: requirements, productionItemId: productionItem.id };
+}
+
 function validateRequirements(db, accountId, requirements) {
+  if (!requirements.length) return;
+  if (hasTable(db, 'item_definitions')) {
+    for (const requirement of requirements) {
+      const defined = db.prepare('SELECT sku, unit FROM item_definitions WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, requirement.itemSku);
+      if (!defined) throw invalid(`Define the SKU ${requirement.itemSku} in Item definition first.`);
+      if (String(defined.unit).toLowerCase() !== String(requirement.unit).toLowerCase()) throw invalid(`Unit must match the definition for ${defined.sku} (${defined.unit}).`);
+    }
+    return;
+  }
   if (!hasTable(db, 'inventory')) return;
   for (const requirement of requirements) {
     const inventory = db.prepare('SELECT sku, unit FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, requirement.itemSku);
-    if (!inventory) throw new Error(`Choose an existing inventory SKU (${requirement.itemSku}).`);
-    if (String(inventory.unit).toLowerCase() !== String(requirement.unit).toLowerCase()) throw new Error(`Unit must match inventory for ${inventory.sku} (${inventory.unit}).`);
+    if (!inventory) throw invalid(`Choose an existing inventory SKU (${requirement.itemSku}).`);
+    if (String(inventory.unit).toLowerCase() !== String(requirement.unit).toLowerCase()) throw invalid(`Unit must match inventory for ${inventory.sku} (${inventory.unit}).`);
   }
 }
 
@@ -131,13 +164,14 @@ function saveRequirements(db, accountId, runId, requirements, now) {
 /** Create a production run and its requirement rows for one account. */
 export function createProductionRun(db, accountId, input, now) {
   if (runNumberTaken(db, accountId, input.runNumber)) throw conflict('That run number is already in use.');
-  validateRequirements(db, accountId, input.effectiveRequirements || []);
+  const resolved = resolveProductionItem(db, accountId, input);
+  validateRequirements(db, accountId, resolved.effectiveRequirements || []);
   const id = randomUUID();
   return db.transaction(() => {
-    db.prepare('INSERT INTO production_runs(account_id,id,run_number,item,quantity,unit,status,scheduled_date,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(
-      accountId, id, input.runNumber, input.item, input.quantity, input.unit, input.status, input.scheduledDate, input.notes, now, now,
+    db.prepare('INSERT INTO production_runs(account_id,id,run_number,item,quantity,unit,status,scheduled_date,notes,production_item_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(
+      accountId, id, resolved.runNumber, resolved.item, resolved.quantity, resolved.unit, resolved.status, resolved.scheduledDate, resolved.notes, resolved.productionItemId, now, now,
     );
-    saveRequirements(db, accountId, id, input.effectiveRequirements || [], now);
+    saveRequirements(db, accountId, id, resolved.effectiveRequirements || [], now);
     return getProductionRun(db, accountId, id);
   })();
 }
@@ -145,13 +179,14 @@ export function createProductionRun(db, accountId, input, now) {
 /** Update an account-owned production run and replace its requirement rows. */
 export function updateProductionRun(db, accountId, id, input, now) {
   if (runNumberTaken(db, accountId, input.runNumber, id)) throw conflict('That run number is already in use.');
-  validateRequirements(db, accountId, input.effectiveRequirements || []);
+  const resolved = resolveProductionItem(db, accountId, input);
+  validateRequirements(db, accountId, resolved.effectiveRequirements || []);
   return db.transaction(() => {
-    const result = db.prepare('UPDATE production_runs SET run_number=?, item=?, quantity=?, unit=?, status=?, scheduled_date=?, notes=?, updated_at=? WHERE account_id=? AND id=?').run(
-      input.runNumber, input.item, input.quantity, input.unit, input.status, input.scheduledDate, input.notes, now, accountId, id,
+    const result = db.prepare('UPDATE production_runs SET run_number=?, item=?, quantity=?, unit=?, status=?, scheduled_date=?, notes=?, production_item_id=?, updated_at=? WHERE account_id=? AND id=?').run(
+      resolved.runNumber, resolved.item, resolved.quantity, resolved.unit, resolved.status, resolved.scheduledDate, resolved.notes, resolved.productionItemId, now, accountId, id,
     );
     if (!result.changes) return null;
-    saveRequirements(db, accountId, id, input.effectiveRequirements || [], now);
+    saveRequirements(db, accountId, id, resolved.effectiveRequirements || [], now);
     return getProductionRun(db, accountId, id);
   })();
 }

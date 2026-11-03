@@ -15,6 +15,7 @@ function store() {
     status TEXT NOT NULL,
     scheduled_date TEXT NOT NULL,
     notes TEXT NOT NULL DEFAULT '',
+    production_item_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY(account_id, id)

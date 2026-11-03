@@ -138,6 +138,21 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Update `parseProductionInput`, the production form, and `tests/production.test.js` to cover requirement rows.
 - [x] Block assessment for an item whose requirement unit mismatches inventory and show *Manual Review Required — Unit Mismatch* naming the run.
 
+## Item definition update
+
+- [x] Add an account-scoped SKU/item master with a required unique SKU, display name, and unit.
+- [x] Seed item definitions from existing inventory, deliveries, production demand, and mapped POs during migration.
+- [x] Limit inventory create and edit to defined SKUs and derive the item name and unit from the definition; reject undefined SKUs.
+- [x] Keep the SKU fixed on existing definitions and inventory rows, and block deleting a definition that is still referenced.
+- [x] Add production item definitions with material requirement templates validated against defined SKUs and units.
+- [x] Add an Item definition view next to Production with sections for SKUs and for items to make.
+- [x] Select a defined production item when creating a production run; take its name, unit, and default requirements from the definition.
+- [x] Keep per-run requirement copies editable without changing the production item definition.
+- [x] Block deleting a production item that is used by a production run.
+- [x] Allow a PO to map to a defined SKU even before that SKU has an inventory record, showing *Manual Review Required — Missing Inventory* until stock is added.
+- [x] Return correction validation errors to the correction form instead of reporting a successful save.
+- [x] Add a regression test for mapping a PO to a defined SKU before inventory exists, the Missing Inventory assessment, the quantity decision after adding stock, and the unit-mismatch rejection.
+
 ## Purchase order intake update
 
 - [x] Separate validation result (valid or unverified with a reason) from workflow state (Pending Review, Approved, Ordered/Incoming, Rejected, Unverified), and migrate existing `valid` and `needs_review` rows.
@@ -177,7 +192,7 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 
 ## ETA and daily refresh update
 
-- [x] Store a plant time zone setting, defaulting from the PC's time zone, and use it for every calendar-day decision.
+- [x] Store a plant time zone setting, defaulting to Asia/Manila, and use it for every calendar-day decision.
 - [x] Compute provisional arrivals as plant-local today plus ETA duration and label them as estimates until ordering.
 - [x] Advance provisional arrivals at each plant-local date change and reassess Pending Review and Approved POs.
 - [x] Apply any missed date change on startup before serving assessments, and keep ordered arrival dates fixed.
@@ -229,3 +244,4 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Add an unverified queue with reasons and a correction form that can map a SKU and revalidate the same record.
 - [x] Add an incoming-deliveries view with add, edit, and receive.
 - [x] Add received-time sort order plus status, item, and date search and filter for POs and inventory, and refresh assessments after any save without a full reload.
+- [x] Move the sender allowlist and plant time zone into a Settings view opened from a header button next to Sign out.

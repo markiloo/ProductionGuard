@@ -216,45 +216,63 @@ function RunStrip({ status }) {
   );
 }
 
-function SenderPanel({ status, sender, setSender, onAdd, onRemove, busy, timeZone, setTimeZone, onSaveTimeZone }) {
+function SettingsView({ status, sender, setSender, onAdd, onRemove, busy, timeZone, setTimeZone, onSaveTimeZone }) {
   return (
-    <aside className="panel sender-panel" aria-labelledby="senders-title">
-      <div className="panel-head">
+    <section className="panel settings-panel" id="settings" tabIndex={-1} aria-labelledby="settings-title">
+      <header className="panel-head record-head">
         <div>
-          <p className="eyebrow">Allowlist</p>
-          <h2 id="senders-title">Approved senders</h2>
+          <p className="eyebrow">Configuration</p>
+          <h2 id="settings-title">Settings</h2>
         </div>
-        <span className="count">{status.senders.length}</span>
+        <span className="count">{status.auth.account?.username}</span>
+      </header>
+      <div className="settings-grid">
+        <section className="settings-section" aria-labelledby="senders-title">
+          <div className="settings-head">
+            <div>
+              <p className="eyebrow">Allowlist</p>
+              <h3 id="senders-title">Approved senders</h3>
+            </div>
+            <span className="count">{status.senders.length}</span>
+          </div>
+          <p className="settings-copy">Only subject-PO mail from these exact addresses is collected. Other PO mail stays in the unverified queue with a reason. Adding a sender also promotes that sender's queued mail back into Pending Review.</p>
+          <form className="sender-form" onSubmit={onAdd}>
+            <label className="sr-only" htmlFor="sender-address">Sender email address</label>
+            <input id="sender-address" type="email" value={sender} onChange={(event) => setSender(event.target.value)} placeholder="name@example.com" autoComplete="off" required />
+            <button type="submit" className="button button-primary button-small" disabled={busy}>Add</button>
+          </form>
+          {status.senders.length > 0 ? (
+            <ul className="sender-list">
+              {status.senders.map((address) => (
+                <li key={address}>
+                  <span>{address}</span>
+                  <button type="button" className="button button-ghost button-small remove" onClick={() => onRemove(address)} aria-label={`Remove ${address}`}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="sender-empty">No approved senders yet. Add one above to start collecting.</p>
+          )}
+        </section>
+
+        <section className="settings-section" aria-labelledby="timezone-title">
+          <div className="settings-head">
+            <div>
+              <p className="eyebrow">Calendar</p>
+              <h3 id="timezone-title">Plant time zone</h3>
+            </div>
+            <span className="count">{status.today}</span>
+          </div>
+          <p className="settings-copy">Provisional ETAs, the daily assessment refresh, and every calendar-day decision use this zone. The default is <strong>Asia/Manila</strong>.</p>
+          <form className="sender-form" onSubmit={onSaveTimeZone}>
+            <label className="sr-only" htmlFor="plant-time-zone">Plant time zone</label>
+            <input id="plant-time-zone" value={timeZone} onChange={(event) => setTimeZone(event.target.value)} placeholder="Asia/Manila" autoComplete="off" required />
+            <button type="submit" className="button button-primary button-small" disabled={busy}>Save</button>
+          </form>
+          <p className="hint">Current plant date: {status.today}. Use an IANA zone such as Asia/Manila.</p>
+        </section>
       </div>
-      <p>Only subject-PO mail from these exact addresses is collected. Other PO mail is kept in the unverified queue.</p>
-      <form className="sender-form" onSubmit={onAdd}>
-        <label className="sr-only" htmlFor="sender-address">Sender email address</label>
-        <input id="sender-address" type="email" value={sender} onChange={(event) => setSender(event.target.value)} placeholder="name@example.com" autoComplete="off" required />
-        <button type="submit" className="button button-primary button-small" disabled={busy}>Add</button>
-      </form>
-      {status.senders.length > 0 ? (
-        <ul className="sender-list">
-          {status.senders.map((address) => (
-            <li key={address}>
-              <span>{address}</span>
-              <button type="button" className="button button-ghost button-small remove" onClick={() => onRemove(address)} aria-label={`Remove ${address}`}>Remove</button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="sender-empty">No approved senders yet. Add one above to start collecting.</p>
-      )}
-      <div className="sender-settings">
-        <p className="eyebrow">Plant time zone</p>
-        <p>Provisional ETAs and calendar-day checks use this zone.</p>
-        <form className="sender-form" onSubmit={onSaveTimeZone}>
-          <label className="sr-only" htmlFor="plant-time-zone">Plant time zone</label>
-          <input id="plant-time-zone" value={timeZone} onChange={(event) => setTimeZone(event.target.value)} placeholder="e.g. Asia/Manila" autoComplete="off" required />
-          <button type="submit" className="button button-secondary button-small" disabled={busy}>Save</button>
-        </form>
-        {status.today ? <p className="hint">Plant date: {status.today}</p> : null}
-      </div>
-    </aside>
+    </section>
   );
 }
 
@@ -442,7 +460,7 @@ function InventoryView({ items, onAdd, onEdit }) {
   );
 }
 
-function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
+function InventoryDialog({ draft, skuOptions = [], busy, onClose, onSave, onDelete }) {
   const dialogRef = useSheetDialog(onClose);
   const editing = Boolean(draft.id);
   const [item, setItem] = useState(draft.item || '');
@@ -453,6 +471,15 @@ function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
   const [reorderLevel, setReorderLevel] = useState(draft.reorderLevel == null ? '' : String(draft.reorderLevel));
   const [notes, setNotes] = useState(draft.notes || '');
   const [formError, setFormError] = useState('');
+
+  function chooseSku(value) {
+    const definition = skuOptions.find((option) => option.sku.toLowerCase() === value.toLowerCase());
+    setSku(value);
+    if (definition) {
+      setItem(definition.item);
+      setUnit(definition.unit);
+    }
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -479,13 +506,16 @@ function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
       <form className="detail-body inventory-form" onSubmit={submit}>
         <div className="form-grid">
           <div className="field field-wide">
-            <label htmlFor="inventory-item">Item name</label>
-            <input id="inventory-item" value={item} onChange={(event) => setItem(event.target.value)} maxLength={120} placeholder="e.g. Bearings" required autoFocus />
-          </div>
-          <div className="field">
             <label htmlFor="inventory-sku">Item code (SKU)</label>
-            <input id="inventory-sku" value={sku} onChange={(event) => setSku(event.target.value)} maxLength={60} placeholder="e.g. ITEM-B" required />
-            <p className="field-hint">POs, deliveries, and demand match this code.</p>
+            <select id="inventory-sku" value={sku} onChange={(event) => chooseSku(event.target.value)} required autoFocus={!editing} disabled={editing && Boolean(draft.sku)}>
+              <option value="">Choose a defined SKU</option>
+              {skuOptions.map((option) => <option key={option.id} value={option.sku}>{option.sku} — {option.item}</option>)}
+            </select>
+            <p className="field-hint">{editing && draft.sku ? 'The SKU is fixed for an existing inventory item.' : 'SKUs are defined under Item definition.'}</p>
+          </div>
+          <div className="field field-wide">
+            <label htmlFor="inventory-item">Item name</label>
+            <input id="inventory-item" value={item} readOnly aria-readonly="true" placeholder="Selected from Item definition" required />
           </div>
           <div className="field">
             <label htmlFor="inventory-supplier">Supplier</label>
@@ -497,8 +527,7 @@ function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
           </div>
           <div className="field">
             <label htmlFor="inventory-unit">Unit</label>
-            <input id="inventory-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="inventory-units" required />
-            <datalist id="inventory-units"><option value="units" /><option value="kg" /><option value="boxes" /><option value="liters" /></datalist>
+            <input id="inventory-unit" value={unit} readOnly aria-readonly="true" required />
           </div>
           <div className="field">
             <label htmlFor="inventory-reorder">Reorder level</label>
@@ -509,11 +538,12 @@ function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
             <textarea id="inventory-notes" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={3} placeholder="Optional storage notes, bin location, etc." />
           </div>
         </div>
+        {!skuOptions.length ? <p className="form-error" role="alert">Every defined SKU is already stocked, or none are defined yet. Add a new SKU under Item definition first.</p> : null}
         {formError ? <p className="form-error" role="alert">{formError}</p> : null}
         <div className="dialog-actions">
           {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add item'}</button>
+          <button type="submit" className="button button-primary" disabled={busy || (!editing && !skuOptions.length)}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add item'}</button>
         </div>
       </form>
     </dialog>
@@ -527,7 +557,7 @@ function ProductionRow({ run, onEdit }) {
       <div className="production-main">
         <div className="production-top">
           <span className="production-run">{run.runNumber}</span>
-          <strong className="production-name">{requirements.length ? `${requirements.length} requirement${requirements.length === 1 ? '' : 's'}` : run.item}</strong>
+          <strong className="production-name">{run.item}</strong>
           <ProductionStatusChip status={run.status} />
         </div>
         <span className="production-meta">Scheduled {scheduleDate(run.scheduledDate)}{run.notes ? ` · ${run.notes}` : ''}</span>
@@ -544,6 +574,7 @@ function ProductionRow({ run, onEdit }) {
         ) : null}
       </div>
       <div className="production-side">
+        <span className="production-qty">{run.quantity}<small>{run.unit}</small></span>
         <time className="production-updated" dateTime={run.updatedAt} title={fullDate(run.updatedAt)}>Updated {shortDate(run.updatedAt)}</time>
       </div>
       <button type="button" className="button button-ghost button-small production-edit" onClick={() => onEdit(run)} aria-label={`Edit ${run.runNumber}`}>Edit</button>
@@ -580,7 +611,7 @@ function ProductionView({ runs, onAdd, onEdit }) {
               <div className="empty">
                 <span className="empty-mark" aria-hidden="true">PR</span>
                 <strong>No production runs yet</strong>
-                <p>Add a scheduled run and its material requirements to drive assessments.</p>
+                <p>Add a scheduled run, select a defined production item, and adjust its requirement copies.</p>
                 <button type="button" className="button button-secondary button-small" onClick={onAdd}>Add your first run</button>
               </div>
             ) : null}
@@ -591,16 +622,20 @@ function ProductionView({ runs, onAdd, onEdit }) {
   );
 }
 
-function ProductionDialog({ draft, skuOptions, busy, onClose, onSave, onDelete }) {
+function ProductionDialog({ draft, productionItems = [], skuOptions = [], busy, onClose, onSave, onDelete }) {
   const dialogRef = useSheetDialog(onClose);
   const editing = Boolean(draft.id);
   const runNumber = draft.runNumber || '';
+  const [productionItemId, setProductionItemId] = useState(draft.productionItemId || '');
+  const [item, setItem] = useState(draft.item || '');
+  const [quantity, setQuantity] = useState(String(draft.quantity ?? 1));
+  const [unit, setUnit] = useState(draft.unit || 'units');
   const [status, setStatus] = useState(draft.status || 'scheduled');
   const [scheduledDate, setScheduledDate] = useState(draft.scheduledDate || todayDate());
   const [notes, setNotes] = useState(draft.notes || '');
   const [requirements, setRequirements] = useState(() => {
-    const existing = draft.requirements?.length ? draft.requirements : [{ itemSku: draft.item || '', quantity: draft.quantity || 1, unit: draft.unit || 'units', status: 'outstanding' }];
-    return existing.map((requirement) => ({ itemSku: requirement.itemSku, quantity: String(requirement.quantity), unit: requirement.unit, status: requirement.status || 'outstanding' }));
+    const existing = draft.requirements?.length ? draft.requirements : [{ itemSku: '', quantity: 1, unit: 'units', status: 'outstanding' }];
+    return existing.map((requirement) => ({ itemSku: requirement.itemSku || '', quantity: String(requirement.quantity ?? 1), unit: requirement.unit || 'units', status: requirement.status || 'outstanding' }));
   });
   const [formError, setFormError] = useState('');
 
@@ -609,8 +644,20 @@ function ProductionDialog({ draft, skuOptions, busy, onClose, onSave, onDelete }
   }
 
   function chooseSku(index, itemSku) {
-    const inventoryItem = skuOptions.find((option) => option.sku.toLowerCase() === itemSku.toLowerCase());
-    updateRequirement(index, { itemSku, unit: inventoryItem?.unit || requirements[index].unit });
+    const definition = skuOptions.find((option) => option.sku.toLowerCase() === itemSku.toLowerCase());
+    updateRequirement(index, { itemSku, unit: definition?.unit || requirements[index].unit });
+  }
+
+  function chooseProductionItem(value) {
+    setProductionItemId(value);
+    const selected = productionItems.find((option) => option.id === value);
+    if (!selected) return;
+    setItem(selected.name);
+    setUnit(selected.unit);
+    const next = selected.requirements?.length
+      ? selected.requirements.map((requirement) => ({ itemSku: requirement.itemSku, quantity: String(requirement.quantity), unit: requirement.unit, status: 'outstanding' }))
+      : [{ itemSku: '', quantity: '1', unit: 'units', status: 'outstanding' }];
+    setRequirements(next);
   }
 
   async function submit(event) {
@@ -619,6 +666,10 @@ function ProductionDialog({ draft, skuOptions, busy, onClose, onSave, onDelete }
     try {
       await onSave({
         runNumber,
+        productionItemId: productionItemId || null,
+        item,
+        unit,
+        quantity: Number(quantity),
         status,
         scheduledDate,
         notes,
@@ -660,6 +711,22 @@ function ProductionDialog({ draft, skuOptions, busy, onClose, onSave, onDelete }
             </select>
           </div>
           <div className="field field-wide">
+            <label htmlFor="production-item">Item to make</label>
+            <select id="production-item" value={productionItemId} onChange={(event) => chooseProductionItem(event.target.value)} required>
+              <option value="">Choose a production item</option>
+              {productionItems.map((option) => <option key={option.id} value={option.id}>{option.name} — {option.unit}</option>)}
+            </select>
+            <p className="field-hint">Production items and their requirements are defined under Item definition.</p>
+          </div>
+          <div className="field">
+            <label htmlFor="production-quantity">Planned quantity</label>
+            <input id="production-quantity" type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} required />
+          </div>
+          <div className="field">
+            <label htmlFor="production-unit">Unit</label>
+            <input id="production-unit" value={unit} readOnly aria-readonly="true" required />
+          </div>
+          <div className="field field-wide">
             <label htmlFor="production-date">Scheduled date</label>
             <input id="production-date" type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} required />
           </div>
@@ -694,10 +761,253 @@ function ProductionDialog({ draft, skuOptions, busy, onClose, onSave, onDelete }
           </div>
         </div>
         {formError ? <p className="form-error" role="alert">{formError}</p> : null}
+        {!productionItems.length ? <p className="form-error" role="alert">Define a production item under Item definition before adding a run.</p> : null}
         <div className="dialog-actions">
           {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add run'}</button>
+          <button type="submit" className="button button-primary" disabled={busy || !productionItems.length}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add run'}</button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+function DefinitionRow({ definition, onEdit }) {
+  return (
+    <div className="definition-row">
+      <div className="definition-main">
+        <div className="definition-top">
+          <strong className="definition-name">{definition.item}</strong>
+          <span className="inventory-sku">{definition.sku}</span>
+          <span className="definition-unit">{definition.unit}</span>
+        </div>
+      </div>
+      <button type="button" className="button button-ghost button-small" onClick={() => onEdit(definition)} aria-label={`Edit ${definition.sku}`}>Edit</button>
+    </div>
+  );
+}
+
+function ProductionItemRow({ item, onEdit }) {
+  const requirements = item.requirements || [];
+  return (
+    <div className="definition-row">
+      <div className="definition-main">
+        <div className="definition-top">
+          <strong className="definition-name">{item.name}</strong>
+          <span className="definition-unit">{item.unit}</span>
+        </div>
+        {item.notes ? <span className="definition-meta">{item.notes}</span> : null}
+        {requirements.length ? (
+          <ul className="requirement-list">
+            {requirements.map((requirement) => (
+              <li key={requirement.id}>
+                <span className="requirement-sku">{requirement.itemSku}</span>
+                <span className="requirement-qty">{requirement.quantity} {requirement.unit}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <span className="definition-meta">No requirements defined</span>}
+      </div>
+      <button type="button" className="button button-ghost button-small" onClick={() => onEdit(item)} aria-label={`Edit ${item.name}`}>Edit</button>
+    </div>
+  );
+}
+
+function ItemDefinitionView({ definitions, productionItems, onAddDefinition, onEditDefinition, onAddProductionItem, onEditProductionItem }) {
+  return (
+    <section className="panel record-panel definitions" id="item-definition" tabIndex={-1} aria-labelledby="item-definition-title">
+      <header className="panel-head record-head">
+        <div><p className="eyebrow">Master data</p><h2 id="item-definition-title">Item definition</h2></div>
+        <span className="count">{definitions ? `${definitions.length} ${definitions.length === 1 ? 'SKU' : 'SKUs'}` : '—'}</span>
+      </header>
+      {definitions === null ? (
+        <div className="record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading item definitions…</div>
+      ) : (
+        <div className="definition-grid">
+          <section className="definition-section" aria-labelledby="sku-definitions-title">
+            <div className="panel-head record-head">
+              <div><p className="eyebrow">Inventory master</p><h3 id="sku-definitions-title">SKUs and items</h3></div>
+              <button type="button" className="button button-primary button-small" onClick={onAddDefinition}>Add SKU</button>
+            </div>
+            <p className="settings-copy">Every inventory item must use one of these SKUs. POs, deliveries, and production demand join on the SKU.</p>
+            <div className="record-list">
+              {definitions.map((definition) => <DefinitionRow key={definition.id} definition={definition} onEdit={onEditDefinition} />)}
+              {!definitions.length ? (
+                <div className="empty">
+                  <span className="empty-mark" aria-hidden="true">SKU</span>
+                  <strong>No SKUs defined</strong>
+                  <p>Define an item code, name, and unit before adding inventory.</p>
+                  <button type="button" className="button button-secondary button-small" onClick={onAddDefinition}>Define your first SKU</button>
+                </div>
+              ) : null}
+            </div>
+          </section>
+          <section className="definition-section" aria-labelledby="production-items-title">
+            <div className="panel-head record-head">
+              <div><p className="eyebrow">Production master</p><h3 id="production-items-title">Items to make</h3></div>
+              <button type="button" className="button button-primary button-small" onClick={onAddProductionItem}>Add item</button>
+            </div>
+            <p className="settings-copy">Define what the plant produces and the materials each run needs. Production runs select one of these items.</p>
+            <div className="record-list">
+              {(productionItems || []).map((item) => <ProductionItemRow key={item.id} item={item} onEdit={onEditProductionItem} />)}
+              {!productionItems?.length ? (
+                <div className="empty">
+                  <span className="empty-mark" aria-hidden="true">PI</span>
+                  <strong>No production items defined</strong>
+                  <p>Define an item to make and its material requirements.</p>
+                  <button type="button" className="button button-secondary button-small" onClick={onAddProductionItem}>Define your first item</button>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ItemDefinitionDialog({ draft, busy, onClose, onSave, onDelete }) {
+  const dialogRef = useSheetDialog(onClose);
+  const editing = Boolean(draft.id);
+  const [sku, setSku] = useState(draft.sku || '');
+  const [item, setItem] = useState(draft.item || '');
+  const [unit, setUnit] = useState(draft.unit || 'units');
+  const [formError, setFormError] = useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    setFormError('');
+    try { await onSave({ sku, item, unit }); } catch (failure) { setFormError(failure.message); }
+  }
+
+  async function remove() {
+    if (!globalThis.confirm(`Delete the definition for ${sku}? This cannot be undone.`)) return;
+    setFormError('');
+    try { await onDelete(); } catch (failure) { setFormError(failure.message); }
+  }
+
+  return (
+    <dialog ref={dialogRef} className="detail" aria-labelledby="item-definition-dialog-title" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <header className="detail-head">
+        <div><p className="eyebrow">Item definition</p><h2 id="item-definition-dialog-title">{editing ? 'Edit SKU' : 'Define a SKU'}</h2></div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close item definition form" disabled={busy}>×</button>
+      </header>
+      <form className="detail-body" onSubmit={submit}>
+        <div className="form-grid">
+          <div className="field field-wide">
+            <label htmlFor="definition-sku">Item code (SKU)</label>
+            <input id="definition-sku" value={sku} onChange={(event) => setSku(event.target.value)} maxLength={60} placeholder="e.g. ITEM-B" required readOnly={editing} aria-readonly={editing} autoFocus={!editing} />
+            <p className="field-hint">{editing ? 'The SKU is the join key and cannot be changed.' : 'POs, deliveries, and demand match this code.'}</p>
+          </div>
+          <div className="field field-wide">
+            <label htmlFor="definition-item">Item name</label>
+            <input id="definition-item" value={item} onChange={(event) => setItem(event.target.value)} maxLength={120} placeholder="e.g. Bearings" required />
+          </div>
+          <div className="field">
+            <label htmlFor="definition-unit">Unit</label>
+            <input id="definition-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="definition-units" required />
+            <datalist id="definition-units"><option value="units" /><option value="kg" /><option value="boxes" /><option value="liters" /></datalist>
+          </div>
+        </div>
+        {formError ? <p className="form-error" role="alert">{formError}</p> : null}
+        <div className="dialog-actions">
+          {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
+          <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Define SKU'}</button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, onDelete }) {
+  const dialogRef = useSheetDialog(onClose);
+  const editing = Boolean(draft.id);
+  const [name, setName] = useState(draft.name || '');
+  const [unit, setUnit] = useState(draft.unit || 'units');
+  const [notes, setNotes] = useState(draft.notes || '');
+  const [requirements, setRequirements] = useState(() => (draft.requirements?.length ? draft.requirements : []).map((requirement) => ({
+    itemSku: requirement.itemSku,
+    quantity: String(requirement.quantity),
+    unit: requirement.unit,
+  })));
+  const [formError, setFormError] = useState('');
+
+  function updateRequirement(index, patch) {
+    setRequirements((current) => current.map((requirement, row) => (row === index ? { ...requirement, ...patch } : requirement)));
+  }
+
+  function chooseSku(index, itemSku) {
+    const definition = skuOptions.find((option) => option.sku.toLowerCase() === itemSku.toLowerCase());
+    updateRequirement(index, { itemSku, unit: definition?.unit || requirements[index].unit });
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setFormError('');
+    try {
+      await onSave({
+        name,
+        unit,
+        notes,
+        requirements: requirements.map((requirement) => ({ itemSku: requirement.itemSku, quantity: Number(requirement.quantity), unit: requirement.unit })),
+      });
+    } catch (failure) { setFormError(failure.message); }
+  }
+
+  async function remove() {
+    if (!globalThis.confirm(`Delete the production item ${name}? This cannot be undone.`)) return;
+    setFormError('');
+    try { await onDelete(); } catch (failure) { setFormError(failure.message); }
+  }
+
+  return (
+    <dialog ref={dialogRef} className="detail" aria-labelledby="production-item-dialog-title" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <header className="detail-head">
+        <div><p className="eyebrow">Item definition</p><h2 id="production-item-dialog-title">{editing ? 'Edit production item' : 'Define a production item'}</h2></div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close production item form" disabled={busy}>×</button>
+      </header>
+      <form className="detail-body" onSubmit={submit}>
+        <div className="form-grid">
+          <div className="field field-wide">
+            <label htmlFor="production-item-name">Item to make</label>
+            <input id="production-item-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="e.g. Assembled Bearing Unit" required autoFocus />
+          </div>
+          <div className="field">
+            <label htmlFor="production-item-unit">Unit</label>
+            <input id="production-item-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="production-item-units" required />
+            <datalist id="production-item-units"><option value="units" /><option value="kg" /><option value="boxes" /><option value="liters" /></datalist>
+          </div>
+          <div className="field field-wide">
+            <label htmlFor="production-item-notes">Notes</label>
+            <input id="production-item-notes" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} placeholder="Optional" />
+          </div>
+          <div className="field field-wide">
+            <label>Material requirements</label>
+            <div className="requirement-editor">
+              {requirements.map((requirement, index) => (
+                <div className="requirement-row" key={index}>
+                  <label className="sr-only" htmlFor={`production-requirement-sku-${index}`}>Item SKU</label>
+                  <select id={`production-requirement-sku-${index}`} value={requirement.itemSku} onChange={(event) => chooseSku(index, event.target.value)} required>
+                    <option value="">Choose SKU</option>
+                    {skuOptions.map((option) => <option key={option.id} value={option.sku}>{option.sku} — {option.item}</option>)}
+                  </select>
+                  <label className="sr-only" htmlFor={`production-requirement-qty-${index}`}>Quantity</label>
+                  <input id={`production-requirement-qty-${index}`} type="number" min="1" step="1" value={requirement.quantity} onChange={(event) => updateRequirement(index, { quantity: event.target.value })} required />
+                  <label className="sr-only" htmlFor={`production-requirement-unit-${index}`}>Unit</label>
+                  <input id={`production-requirement-unit-${index}`} value={requirement.unit} onChange={(event) => updateRequirement(index, { unit: event.target.value })} maxLength={20} required />
+                  <button type="button" className="button button-ghost button-small" onClick={() => setRequirements((current) => current.filter((_, row) => row !== index))} aria-label="Remove requirement">Remove</button>
+                </div>
+              ))}
+              <button type="button" className="button button-secondary button-small" onClick={() => setRequirements((current) => [...current, { itemSku: '', quantity: '1', unit: 'units' }])}>Add requirement</button>
+            </div>
+          </div>
+        </div>
+        {formError ? <p className="form-error" role="alert">{formError}</p> : null}
+        <div className="dialog-actions">
+          {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
+          <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Define item'}</button>
         </div>
       </form>
     </dialog>
@@ -882,7 +1192,7 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
     event.preventDefault();
     setFormError('');
     try {
-      await onCorrect({
+      const updated = await onCorrect({
         item: draft.item,
         mappedSku: draft.mappedSku,
         quantity: Number(draft.quantity),
@@ -890,6 +1200,10 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
         etaDays: Number(draft.etaDays),
         supplier: draft.supplier,
       });
+      if (updated?.poError) {
+        setFormError(updated.poError);
+        return;
+      }
       setCorrecting(false);
     } catch (failure) {
       setFormError(failure.message);
@@ -1115,6 +1429,14 @@ export function App() {
   const [inventoryRevision, setInventoryRevision] = useState(0);
   const [inventoryDraft, setInventoryDraft] = useState(null);
   const [inventoryBusy, setInventoryBusy] = useState(false);
+  const [itemDefinitions, setItemDefinitions] = useState(null);
+  const [itemDefinitionRevision, setItemDefinitionRevision] = useState(0);
+  const [itemDefinitionDraft, setItemDefinitionDraft] = useState(null);
+  const [itemDefinitionBusy, setItemDefinitionBusy] = useState(false);
+  const [productionItems, setProductionItems] = useState(null);
+  const [productionItemRevision, setProductionItemRevision] = useState(0);
+  const [productionItemDraft, setProductionItemDraft] = useState(null);
+  const [productionItemBusy, setProductionItemBusy] = useState(false);
   const [productionRuns, setProductionRuns] = useState(null);
   const [productionRevision, setProductionRevision] = useState(0);
   const [productionDraft, setProductionDraft] = useState(null);
@@ -1124,7 +1446,11 @@ export function App() {
   const [deliveryDraft, setDeliveryDraft] = useState(null);
   const [deliveryBusy, setDeliveryBusy] = useState(false);
   const refreshSequence = useRef(0);
-  const skuOptions = inventory || [];
+  const definitionOptions = itemDefinitions || [];
+  const inventoryOptions = inventory || [];
+  const stockedSkus = new Set(inventoryOptions.map((item) => item.sku.toLowerCase()));
+  const availableDefinitionOptions = definitionOptions.filter((definition) => !stockedSkus.has(definition.sku.toLowerCase()));
+  const inventoryDialogOptions = inventoryDraft?.id ? definitionOptions : availableDefinitionOptions;
 
   async function refresh() {
     const sequence = ++refreshSequence.current;
@@ -1140,6 +1466,10 @@ export function App() {
         setSelected(null);
         setInventory(null);
         setInventoryDraft(null);
+        setItemDefinitions(null);
+        setItemDefinitionDraft(null);
+        setProductionItems(null);
+        setProductionItemDraft(null);
         setProductionRuns(null);
         setProductionDraft(null);
         setDeliveries(null);
@@ -1180,6 +1510,24 @@ export function App() {
       .catch((failure) => { if (active) { setInventory([]); setError(failure.message); } });
     return () => { active = false; };
   }, [status?.auth.connected, status?.auth.account?.id, inventoryRevision]);
+
+  useEffect(() => {
+    if (!status?.auth.connected) return undefined;
+    let active = true;
+    api('/api/item-definitions')
+      .then((data) => { if (active) setItemDefinitions(data.items); })
+      .catch((failure) => { if (active) { setItemDefinitions([]); setError(failure.message); } });
+    return () => { active = false; };
+  }, [status?.auth.connected, status?.auth.account?.id, itemDefinitionRevision]);
+
+  useEffect(() => {
+    if (!status?.auth.connected) return undefined;
+    let active = true;
+    api('/api/production-items')
+      .then((data) => { if (active) setProductionItems(data.items); })
+      .catch((failure) => { if (active) { setProductionItems([]); setError(failure.message); } });
+    return () => { active = false; };
+  }, [status?.auth.connected, status?.auth.account?.id, productionItemRevision]);
 
   useEffect(() => {
     if (!status?.auth.connected || view !== 'production') return undefined;
@@ -1248,12 +1596,13 @@ export function App() {
   }
 
   async function correctPo(values) {
-    if (!selected) return;
+    if (!selected) return null;
     try {
       const result = await api(`/api/pos/${encodeURIComponent(selected)}`, { method: 'PATCH', body: JSON.stringify(values) });
       setDetail(result.po);
-      setDetailMessage('Correction saved and assessment rerun.');
+      setDetailMessage(result.po.poError ? 'Correction saved, but the record still needs attention.' : 'Correction saved and assessment rerun.');
       await refresh();
+      return result.po;
     } catch (failure) {
       setError(failure.message);
       throw failure;
@@ -1268,6 +1617,10 @@ export function App() {
       setView('orders');
       setInventory(null);
       setInventoryDraft(null);
+      setItemDefinitions(null);
+      setItemDefinitionDraft(null);
+      setProductionItems(null);
+      setProductionItemDraft(null);
       setProductionRuns(null);
       setProductionDraft(null);
       setDeliveries(null);
@@ -1301,6 +1654,10 @@ export function App() {
     setView('orders');
     setInventory(null);
     setInventoryDraft(null);
+    setItemDefinitions(null);
+    setItemDefinitionDraft(null);
+    setProductionItems(null);
+    setProductionItemDraft(null);
     setProductionRuns(null);
     setProductionDraft(null);
     setDeliveries(null);
@@ -1356,10 +1713,81 @@ export function App() {
     }
   }
 
+  function openNewItemDefinition() {
+    setItemDefinitionDraft({ id: null, sku: '', item: '', unit: 'units' });
+  }
+
+  function openItemDefinition(definition) {
+    setItemDefinitionDraft({ ...definition });
+  }
+
+  async function saveItemDefinition(values) {
+    setItemDefinitionBusy(true);
+    try {
+      const editing = Boolean(itemDefinitionDraft?.id);
+      const url = editing ? `/api/item-definitions/${encodeURIComponent(itemDefinitionDraft.id)}` : '/api/item-definitions';
+      await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
+      setItemDefinitionDraft(null);
+      setNotice(editing ? 'Item definition saved.' : 'Item definition added.');
+      setItemDefinitionRevision((revision) => revision + 1);
+      setInventoryRevision((revision) => revision + 1);
+    } finally {
+      setItemDefinitionBusy(false);
+    }
+  }
+
+  async function removeItemDefinition() {
+    if (!itemDefinitionDraft?.id) return;
+    setItemDefinitionBusy(true);
+    try {
+      await api(`/api/item-definitions/${encodeURIComponent(itemDefinitionDraft.id)}`, { method: 'DELETE' });
+      setItemDefinitionDraft(null);
+      setNotice('Item definition deleted.');
+      setItemDefinitionRevision((revision) => revision + 1);
+    } finally {
+      setItemDefinitionBusy(false);
+    }
+  }
+
+  function openNewProductionItem() {
+    setProductionItemDraft({ id: null, name: '', unit: 'units', notes: '', requirements: [] });
+  }
+
+  function openProductionItem(item) {
+    setProductionItemDraft({ ...item, requirements: item.requirements || [] });
+  }
+
+  async function saveProductionItem(values) {
+    setProductionItemBusy(true);
+    try {
+      const editing = Boolean(productionItemDraft?.id);
+      const url = editing ? `/api/production-items/${encodeURIComponent(productionItemDraft.id)}` : '/api/production-items';
+      await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
+      setProductionItemDraft(null);
+      setNotice(editing ? 'Production item saved.' : 'Production item added.');
+      setProductionItemRevision((revision) => revision + 1);
+    } finally {
+      setProductionItemBusy(false);
+    }
+  }
+
+  async function removeProductionItem() {
+    if (!productionItemDraft?.id) return;
+    setProductionItemBusy(true);
+    try {
+      await api(`/api/production-items/${encodeURIComponent(productionItemDraft.id)}`, { method: 'DELETE' });
+      setProductionItemDraft(null);
+      setNotice('Production item deleted.');
+      setProductionItemRevision((revision) => revision + 1);
+    } finally {
+      setProductionItemBusy(false);
+    }
+  }
+
   async function openNewProductionRun() {
     try {
       const data = await api('/api/production-runs/next-number');
-      setProductionDraft({ id: null, runNumber: data.runNumber, status: 'scheduled', scheduledDate: todayDate(), notes: '', requirements: [] });
+      setProductionDraft({ id: null, runNumber: data.runNumber, productionItemId: '', item: '', quantity: 1, unit: 'units', status: 'scheduled', scheduledDate: todayDate(), notes: '', requirements: [] });
     } catch (failure) {
       setError(failure.message);
     }
@@ -1452,8 +1880,8 @@ export function App() {
   return (
     <main className="shell">
       {status.auth.connected ? (
-        <a className="skip-link" href={view === 'orders' ? '#orders' : view === 'deliveries' ? '#deliveries' : view === 'inventory' ? '#inventory' : '#production'}>
-          Skip to {view === 'orders' ? 'purchase orders' : view === 'deliveries' ? 'deliveries' : view === 'inventory' ? 'inventory' : 'production'}
+        <a className="skip-link" href={view === 'settings' ? '#settings' : view === 'orders' ? '#orders' : view === 'deliveries' ? '#deliveries' : view === 'inventory' ? '#inventory' : view === 'item-definition' ? '#item-definition' : '#production'}>
+          Skip to {view === 'settings' ? 'settings' : view === 'orders' ? 'purchase orders' : view === 'deliveries' ? 'deliveries' : view === 'inventory' ? 'inventory' : view === 'item-definition' ? 'item definition' : 'production'}
         </a>
       ) : null}
       <header className="app-head">
@@ -1468,7 +1896,19 @@ export function App() {
           </div>
           <div className="head-tools">
             <ThemeToggle theme={theme} onChange={changeTheme} />
-            {status.auth.connected ? <button type="button" className="button button-ghost button-small" onClick={signOut}>Sign out</button> : null}
+            {status.auth.connected ? (
+              <>
+                <button
+                  type="button"
+                  className={`button button-ghost button-small${view === 'settings' ? ' is-current' : ''}`}
+                  aria-current={view === 'settings' ? 'page' : undefined}
+                  onClick={() => showView('settings')}
+                >
+                  Settings
+                </button>
+                <button type="button" className="button button-ghost button-small" onClick={signOut}>Sign out</button>
+              </>
+            ) : null}
           </div>
         </div>
       </header>
@@ -1479,6 +1919,7 @@ export function App() {
           <button type="button" className="view-tab" aria-current={view === 'deliveries' ? 'page' : undefined} onClick={() => showView('deliveries')}>Deliveries</button>
           <button type="button" className="view-tab" aria-current={view === 'inventory' ? 'page' : undefined} onClick={() => showView('inventory')}>Inventory</button>
           <button type="button" className="view-tab" aria-current={view === 'production' ? 'page' : undefined} onClick={() => showView('production')}>Production</button>
+          <button type="button" className="view-tab" aria-current={view === 'item-definition' ? 'page' : undefined} onClick={() => showView('item-definition')}>Item definition</button>
         </nav>
       ) : null}
 
@@ -1523,33 +1964,51 @@ export function App() {
             <p className="hint">The app password is encrypted for your Windows user. Never enter your normal Google password.</p>
           </form>
         </section>
+      ) : view === 'settings' ? (
+        <SettingsView
+          status={status}
+          sender={sender}
+          setSender={setSender}
+          onAdd={addSender}
+          onRemove={removeSender}
+          busy={busy}
+          timeZone={timeZone}
+          setTimeZone={setTimeZone}
+          onSaveTimeZone={saveTimeZone}
+        />
       ) : view === 'orders' ? (
         <>
           <RunStrip status={status} />
-          <div className="workspace">
-            <SenderPanel status={status} sender={sender} setSender={setSender} onAdd={addSender} onRemove={removeSender} busy={busy} timeZone={timeZone} setTimeZone={setTimeZone} onSaveTimeZone={saveTimeZone} />
-            <PosPanel
-              status={status}
-              pos={pos}
-              stateFilter={stateFilter}
-              setStateFilter={setStateFilter}
-              sort={sort}
-              setSort={setSort}
-              query={query}
-              setQuery={setQuery}
-              offset={offset}
-              setOffset={setOffset}
-              selected={selected}
-              setSelected={setSelected}
-              busy={busy}
-              onClear={clearOrders}
-            />
-          </div>
+          <PosPanel
+            status={status}
+            pos={pos}
+            stateFilter={stateFilter}
+            setStateFilter={setStateFilter}
+            sort={sort}
+            setSort={setSort}
+            query={query}
+            setQuery={setQuery}
+            offset={offset}
+            setOffset={setOffset}
+            selected={selected}
+            setSelected={setSelected}
+            busy={busy}
+            onClear={clearOrders}
+          />
         </>
       ) : view === 'deliveries' ? (
         <DeliveriesView deliveries={deliveries} onAdd={openNewDelivery} onEdit={openDelivery} onReceive={receiveDelivery} busy={deliveryBusy} />
       ) : view === 'inventory' ? (
         <InventoryView items={inventory} onAdd={openNewInventoryItem} onEdit={openInventoryItem} />
+      ) : view === 'item-definition' ? (
+        <ItemDefinitionView
+          definitions={itemDefinitions}
+          productionItems={productionItems}
+          onAddDefinition={openNewItemDefinition}
+          onEditDefinition={openItemDefinition}
+          onAddProductionItem={openNewProductionItem}
+          onEditProductionItem={openProductionItem}
+        />
       ) : (
         <ProductionView runs={productionRuns} onAdd={openNewProductionRun} onEdit={openProductionRun} />
       )}
@@ -1567,20 +2026,26 @@ export function App() {
           error={error}
           busy={busy}
           message={detailMessage}
-          skuOptions={skuOptions}
+          skuOptions={definitionOptions}
           onClose={() => setSelected(null)}
           onAction={poAction}
           onCorrect={correctPo}
         />
       ) : null}
       {inventoryDraft ? (
-        <InventoryDialog draft={inventoryDraft} busy={inventoryBusy} onClose={() => { if (!inventoryBusy) setInventoryDraft(null); }} onSave={saveInventory} onDelete={removeInventoryItem} />
+        <InventoryDialog draft={inventoryDraft} skuOptions={inventoryDialogOptions} busy={inventoryBusy} onClose={() => { if (!inventoryBusy) setInventoryDraft(null); }} onSave={saveInventory} onDelete={removeInventoryItem} />
+      ) : null}
+      {itemDefinitionDraft ? (
+        <ItemDefinitionDialog draft={itemDefinitionDraft} busy={itemDefinitionBusy} onClose={() => { if (!itemDefinitionBusy) setItemDefinitionDraft(null); }} onSave={saveItemDefinition} onDelete={removeItemDefinition} />
+      ) : null}
+      {productionItemDraft ? (
+        <ProductionItemDialog draft={productionItemDraft} skuOptions={definitionOptions} busy={productionItemBusy} onClose={() => { if (!productionItemBusy) setProductionItemDraft(null); }} onSave={saveProductionItem} onDelete={removeProductionItem} />
       ) : null}
       {productionDraft ? (
-        <ProductionDialog draft={productionDraft} skuOptions={skuOptions} busy={productionBusy} onClose={() => { if (!productionBusy) setProductionDraft(null); }} onSave={saveProductionRun} onDelete={removeProductionRun} />
+        <ProductionDialog draft={productionDraft} productionItems={productionItems || []} skuOptions={definitionOptions} busy={productionBusy} onClose={() => { if (!productionBusy) setProductionDraft(null); }} onSave={saveProductionRun} onDelete={removeProductionRun} />
       ) : null}
       {deliveryDraft ? (
-        <DeliveryDialog draft={deliveryDraft} skuOptions={skuOptions} busy={deliveryBusy} onClose={() => { if (!deliveryBusy) setDeliveryDraft(null); }} onSave={saveDelivery} />
+        <DeliveryDialog draft={deliveryDraft} skuOptions={inventoryOptions} busy={deliveryBusy} onClose={() => { if (!deliveryBusy) setDeliveryDraft(null); }} onSave={saveDelivery} />
       ) : null}
     </main>
   );

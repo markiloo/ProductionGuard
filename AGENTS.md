@@ -66,6 +66,17 @@ Tests use Node's built-in runner (`node --test`) and `node:assert/strict`. Name 
 - Cover the behaviors that matter most: strict cutoff boundaries, sender add/remove, duplicate messages, account isolation, sign-out and clear races during downloads, credential handling, migrations, PO parsing, and API validation/cross-origin rejection.
 - Do not weaken tests to accommodate a behavior change without an explicit requirement.
 
+### Regression tests for errors and fixes
+
+Any error, failed workflow, or support report that gets fixed must come with a regression test in the same change.
+
+- Reproduce the failure first when practical: add the test, confirm it fails against the unfixed code, then fix the code and confirm it passes. The test must fail for the original reason, not an unrelated setup error.
+- Name the test after the user-visible behavior (for example, "PO correction maps a defined SKU without inventory"), not after the internal function.
+- Assert the exact outcome that failed: HTTP status, error message, persisted fields, assessment decision/requirement, or rendered state. Asserting only that a call succeeds does not count.
+- Start from the data shape that triggered the bug, using in-memory SQLite or a temporary `DATA_DIR`. Never depend on the contents of `data/`, a live Gmail account, or a specific machine clock.
+- If the failure cannot be automated directly (real IMAP, DPAPI, or a browser-only interaction), record the manual reproduction steps in the test or PR and add an automated test at the closest seam that exercises the same logic.
+- Keep the regression test alongside the fix; do not defer it to a separate change.
+
 ## Commits & Pull Requests
 
 Use short, imperative commit subjects (for example, `Add sender settings`). Pull requests should explain the change, link related work, list the checks run (`npm run lint`, `npm test`, `npm run build`), and include screenshots for UI changes.

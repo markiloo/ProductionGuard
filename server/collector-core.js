@@ -75,9 +75,13 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
               const reasons = po.poError ? [po.poError] : [];
               if (!authorized) reasons.push('Sender is not authorized');
               const valid = reasons.length === 0;
-              const mappedSku = po.item
-                ? db.prepare('SELECT sku FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE AND trim(sku) <> \'\' ORDER BY sku LIMIT 1').get(accountId, po.item)?.sku || null
+              const hasDefinitions = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='item_definitions'").get());
+              const definedSku = hasDefinitions && po.item
+                ? db.prepare("SELECT sku FROM item_definitions WHERE account_id=? AND sku=? COLLATE NOCASE ORDER BY sku LIMIT 1").get(accountId, po.item)?.sku || null
                 : null;
+              const mappedSku = definedSku || (po.item
+                ? db.prepare('SELECT sku FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE AND trim(sku) <> \'\' ORDER BY sku LIMIT 1').get(accountId, po.item)?.sku || null
+                : null);
               db.prepare(`INSERT OR IGNORE INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments,item,quantity,unit,eta,supplier,po_status,po_error,po_id,po_state,mapped_sku,eta_days)
                 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
                 accountId, id, runId, from?.address || '', from?.name || '', JSON.stringify(recipients), message.envelope.subject || '', receivedAt, body.slice(0, 200), body, parts.hasAttachments ? 1 : 0,

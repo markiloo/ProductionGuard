@@ -35,7 +35,14 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
   const arrival = provisional ? addDays(today, po.etaDays) : po.expectedArrival;
   const base = { arrival: isValidDate(arrival) ? arrival : null, provisional };
   if (po.poStatus !== 'valid') return manual(`${MANUAL} — Invalid PO`, { ...base, note: po.poError || 'The PO data is incomplete.' });
-  if (!inventory) return manual(`${MANUAL} — Unmapped Item`, { ...base, note: 'Map this item to an inventory SKU before assessment.' });
+  if (!inventory) {
+    return manual(po.sku ? `${MANUAL} — Missing Inventory` : `${MANUAL} — Unmapped Item`, {
+      ...base,
+      note: po.sku
+        ? `SKU ${po.sku} is mapped but has no inventory record. Add it in Inventory before assessment.`
+        : 'Map this item to a defined SKU before assessment.',
+    });
+  }
   if (!sameUnit(po.unit, inventory.unit)) {
     return manual(`${MANUAL} — Unit Mismatch`, { ...base, inventory, note: `The PO uses ${po.unit || 'no unit'} but inventory for ${inventory.sku} uses ${inventory.unit}.` });
   }

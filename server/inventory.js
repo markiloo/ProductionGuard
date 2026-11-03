@@ -68,22 +68,53 @@ function skuConflict() {
   return error;
 }
 
+function definitionsTable(db) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='item_definitions'").get());
+}
+
+function definedItem(db, accountId, sku) {
+  if (!definitionsTable(db) || !sku) return null;
+  return db.prepare('SELECT sku, item, unit FROM item_definitions WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, sku) || null;
+}
+
 /** Create an inventory item for one account. */
 export function createInventoryItem(db, accountId, input, now) {
+  const definition = definedItem(db, accountId, input.sku);
+  if (definitionsTable(db) && !definition) {
+    const error = new Error('Choose a defined SKU from Item definition first.');
+    error.status = 400;
+    throw error;
+  }
+  const item = definition ? definition.item : input.item;
+  const unit = definition ? definition.unit : input.unit;
   if (skuTaken(db, accountId, input.sku)) throw skuConflict();
   const id = randomUUID();
   db.prepare('INSERT INTO inventory(account_id,id,item,sku,quantity,unit,supplier,reorder_level,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(
-    accountId, id, input.item, input.sku, input.quantity, input.unit, input.supplier, input.reorderLevel, input.notes, now, now,
+    accountId, id, item, definition ? definition.sku : input.sku, input.quantity, unit, input.supplier, input.reorderLevel, input.notes, now, now,
   );
   return getInventoryItem(db, accountId, id);
 }
 
 /** Update an account-owned inventory item; returns null when the item is missing or owned by another account. */
 export function updateInventoryItem(db, accountId, id, input, now) {
-  if (!getInventoryItem(db, accountId, id)) return null;
+  const existing = getInventoryItem(db, accountId, id);
+  if (!existing) return null;
+  const definition = definedItem(db, accountId, input.sku);
+  if (definitionsTable(db) && !definition) {
+    const error = new Error('Choose a defined SKU from Item definition first.');
+    error.status = 400;
+    throw error;
+  }
+  if (existing.sku && definition && existing.sku.toLowerCase() !== definition.sku.toLowerCase()) {
+    const error = new Error('The SKU cannot be changed on an existing inventory item.');
+    error.status = 409;
+    throw error;
+  }
+  const item = definition ? definition.item : input.item;
+  const unit = definition ? definition.unit : input.unit;
   if (skuTaken(db, accountId, input.sku, id)) throw skuConflict();
   const result = db.prepare('UPDATE inventory SET item=?, sku=?, quantity=?, unit=?, supplier=?, reorder_level=?, notes=?, updated_at=? WHERE account_id=? AND id=?').run(
-    input.item, input.sku, input.quantity, input.unit, input.supplier, input.reorderLevel, input.notes, now, accountId, id,
+    item, definition ? definition.sku : input.sku, input.quantity, unit, input.supplier, input.reorderLevel, input.notes, now, accountId, id,
   );
   return result.changes ? getInventoryItem(db, accountId, id) : null;
 }

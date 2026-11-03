@@ -40,9 +40,14 @@ function requirementRows(db, accountId) {
     WHERE r.account_id=? ORDER BY p.scheduled_date, p.run_number`).all(accountId);
 }
 
-function effectiveSku(po, inventoryBySku) {
+function hasTable(db, name) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
+}
+
+function effectiveSku(po, inventoryBySku, definedBySku) {
   if (po.mappedSku) return po.mappedSku;
-  return inventoryBySku.get(String(po.item || '').toLowerCase())?.sku || null;
+  const key = String(po.item || '').toLowerCase();
+  return inventoryBySku.get(key)?.sku || definedBySku.get(key)?.sku || null;
 }
 
 /** Build the assessment input shared by every PO for one account. */
@@ -52,11 +57,17 @@ export function buildContext(db, accountId, today) {
   for (const item of inventory) {
     if (item.sku && !inventoryBySku.has(item.sku.toLowerCase())) inventoryBySku.set(item.sku.toLowerCase(), item);
   }
+  const definedBySku = new Map();
+  if (hasTable(db, 'item_definitions')) {
+    for (const definition of db.prepare('SELECT sku FROM item_definitions WHERE account_id=?').all(accountId)) {
+      if (!definedBySku.has(definition.sku.toLowerCase())) definedBySku.set(definition.sku.toLowerCase(), definition);
+    }
+  }
   const deliveries = deliveryRows(db, accountId);
   const requirements = requirementRows(db, accountId);
   const pos = db.prepare(`SELECT ${PO_COLUMNS} FROM emails WHERE account_id=? AND po_state IS NOT NULL ORDER BY received_at, po_id`).all(accountId);
   const enriched = pos.map((po) => {
-    const sku = effectiveSku(po, inventoryBySku);
+    const sku = effectiveSku(po, inventoryBySku, definedBySku);
     return { ...po, sku, arrival: po.state === 'ordered' ? po.expectedArrival : addDays(today, po.etaDays) };
   });
   return { inventory, inventoryBySku, deliveries, requirements, pos: enriched };
@@ -241,11 +252,15 @@ export function correctPo(db, accountId, poId, input, { today, now }) {
   if (!Number.isInteger(etaDays) || etaDays <= 0) errors.push('ETA must be a whole number of days or weeks');
   let mappedSku = null;
   if (mappedInput) {
-    const matched = inventory.find((row) => row.sku.toLowerCase() === mappedInput.toLowerCase());
-    if (!matched) errors.push('Choose an existing inventory SKU');
+    const hasDefinitions = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='item_definitions'").get());
+    const definition = hasDefinitions
+      ? db.prepare('SELECT sku, unit FROM item_definitions WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, mappedInput)
+      : null;
+    const matched = definition || inventory.find((row) => row.sku.toLowerCase() === mappedInput.toLowerCase());
+    if (!matched) errors.push(hasDefinitions ? 'Choose a defined SKU from Item definition' : 'Choose an existing inventory SKU');
     else {
       mappedSku = matched.sku;
-      if (unit && String(matched.unit).toLowerCase() !== unit.toLowerCase()) errors.push(`Unit must match inventory for ${matched.sku} (${matched.unit})`);
+      if (unit && String(matched.unit).toLowerCase() !== unit.toLowerCase()) errors.push(`Unit must match ${definition ? 'the definition' : 'inventory'} for ${matched.sku} (${matched.unit})`);
     }
   }
   const authorized = Boolean(db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(po.senderAddress)));

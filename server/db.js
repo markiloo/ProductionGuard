@@ -129,6 +129,42 @@ export function migrate() {
        PRIMARY KEY(account_id, id)
      );
      CREATE INDEX po_events_po ON po_events(account_id, po_id, created_at);`,
+    `CREATE TABLE item_definitions (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       id TEXT NOT NULL,
+       sku TEXT NOT NULL CHECK (length(trim(sku)) > 0),
+       item TEXT NOT NULL CHECK (length(trim(item)) > 0),
+       unit TEXT NOT NULL CHECK (length(trim(unit)) > 0),
+       created_at TEXT NOT NULL,
+       updated_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, id)
+     );
+     CREATE UNIQUE INDEX item_definitions_sku ON item_definitions(account_id, sku COLLATE NOCASE);
+     CREATE TABLE production_items (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       id TEXT NOT NULL,
+       name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+       unit TEXT NOT NULL CHECK (length(trim(unit)) > 0),
+       notes TEXT NOT NULL DEFAULT '',
+       created_at TEXT NOT NULL,
+       updated_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, id)
+     );
+     CREATE UNIQUE INDEX production_items_name ON production_items(account_id, name COLLATE NOCASE);
+     CREATE TABLE production_item_requirements (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       id TEXT NOT NULL,
+       production_item_id TEXT NOT NULL,
+       item_sku TEXT NOT NULL CHECK (length(trim(item_sku)) > 0),
+       quantity INTEGER NOT NULL CHECK (quantity > 0),
+       unit TEXT NOT NULL CHECK (length(trim(unit)) > 0),
+       created_at TEXT NOT NULL,
+       updated_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, id),
+       FOREIGN KEY(account_id, production_item_id) REFERENCES production_items(account_id, id) ON DELETE CASCADE
+     );
+     CREATE INDEX production_item_requirements_item ON production_item_requirements(account_id, production_item_id);
+     ALTER TABLE production_runs ADD COLUMN production_item_id TEXT;`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;
@@ -169,6 +205,18 @@ export function migrate() {
         for (const run of db.prepare('SELECT account_id,id,item,quantity,unit,status FROM production_runs').all()) {
           insert.run(run.account_id, `legacy-${run.id}`, run.id, run.item, run.quantity, run.unit, run.status === 'completed' ? 'completed' : 'outstanding', now, now);
         }
+      }
+      if (version === 12) {
+        const now = new Date().toISOString();
+        const insert = db.prepare('INSERT OR IGNORE INTO item_definitions(account_id,id,sku,item,unit,created_at,updated_at) VALUES(?,?,?,?,?,?,?)');
+        const add = (accountId, sku, item, unit) => {
+          if (!String(sku || '').trim()) return;
+          insert.run(accountId, `seed-${accountId}-${String(sku).toLowerCase()}`, String(sku).trim(), String(item || sku).trim() || String(sku).trim(), String(unit || 'units').trim() || 'units', now, now);
+        };
+        for (const row of db.prepare("SELECT account_id,sku,item,unit FROM inventory WHERE trim(sku) <> '' ORDER BY item").all()) add(row.account_id, row.sku, row.item, row.unit);
+        for (const row of db.prepare('SELECT account_id,item_sku,unit FROM production_requirements').all()) add(row.account_id, row.item_sku, row.item_sku, row.unit);
+        for (const row of db.prepare('SELECT account_id,item_sku,unit FROM incoming_deliveries').all()) add(row.account_id, row.item_sku, row.item_sku, row.unit);
+        for (const row of db.prepare('SELECT account_id,mapped_sku,unit FROM emails WHERE mapped_sku IS NOT NULL').all()) add(row.account_id, row.mapped_sku, row.mapped_sku, row.unit);
       }
       db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)').run(version, new Date().toISOString());
     })();

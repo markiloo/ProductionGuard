@@ -8,6 +8,8 @@ import { normalizeSender, isValidSender } from './rules.js';
 import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email-queries.js';
 import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
 import { listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
+import { listItemDefinitions, createItemDefinition, updateItemDefinition, deleteItemDefinition, parseItemDefinitionInput } from './item-definitions.js';
+import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
 import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail } from './pos.js';
 import { listDeliveries, createDelivery, updateDelivery, receiveDelivery, parseDeliveryInput } from './deliveries.js';
 import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
@@ -51,6 +53,7 @@ function readProductionInput(body, res) {
 
 function sendProductionError(res, failure) {
   if (failure.status === 409) return res.status(409).json({ error: failure.message });
+  if (failure.status === 400) return res.status(400).json({ error: failure.message });
   if (String(failure.code || '').startsWith('SQLITE_CONSTRAINT')) return res.status(409).json({ error: 'That run number is already in use.' });
   return res.status(500).json({ error: 'Could not save production run.' });
 }
@@ -138,6 +141,74 @@ app.delete('/api/inventory/:id', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   if (!deleteInventoryItem(db, aid, req.params.id)) return res.status(404).json({ error: 'Inventory item not found.' });
   res.json({ ok: true });
+});
+
+app.get('/api/item-definitions', (_req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  res.json({ items: listItemDefinitions(db, aid) });
+});
+app.post('/api/item-definitions', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const input = parseItemDefinitionInput(req.body);
+    res.status(201).json({ ok: true, item: createItemDefinition(db, aid, input, isoNow()) });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not save the item definition.');
+  }
+});
+app.put('/api/item-definitions/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const input = parseItemDefinitionInput(req.body);
+    const item = updateItemDefinition(db, aid, req.params.id, input, isoNow());
+    if (!item) return res.status(404).json({ error: 'Item definition not found.' });
+    res.json({ ok: true, item });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not save the item definition.');
+  }
+});
+app.delete('/api/item-definitions/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    if (!deleteItemDefinition(db, aid, req.params.id)) return res.status(404).json({ error: 'Item definition not found.' });
+    res.json({ ok: true });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not delete the item definition.');
+  }
+});
+
+app.get('/api/production-items', (_req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  res.json({ items: listProductionItems(db, aid) });
+});
+app.post('/api/production-items', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const input = parseProductionItemInput(req.body);
+    res.status(201).json({ ok: true, item: createProductionItem(db, aid, input, isoNow()) });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not save the production item.');
+  }
+});
+app.put('/api/production-items/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const input = parseProductionItemInput(req.body);
+    const item = updateProductionItem(db, aid, req.params.id, input, isoNow());
+    if (!item) return res.status(404).json({ error: 'Production item not found.' });
+    res.json({ ok: true, item });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not save the production item.');
+  }
+});
+app.delete('/api/production-items/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    if (!deleteProductionItem(db, aid, req.params.id)) return res.status(404).json({ error: 'Production item not found.' });
+    res.json({ ok: true });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not delete the production item.');
+  }
 });
 
 app.get('/api/production-runs/next-number', (_req, res) => {

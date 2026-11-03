@@ -1,5 +1,6 @@
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
+const DEFAULT_TIME_ZONE = 'Asia/Manila';
 
 /** Return true for a real calendar date in YYYY-MM-DD form. */
 export function isValidDate(value) {
@@ -27,19 +28,19 @@ export function plantToday(timeZone) {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
-/** Validate an IANA time zone, falling back to the PC's zone. */
+/** Validate an IANA time zone, falling back to the plant default. */
 export function resolveTimeZone(value) {
   const candidate = String(value || '').trim();
   if (candidate) {
     try {
       new Intl.DateTimeFormat('en-CA', { timeZone: candidate });
       return candidate;
-    } catch { /* Fall through to the system zone. */ }
+    } catch { /* Fall through to the plant default. */ }
   }
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  return DEFAULT_TIME_ZONE;
 }
 
-/** Read the stored plant time zone, defaulting to the PC's zone. */
+/** Read the stored plant time zone, defaulting to Asia/Manila. */
 export function getPlantTimeZone(db) {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'plant_timezone'").get();
   return resolveTimeZone(row?.value);

@@ -23,12 +23,41 @@
 /** @typedef {{ address: string }} SenderSetting */
 
 /**
+ * @typedef {Object} ItemDefinition
+ * @property {string} id Stable definition ID.
+ * @property {string} sku Required per-account unique item code.
+ * @property {string} item Display name.
+ * @property {string} unit Unit used for every quantity of this item.
+ * @property {string} createdAt UTC creation timestamp.
+ * @property {string} updatedAt UTC last-edit timestamp.
+ */
+
+/**
+ * @typedef {Object} ProductionItemRequirement
+ * @property {string} id Stable requirement template ID.
+ * @property {string} productionItemId Owning production item ID.
+ * @property {string} itemSku Required material SKU.
+ * @property {number} quantity Whole-number quantity.
+ * @property {string} unit Unit matching the SKU definition.
+ */
+
+/**
+ * @typedef {Object} ProductionItem
+ * @property {string} id Stable production item ID.
+ * @property {string} name Item to make, unique per account.
+ * @property {string} unit Unit of the produced item.
+ * @property {string} notes Optional notes.
+ * @property {ProductionItemRequirement[]} requirements Material template rows.
+ * @property {string} createdAt UTC creation timestamp.
+ * @property {string} updatedAt UTC last-edit timestamp.
+ */
+
+/**
  * @typedef {Object} InventoryItem
  * @property {string} id Stable local inventory ID.
  * @property {string} item Display name.
  * @property {string} sku Required per-account unique item code; the join key for POs, deliveries, and demand.
- * @property {number} quantity Whole-number quantity on hand.
- * @property {string} unit Inventory unit used for every quantity of this item.
+ * @property {number} quantity Whole-number quantity on hand. * @property {string} unit Inventory unit used for every quantity of this item.
  * @property {string} supplier Optional supplier name.
  * @property {number|null} reorderLevel Whole-number threshold, or null when unset.
  * @property {string} notes Optional local notes.
@@ -52,9 +81,10 @@
  * @typedef {Object} ProductionRun
  * @property {string} id Stable local production run ID.
  * @property {string} runNumber Human-readable run number, unique per account.
- * @property {string} item Run header label, derived from the first requirement.
- * @property {number} quantity Header quantity mirroring the first requirement.
- * @property {string} unit Header unit mirroring the first requirement.
+ * @property {string|null} productionItemId Definition selected for the run.
+ * @property {string} item Run header label, taken from the production item definition.
+ * @property {number} quantity Whole-number planned quantity of the produced item.
+ * @property {string} unit Unit of the produced item, taken from the definition.
  * @property {'scheduled'|'in_progress'|'completed'|'on_hold'} status Production status.
  * @property {string} scheduledDate Local calendar date in YYYY-MM-DD form.
  * @property {string} notes Optional local notes.
