@@ -31,11 +31,14 @@ test('migration adds suppliers to saved POs and flags older messages missing the
     assert.deepEqual(page.items.map((item) => [item.id, item.supplier, item.poStatus]), [['old-po', null, 'needs_review'], ['po', 'Acme Supply', 'valid']]);
     assert.match(getEmail(db, 'a', 'old-po').poError, /supplier/i);
     assert.equal(getEmail(db, 'a', 'other'), null);
+    assert.equal(db.prepare("SELECT po_state FROM emails WHERE message_id='po'").get().po_state, 'pending_review');
     assert.equal(clearSavedEmails(db, 'a', '2026-01-04T00:00:00.000Z'), 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emails').get().count, 1);
-    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 6);
+    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 11);
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inventory'").get());
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_runs'").get());
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_requirements'").get());
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'incoming_deliveries'").get());
   } finally {
     loaded?.db.close();
     loaded?.releaseInstanceLock();

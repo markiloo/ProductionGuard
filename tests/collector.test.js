@@ -10,7 +10,7 @@ const message = (uid, at, address = 'orders@example.com', subject = 'PO') => ({ 
 
 function fixture(fetchMessage, download = async () => ({ content: Readable.from([Buffer.from('ITEM: Steel\nQUANTITY: 2\nUNIT: kg\nETA: 1 week\nSUPPLIER: Acme Supply')]) })) {
   const db = new Database(':memory:');
-  db.exec("CREATE TABLE runs(id TEXT PRIMARY KEY,account_id TEXT,cutoff TEXT,started_at TEXT,last_success_at TEXT,error TEXT,status TEXT);CREATE TABLE senders(account_id TEXT,address TEXT,normalized_address TEXT,created_at TEXT,PRIMARY KEY(account_id,normalized_address));CREATE TABLE emails(account_id TEXT,message_id TEXT,run_id TEXT,sender_address TEXT,sender_name TEXT,recipients TEXT,subject TEXT,received_at TEXT,preview TEXT,body TEXT,has_attachments INTEGER,item TEXT,quantity INTEGER,unit TEXT,eta TEXT,supplier TEXT,po_status TEXT,po_error TEXT,PRIMARY KEY(account_id,message_id));CREATE TABLE account_clears(account_id TEXT PRIMARY KEY,cleared_at TEXT NOT NULL);");
+  db.exec("CREATE TABLE runs(id TEXT PRIMARY KEY,account_id TEXT,cutoff TEXT,started_at TEXT,last_success_at TEXT,error TEXT,status TEXT);CREATE TABLE senders(account_id TEXT,address TEXT,normalized_address TEXT,created_at TEXT,PRIMARY KEY(account_id,normalized_address));CREATE TABLE inventory(account_id TEXT,id TEXT,item TEXT,sku TEXT,quantity INTEGER,unit TEXT,updated_at TEXT,PRIMARY KEY(account_id,id));CREATE TABLE emails(account_id TEXT,message_id TEXT,run_id TEXT,sender_address TEXT,sender_name TEXT,recipients TEXT,subject TEXT,received_at TEXT,preview TEXT,body TEXT,has_attachments INTEGER,item TEXT,quantity INTEGER,unit TEXT,eta TEXT,supplier TEXT,po_status TEXT,po_error TEXT,po_id TEXT,po_state TEXT,mapped_sku TEXT,eta_days INTEGER,expected_arrival TEXT,ordered_at TEXT,PRIMARY KEY(account_id,message_id));CREATE TABLE account_clears(account_id TEXT PRIMARY KEY,cleared_at TEXT NOT NULL);");
   db.prepare('INSERT INTO senders VALUES(?,?,?,?)').run('gmail:a@gmail.com', 'orders@example.com', 'orders@example.com', cutoff);
   let account = 'gmail:a@gmail.com';
   const calls = { searches: [], downloads: [], closes: 0 };
@@ -22,18 +22,22 @@ test('Gmail collector applies strict received cutoff, exact From address, and do
   const data = fixture((uid) => [message(1, '2026-11-02T08:59:59Z'), message(2, cutoff), message(3, '2026-11-02T09:01:00Z', 'other@example.com'), message(4, '2026-11-02T09:02:00Z')][uid - 1]);
   try {
     await data.collector.collect();
-    assert.equal(data.count(), 1);
-    assert.deepEqual(data.calls.downloads, [{ uid: 4, part: '1' }]);
-    const saved = data.db.prepare('SELECT * FROM emails').get();
-    assert.equal(saved.message_id, 'gmail-4');
+    assert.equal(data.count(), 2);
+    assert.deepEqual(data.calls.downloads, [{ uid: 3, part: '1' }, { uid: 4, part: '1' }]);
+    const saved = data.db.prepare("SELECT * FROM emails WHERE message_id='gmail-4'").get();
     assert.equal(saved.item, 'Steel');
     assert.equal(saved.quantity, 2);
     assert.equal(saved.supplier, 'Acme Supply');
     assert.equal(saved.po_status, 'valid');
+    assert.equal(saved.po_state, 'pending_review');
+    assert.equal(saved.po_id, 'PO-0002');
     assert.equal(saved.has_attachments, 1);
     assert.equal(JSON.parse(saved.recipients)[0].address, 'buyer@example.com');
-    assert.equal(data.calls.searches[0].from, 'orders@example.com');
-    assert.equal(data.collector.state().currentRunCount, 1);
+    const unauthorized = data.db.prepare("SELECT * FROM emails WHERE message_id='gmail-3'").get();
+    assert.equal(unauthorized.po_state, 'unverified');
+    assert.match(unauthorized.po_error, /not authorized/);
+    assert.equal(data.calls.searches[0].subject, 'PO');
+    assert.equal(data.collector.state().currentRunCount, 2);
   } finally { data.collector.stop(); data.db.close(); }
 });
 
@@ -55,8 +59,8 @@ test('collector saves malformed PO mail for review', async () => {
     assert.equal(saved.quantity, null);
     assert.equal(saved.po_status, 'needs_review');
     assert.match(saved.po_error, /Quantity/);
-    assert.match(saved.po_error, /Unit/);
     assert.match(saved.po_error, /ETA/);
+    assert.match(saved.po_error, /supplier/i);
   } finally { data.collector.stop(); data.db.close(); }
 });
 
@@ -89,14 +93,16 @@ test('sign-out during a text download cannot insert stale mail', async () => {
   } finally { data.collector.stop(); data.db.close(); }
 });
 
-test('new sender checks the current cutoff window and uses the same Gmail account', async () => {
+test('new sender promotes queued unauthorized mail and keeps the current cutoff window', async () => {
   const data = fixture(() => message(4, '2026-11-02T09:02:00Z', 'later@example.com'));
   try {
     await data.collector.collect();
-    assert.equal(data.count(), 0);
+    assert.equal(data.count(), 1);
+    assert.equal(data.db.prepare('SELECT po_state FROM emails').get().po_state, 'unverified');
     data.db.prepare('INSERT INTO senders VALUES(?,?,?,?)').run('gmail:a@gmail.com', 'later@example.com', 'later@example.com', cutoff);
     await data.collector.collect();
     assert.equal(data.count(), 1);
+    assert.equal(data.db.prepare('SELECT po_state FROM emails').get().po_state, 'pending_review');
     assert.equal(data.collector.state().cutoff, cutoff);
   } finally { data.collector.stop(); data.db.close(); }
 });

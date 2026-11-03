@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import { ImapFlow } from 'imapflow';
 import { htmlToText } from 'html-to-text';
 import { normalizeSender } from './rules.js';
-import { isPoSubject, parsePo } from './po.js';
+import { isPoSubject, parseEtaDays, parsePo } from './po.js';
+import { nextPoId, authorizeQueuedMail } from './pos.js';
 
 const now = () => new Date().toISOString();
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,6 +33,8 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
       if (!senders.length || !credentials) return;
       error = null;
       db.prepare("UPDATE runs SET account_id=?,status='running' WHERE id=?").run(accountId, runId);
+      const authorizedSenders = new Set(senders.map((sender) => sender.normalized_address));
+      for (const sender of senders) authorizeQueuedMail(db, accountId, sender.normalized_address);
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           client = createClient(credentials);
@@ -40,37 +43,47 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
           if (version !== generation || account() !== accountId) return;
           const lock = await client.getMailboxLock('INBOX', { readOnly: true });
           try {
-            for (const sender of senders) {
-              const uids = await client.search({ since: new Date(cutoff), from: sender.address }, { uid: true }) || [];
-              for (const uid of uids) {
-                if (version !== generation || account() !== accountId) return;
-                const message = await client.fetchOne(uid, { uid: true, emailId: true, envelope: true, internalDate: true, bodyStructure: true }, { uid: true });
-                if (!message) continue;
-                const from = message.envelope?.from?.[0];
-                const receivedTime = new Date(message.internalDate);
-                if (Number.isNaN(receivedTime.getTime())) continue;
-                const receivedAt = receivedTime.toISOString();
-                if (Date.parse(receivedAt) <= Date.parse(cutoff) || normalizeSender(from?.address) !== sender.normalized_address || !isPoSubject(message.envelope?.subject)) continue;
-                const id = String(message.emailId || `${client.mailbox.uidValidity}:${uid}`);
-                if (db.prepare('SELECT 1 FROM emails WHERE account_id=? AND message_id=?').get(accountId, id)) continue;
-                if (!allowed(accountId, from.address, receivedAt, version)) continue;
-                const parts = inspectParts(message.bodyStructure);
-                let body = '';
-                const chosen = parts.plain || parts.html;
-                if (chosen) {
-                  const downloaded = await client.download(uid, chosen, { uid: true });
-                  if (downloaded.content) {
-                    const chunks = [];
-                    for await (const chunk of downloaded.content) chunks.push(chunk);
-                    body = Buffer.concat(chunks).toString('utf8');
-                    if (!parts.plain) body = htmlToText(body, { wordwrap: false });
-                  }
+            const uids = await client.search({ since: new Date(cutoff), subject: 'PO' }, { uid: true }) || [];
+            for (const uid of uids) {
+              if (version !== generation || account() !== accountId) return;
+              const message = await client.fetchOne(uid, { uid: true, emailId: true, envelope: true, internalDate: true, bodyStructure: true }, { uid: true });
+              if (!message) continue;
+              const from = message.envelope?.from?.[0];
+              const receivedTime = new Date(message.internalDate);
+              if (Number.isNaN(receivedTime.getTime())) continue;
+              const receivedAt = receivedTime.toISOString();
+              if (Date.parse(receivedAt) <= Date.parse(cutoff) || !isPoSubject(message.envelope?.subject)) continue;
+              const id = String(message.emailId || `${client.mailbox.uidValidity}:${uid}`);
+              if (db.prepare('SELECT 1 FROM emails WHERE account_id=? AND message_id=?').get(accountId, id)) continue;
+              if (!allowed(accountId, receivedAt, version)) continue;
+              const parts = inspectParts(message.bodyStructure);
+              let body = '';
+              const chosen = parts.plain || parts.html;
+              if (chosen) {
+                const downloaded = await client.download(uid, chosen, { uid: true });
+                if (downloaded.content) {
+                  const chunks = [];
+                  for await (const chunk of downloaded.content) chunks.push(chunk);
+                  body = Buffer.concat(chunks).toString('utf8');
+                  if (!parts.plain) body = htmlToText(body, { wordwrap: false });
                 }
-                if (!allowed(accountId, from.address, receivedAt, version)) continue;
-                const recipients = ['to', 'cc', 'bcc'].flatMap((type) => (message.envelope?.[type] || []).map((item) => ({ type: type === 'to' ? 'To' : type === 'cc' ? 'Cc' : 'Bcc', name: item.name || '', address: item.address || '' })));
-                const po = parsePo(body);
-                db.prepare('INSERT OR IGNORE INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments,item,quantity,unit,eta,supplier,po_status,po_error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(accountId, id, runId, from.address, from.name || '', JSON.stringify(recipients), message.envelope.subject || '', receivedAt, body.slice(0, 200), body, parts.hasAttachments ? 1 : 0, po.item, po.quantity, po.unit, po.eta, po.supplier, po.poStatus, po.poError);
               }
+              if (!allowed(accountId, receivedAt, version)) continue;
+              const recipients = ['to', 'cc', 'bcc'].flatMap((type) => (message.envelope?.[type] || []).map((item) => ({ type: type === 'to' ? 'To' : type === 'cc' ? 'Cc' : 'Bcc', name: item.name || '', address: item.address || '' })));
+              const po = parsePo(body);
+              const authorized = authorizedSenders.has(normalizeSender(from?.address));
+              const reasons = po.poError ? [po.poError] : [];
+              if (!authorized) reasons.push('Sender is not authorized');
+              const valid = reasons.length === 0;
+              const mappedSku = po.item
+                ? db.prepare('SELECT sku FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE AND trim(sku) <> \'\' ORDER BY sku LIMIT 1').get(accountId, po.item)?.sku || null
+                : null;
+              db.prepare(`INSERT OR IGNORE INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments,item,quantity,unit,eta,supplier,po_status,po_error,po_id,po_state,mapped_sku,eta_days)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+                accountId, id, runId, from?.address || '', from?.name || '', JSON.stringify(recipients), message.envelope.subject || '', receivedAt, body.slice(0, 200), body, parts.hasAttachments ? 1 : 0,
+                po.item, po.quantity, po.unit, po.eta, po.supplier, valid ? 'valid' : 'needs_review', reasons.join('; ') || null,
+                nextPoId(db, accountId), valid ? 'pending_review' : 'unverified', mappedSku, parseEtaDays(po.eta),
+              );
             }
           } finally { lock.release(); }
           if (version === generation && account() === accountId) db.prepare("UPDATE runs SET last_success_at=?,error=NULL WHERE id=?").run(clock(), runId);
@@ -94,9 +107,8 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
       if (rerun) { rerun = false; queueMicrotask(() => collect().catch(() => {})); }
     }
   }
-  function allowed(accountId, address, receivedAt, version) {
+  function allowed(accountId, receivedAt, version) {
     return version === generation && account() === accountId
-      && Boolean(db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(address)))
       && !db.prepare('SELECT 1 FROM account_clears WHERE account_id=? AND cleared_at>=?').get(accountId, receivedAt);
   }
   return { runId, state, stop, begin, collect };

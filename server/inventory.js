@@ -14,7 +14,7 @@ function text(value) {
 }
 
 /** Validate and normalize an inventory create or update request. */
-export function parseInventoryInput(body) {
+export function parseInventoryInput(body, { requireSku = false } = {}) {
   const value = body && typeof body === 'object' ? body : {};
   const item = text(value.item);
   const sku = text(value.sku);
@@ -26,6 +26,7 @@ export function parseInventoryInput(body) {
 
   if (!item) throw new Error('Enter an item name.');
   if (item.length > MAX_ITEM) throw new Error(`Item names must be ${MAX_ITEM} characters or fewer.`);
+  if (requireSku && !sku) throw new Error('Enter an item code (SKU); POs, deliveries, and demand join on it.');
   if (sku.length > MAX_SKU) throw new Error(`SKUs must be ${MAX_SKU} characters or fewer.`);
   if (!unit) throw new Error('Enter a unit.');
   if (unit.length > MAX_UNIT) throw new Error(`Units must be ${MAX_UNIT} characters or fewer.`);
@@ -56,8 +57,20 @@ function getInventoryItem(db, accountId, id) {
   return db.prepare(`SELECT ${columns} FROM inventory WHERE account_id = ? AND id = ?`).get(accountId, id) || null;
 }
 
+function skuTaken(db, accountId, sku, excludeId = '') {
+  if (!sku) return false;
+  return Boolean(db.prepare('SELECT 1 FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE AND id<>?').get(accountId, sku, excludeId));
+}
+
+function skuConflict() {
+  const error = new Error('That SKU is already used by another inventory item.');
+  error.status = 409;
+  return error;
+}
+
 /** Create an inventory item for one account. */
 export function createInventoryItem(db, accountId, input, now) {
+  if (skuTaken(db, accountId, input.sku)) throw skuConflict();
   const id = randomUUID();
   db.prepare('INSERT INTO inventory(account_id,id,item,sku,quantity,unit,supplier,reorder_level,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(
     accountId, id, input.item, input.sku, input.quantity, input.unit, input.supplier, input.reorderLevel, input.notes, now, now,
@@ -67,6 +80,8 @@ export function createInventoryItem(db, accountId, input, now) {
 
 /** Update an account-owned inventory item; returns null when the item is missing or owned by another account. */
 export function updateInventoryItem(db, accountId, id, input, now) {
+  if (!getInventoryItem(db, accountId, id)) return null;
+  if (skuTaken(db, accountId, input.sku, id)) throw skuConflict();
   const result = db.prepare('UPDATE inventory SET item=?, sku=?, quantity=?, unit=?, supplier=?, reorder_level=?, notes=?, updated_at=? WHERE account_id=? AND id=?').run(
     input.item, input.sku, input.quantity, input.unit, input.supplier, input.reorderLevel, input.notes, now, accountId, id,
   );

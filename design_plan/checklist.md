@@ -120,3 +120,112 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Document the production endpoints, fields, and local-storage behavior.
 - [x] Delete inventory items and production runs from their edit sheets after confirmation.
 - [x] Auto-generate sequential `PR-####` production run numbers.
+
+## Item master and SKU update
+
+- [ ] Promote `inventory.sku` to the required item code used by POs, incoming deliveries, and production requirements, and keep `inventory.item` as the display name only.
+- [ ] Require a non-empty SKU on inventory create and edit and enforce a case-insensitive unique index per account, with a specific error for blank or duplicate SKUs.
+- [ ] Leave existing blank-SKU inventory rows unmapped rather than inventing codes, and flag them as *Manual Review Required — Unmapped Item* until the manager supplies a SKU.
+- [ ] Use SKU as the case-insensitive join key for PO mapping, deliveries, and requirements; never match records by display name.
+- [ ] Return the inventory last-update time with assessments and include it in the inventory API response.
+
+## Production requirements update
+
+- [ ] Add a `production_requirements` table storing run ID, item SKU, quantity, unit, and demand status (`outstanding` or `completed`).
+- [ ] Migrate each existing production run's item, quantity, and unit into one requirement row and keep the run header (number, date, status).
+- [ ] Let the manager add and edit requirement rows per run, requiring a whole-number quantity above zero and a unit matching the item's inventory unit.
+- [ ] Count only outstanding requirements as demand; completed runs and completed requirements contribute nothing to projections.
+- [ ] Update `parseProductionInput`, the production form, and `tests/production.test.js` to cover requirement rows.
+- [ ] Block assessment for an item whose requirement unit mismatches inventory and show *Manual Review Required — Unit Mismatch* naming the run.
+
+## Purchase order intake update
+
+- [ ] Separate validation result (valid or unverified with a reason) from workflow state (Pending Review, Approved, Ordered/Incoming, Rejected, Unverified), and migrate existing `valid` and `needs_review` rows.
+- [ ] Add one ordered migration for PO ID, workflow state, mapped SKU, ETA days, expected arrival, and provisional flag; never edit an applied migration.
+- [ ] Assign a per-account sequential PO ID (`PO-0001`) at ingestion and keep it through correction, rejection, resubmission, and delivery linking.
+- [ ] Keep subject matching trimmed, case-insensitive, and exactly `PO`, and keep message ID as the only duplicate protection.
+- [ ] Fetch Inbox mail with subject `PO` from every sender, then match the allowlist locally so unauthorized mail is retained in the unverified queue with a reason instead of dropped.
+- [ ] Accept any unit label and any whole-number ETA in days or weeks, normalize weeks to seven calendar days, and update the parser tests that restrict units to `kg|units` and ETA to `1 week|2 weeks`.
+- [ ] Detect more than one ITEM block in one email and route it to unverified with "submit a separate email for each item"; never select or combine items.
+- [ ] Route missing fields, malformed values, unauthorized senders, and multi-item mail to unverified with the specific reason.
+- [ ] Keep unverified records out of Pending Review, assessments, and provisional coverage.
+- [ ] Map the email item to exactly one inventory SKU case-insensitively, and show *Manual Review Required — Unmapped Item* when no SKU matches.
+- [ ] Validate PO and delivery units against the mapped item's inventory unit, show *Manual Review Required — Unit Mismatch* naming the conflicting record and expected unit, and never convert units.
+- [ ] Preserve the original body, sender, message ID, receipt time, and PO ID through every correction and state change.
+
+## Incoming deliveries update
+
+- [ ] Add an account-scoped incoming delivery record: item SKU, quantity, unit, expected arrival, supplier, status, received time, and linked PO ID.
+- [ ] List, add, and edit unreceived deliveries, and show received deliveries read-only with their received time.
+- [ ] Create exactly one delivery when a PO becomes Ordered/Incoming and update that record on later edits instead of creating another.
+- [ ] Receive a delivery in one transaction that adds its quantity to on-hand stock and removes it from incoming supply.
+- [ ] Make receiving idempotent so retries, double clicks, and refreshes never add stock twice.
+- [ ] Block item, quantity, and status edits on received deliveries and direct stock corrections to inventory editing.
+- [ ] Validate delivery quantity, unit, and expected arrival date.
+
+## PO workflow update
+
+- [ ] Allow Pending Review → Approved or Rejected.
+- [ ] Allow Approved → Ordered/Incoming or Rejected.
+- [ ] Require a non-empty rejection reason and store the reason, time, and history with the PO.
+- [ ] Allow Rejected → Pending Review after corrections pass validation, preserving PO ID, original email, receipt time, and rejection history.
+- [ ] Block every other transition, including Pending Review → Ordered/Incoming, with a clear error.
+- [ ] Keep approval provisional: no linked incoming supply and no fixed arrival.
+- [ ] Fix expected arrival as ordered date + ETA duration and create the single linked delivery on ordering.
+- [ ] Allow Pending Review field corrections with revalidation and reassessment, and require Approved revisions to be rejected and resubmitted.
+- [ ] Prevent Ordered/Incoming POs from being rejected or moved backward, tracking receipt separately.
+
+## ETA and daily refresh update
+
+- [ ] Store a plant time zone setting, defaulting from the PC's time zone, and use it for every calendar-day decision.
+- [ ] Compute provisional arrivals as plant-local today plus ETA duration and label them as estimates until ordering.
+- [ ] Advance provisional arrivals at each plant-local date change and reassess Pending Review and Approved POs.
+- [ ] Apply any missed date change on startup before serving assessments, and keep ordered arrival dates fixed.
+- [ ] Reassess all remaining Pending Review POs after any inventory, delivery, requirement, PO-state, or ETA change, and include the updated decision in the API response.
+
+## Assessment engine update
+
+- [ ] Add a pure, deterministic assessment module taking item stock and update time, unreceived deliveries, outstanding requirements, and earlier POs, and returning the decision, requirement, difference, balances, and warnings.
+- [ ] Compute assessments on read and inside every mutating request, and never persist decision flags.
+- [ ] Project the balance for one item at the evaluated PO's arrival and at every outstanding production date on or after it, adding supply due by the date and subtracting demand due by the date, and report the last outstanding run as the planning end date.
+- [ ] Include demand and supply due on or before arrival even when arrival follows the last run.
+- [ ] Compute net requirement as the largest cumulative deficit at arrival and later run dates, `max(0, -min B(t))`, keeping earlier deficits as timing warnings that never increase the requirement.
+- [ ] Decide *Redundant / Overstock* for a zero requirement, *Recommended* for an exact match, and *Adjust Quantity* otherwise, and report the requirement and PO quantity minus requirement.
+- [ ] Show *Manual Review Required — No Scheduled Demand* and skip requirement math when the item has no outstanding runs.
+- [ ] Apply a one-calendar-day arrival buffer, treating arrival on the run date or later as *Timing Conflict / Expedite Needed*.
+- [ ] Report the missed run date and the projected balance or stockout separately from the quantity decision.
+- [ ] Report *Arriving Early* with the first need date and days early when arrival precedes the first run needing the quantity.
+- [ ] Count earlier pending or approved POs as provisional coverage only on dates on or after their expected arrival, ordered by receipt time then ascending PO ID.
+- [ ] Report *Potential Duplicate / Covered by Pending or Approved PO* with the covered amount and count each PO once.
+- [ ] Show balances before and after the evaluated PO, with provisional contributions shown separately.
+- [ ] Give unmapped, invalid, or unit-mismatched records *Manual Review Required* and no provisional coverage.
+
+## Assessment verification update
+
+- [ ] Add unit tests that run each PRD scenario from its exact stated data and assert balances, requirement, difference, decision, and warnings.
+- [ ] Worked shortage: 50 on Day 4 and 30 on Day 10 → requirement 80; an 80-unit PO on Day 3 → balances 30 and 0, *Recommended* + *Arriving Early*, Day 4 need, one day early.
+- [ ] T-02: 100 stock, 50 due Day 3, demand 120 Day 4 and 80 Day 10 → 30 and −50 before; 50-unit PO on Day 5 → 30 and 0, Day 10 need, five days early.
+- [ ] T-03: requirement 100 with 100, 50, and 150-unit POs → *Recommended*, *Adjust −50*, *Adjust +50*; zero requirement → *Redundant*; no runs → *Manual Review — No Scheduled Demand*.
+- [ ] T-03 late supply: zero stock, 100 demand Day 4, 100 delivery Day 5, 100-unit PO Day 6 → requirement 0, difference +100, *Redundant*, Day 4 conflict warning, Day 6 balance +100.
+- [ ] T-04: Day 2 demand of 100 with a five-day PO from Day 0 → *Recommended* + conflict at Day 2, balance −100; Day 9 arrival passes, Day 10 warns, Day 11 conflicts at −100.
+- [ ] T-05: zero stock, Day 10 demand 100, two 100-unit POs due Day 9 → first *Recommended*, second *Redundant* with 100 coverage; approving or ordering keeps that, and rejecting the first makes the second *Recommended*.
+- [ ] Verify unit mismatch blocks classification and coverage, receiving twice adds stock once, and a daily ETA change triggers a new warning while ordered dates stay fixed.
+
+## Functional API update
+
+- [ ] Add account-scoped endpoints for Pending Review and unverified lists with ascending and descending received-time sort, PO detail with its assessment breakdown, and PO corrections.
+- [ ] Assign PO IDs server-side, reject client-supplied IDs, and enforce per-account uniqueness.
+- [ ] Add approve, reject, order, and resubmit endpoints that enforce allowed transitions, the rejection reason, and current state.
+- [ ] Add incoming-delivery list, create, update, and receive endpoints, plus SKU mapping and SKU validation.
+- [ ] Recompute affected assessments inside the same request and return the updated decision so the dashboard never shows stale flags.
+- [ ] Keep request validation, trusted-origin checks, and account scoping on every new endpoint, with tests for cross-account access and invalid transitions.
+
+## Functional dashboard update
+
+- [ ] Show workflow status and assessment decision as separate labelled values on each PO, with warnings and the last inventory update.
+- [ ] Add an assessment breakdown to PO detail: on-hand, incoming with ETA and a provisional or fixed label, demand by date, balances before and after, need date, requirement, difference, and coverage.
+- [ ] Add Approve and Reject actions with confirmation and a mandatory rejection reason, showing success or error feedback and the updated status.
+- [ ] Add an Order action for approved POs and a Receive action for incoming deliveries.
+- [ ] Add an unverified queue with reasons and a correction form that can map a SKU and revalidate the same record.
+- [ ] Add an incoming-deliveries view with add, edit, and receive.
+- [ ] Add received-time sort order plus status, item, and date search and filter for POs and inventory, and refresh assessments after any save without a full reload.

@@ -8,6 +8,9 @@ import { normalizeSender, isValidSender } from './rules.js';
 import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email-queries.js';
 import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
 import { listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
+import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail } from './pos.js';
+import { listDeliveries, createDelivery, updateDelivery, receiveDelivery, parseDeliveryInput } from './deliveries.js';
+import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -30,7 +33,7 @@ const accountId = () => { syncAccount(); return authState().account?.id || ''; }
 
 function readInventoryInput(body, res) {
   try {
-    return parseInventoryInput(body);
+    return parseInventoryInput(body, { requireSku: true });
   } catch (failure) {
     res.status(400).json({ error: failure.message || 'Invalid inventory item.' });
     return null;
@@ -57,7 +60,10 @@ app.get('/api/status', (_req, res) => {
   const account = state.account;
   const senders = account ? db.prepare('SELECT address FROM senders WHERE account_id = ? ORDER BY normalized_address').all(account.id).map((row) => row.address) : [];
   const total = account ? db.prepare('SELECT COUNT(*) AS count FROM emails WHERE account_id = ? AND po_status IS NOT NULL').get(account.id).count : 0;
-  res.json({ auth: state, collection: collectionState(), senders, totalCount: total, features: { clearSavedInbox: true } });
+  const counts = {};
+  if (account) for (const row of db.prepare('SELECT po_state AS state, COUNT(*) AS count FROM emails WHERE account_id = ? AND po_state IS NOT NULL GROUP BY po_state').all(account.id)) counts[row.state] = row.count;
+  const timeZone = getPlantTimeZone(db);
+  res.json({ auth: state, collection: collectionState(), senders, totalCount: total, counts, plantTimeZone: timeZone, today: plantToday(timeZone), features: { clearSavedInbox: true } });
 });
 app.post('/api/setup', async (req, res) => {
   const email = String(req.body?.email || '').trim().toLowerCase();
@@ -78,6 +84,7 @@ app.post('/api/senders', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   try { db.prepare('INSERT INTO senders(account_id,address,normalized_address,created_at) VALUES(?,?,?,?)').run(aid, address, normalized, isoNow()); }
   catch { return res.status(409).json({ error: 'That sender is already on the list.' }); }
+  authorizeQueuedMail(db, aid, normalized);
   collect({ rerunIfActive: true }).catch(() => {}); res.json({ ok: true });
 });
 app.delete('/api/senders/:address', (req, res) => {
@@ -110,14 +117,22 @@ app.get('/api/inventory', (_req, res) => {
 app.post('/api/inventory', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   const input = readInventoryInput(req.body, res); if (!input) return;
-  res.status(201).json({ ok: true, item: createInventoryItem(db, aid, input, isoNow()) });
+  try {
+    res.status(201).json({ ok: true, item: createInventoryItem(db, aid, input, isoNow()) });
+  } catch (failure) {
+    res.status(failure.status || 500).json({ error: failure.message || 'Could not save inventory item.' });
+  }
 });
 app.put('/api/inventory/:id', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   const input = readInventoryInput(req.body, res); if (!input) return;
-  const item = updateInventoryItem(db, aid, req.params.id, input, isoNow());
-  if (!item) return res.status(404).json({ error: 'Inventory item not found.' });
-  res.json({ ok: true, item });
+  try {
+    const item = updateInventoryItem(db, aid, req.params.id, input, isoNow());
+    if (!item) return res.status(404).json({ error: 'Inventory item not found.' });
+    res.json({ ok: true, item });
+  } catch (failure) {
+    res.status(failure.status || 500).json({ error: failure.message || 'Could not save inventory item.' });
+  }
 });
 app.delete('/api/inventory/:id', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
@@ -160,13 +175,121 @@ app.delete('/api/production-runs/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+function nowAndToday() {
+  const timeZone = getPlantTimeZone(db);
+  return { timeZone, today: plantToday(timeZone), now: isoNow() };
+}
+
+function sendActionError(res, failure, fallback) {
+  res.status(failure.status || 500).json({ error: failure.status && failure.status < 500 ? failure.message : fallback });
+}
+
+app.get('/api/pos', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const { limit, offset } = parsePagination(req.query.limit, req.query.offset);
+  const state = String(req.query.state || 'pending_review');
+  const allowed = new Set(['all', 'pending_review', 'unverified', 'approved', 'ordered', 'rejected']);
+  const query = String(req.query.q || '').trim().slice(0, 200);
+  const sort = req.query.sort === 'asc' ? 'asc' : 'desc';
+  const { today } = nowAndToday();
+  res.json(listPos(db, { accountId: aid, state: allowed.has(state) ? state : 'pending_review', sort, query, limit, offset, today }));
+});
+
+app.get('/api/pos/:poId', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const { today } = nowAndToday();
+  const po = getPo(db, aid, req.params.poId, today);
+  if (!po) return res.status(404).json({ error: 'Purchase order not found.' });
+  res.json(po);
+});
+
+app.patch('/api/pos/:poId', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const { today, now } = nowAndToday();
+  try {
+    const po = correctPo(db, aid, req.params.poId, req.body, { today, now });
+    if (!po) return res.status(404).json({ error: 'Purchase order not found.' });
+    res.json({ ok: true, po });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not correct the purchase order.');
+  }
+});
+
+app.post('/api/pos/:poId/:action', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const action = String(req.params.action || '');
+  if (!['approve', 'reject', 'order', 'resubmit'].includes(action)) return res.status(400).json({ error: 'Unknown purchase order action.' });
+  const { today, now } = nowAndToday();
+  try {
+    const po = transitionPo(db, aid, req.params.poId, action, { reason: req.body?.reason, today, now });
+    if (!po) return res.status(404).json({ error: 'Purchase order not found.' });
+    res.json({ ok: true, po });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not update the purchase order.');
+  }
+});
+
+app.get('/api/deliveries', (_req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  res.json({ items: listDeliveries(db, aid) });
+});
+
+app.post('/api/deliveries', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const input = parseDeliveryInput(db, aid, req.body);
+    res.status(201).json({ ok: true, item: createDelivery(db, aid, input, isoNow()) });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not add the delivery.');
+  }
+});
+
+app.put('/api/deliveries/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const input = parseDeliveryInput(db, aid, req.body);
+    const item = updateDelivery(db, aid, req.params.id, input, isoNow());
+    if (!item) return res.status(404).json({ error: 'Delivery not found.' });
+    res.json({ ok: true, item });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not save the delivery.');
+  }
+});
+
+app.post('/api/deliveries/:id/receive', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const result = receiveDelivery(db, aid, req.params.id, isoNow());
+    if (!result) return res.status(404).json({ error: 'Delivery not found.' });
+    res.json({ ok: true, ...result });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not receive the delivery.');
+  }
+});
+
+app.get('/api/settings', (_req, res) => {
+  const timeZone = getPlantTimeZone(db);
+  res.json({ plantTimeZone: timeZone, today: plantToday(timeZone) });
+});
+
+app.put('/api/settings', (req, res) => {
+  const requested = String(req.body?.plantTimeZone || '').trim();
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: requested });
+  } catch {
+    return res.status(400).json({ error: 'Choose a valid IANA time zone.' });
+  }
+  const timeZone = setPlantTimeZone(db, resolveTimeZone(requested));
+  res.json({ ok: true, plantTimeZone: timeZone, today: plantToday(timeZone) });
+});
+
 const dist = path.resolve(__dirname, '../dist');
 app.use(express.static(dist));
 app.get('*path', (_req, res, next) => res.sendFile(path.join(dist, 'index.html'), (error) => { if (error) next(); }));
 app.use((error, _req, res, _next) => {
   const status = Number.isInteger(error?.status) && error.status >= 400 && error.status < 500 ? error.status : 500;
   console.error(JSON.stringify({ level: 'error', event: 'request_failed', status }));
-  res.status(status).json({ error: status === 400 ? 'Invalid request.' : 'Unexpected server error.' });
+  res.status(status).json({ error: error?.message && status < 500 ? error.message : 'Unexpected server error.' });
 });
 
 function syncAccount() {
