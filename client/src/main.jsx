@@ -805,10 +805,11 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
         <div className="form-grid">
           <div className="field field-wide">
             <label htmlFor="delivery-sku">Item SKU</label>
-            <select id="delivery-sku" value={itemSku} onChange={(event) => chooseSku(event.target.value)} required autoFocus>
+            <select id="delivery-sku" value={itemSku} onChange={(event) => chooseSku(event.target.value)} required autoFocus disabled={Boolean(draft.poId)}>
               <option value="">Choose SKU</option>
               {skuOptions.map((option) => <option key={option.id} value={option.sku}>{option.sku} — {option.item}</option>)}
             </select>
+            {draft.poId ? <p className="field-hint">Linked to {draft.poId}; the item SKU stays fixed.</p> : null}
           </div>
           <div className="field">
             <label htmlFor="delivery-quantity">Quantity</label>
@@ -868,7 +869,8 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
     setFormError('');
     if (!reason.trim()) { setFormError('Enter a rejection reason.'); return; }
     try {
-      await onAction('reject', { reason });
+      const ok = await onAction('reject', { reason });
+      if (ok === false) return;
       setRejecting(false);
       setReason('');
     } catch (failure) {
@@ -1239,7 +1241,7 @@ export function App() {
       await refresh();
     } catch (failure) {
       setError(failure.message);
-      throw failure;
+      return false;
     } finally {
       setDetailLoading(false);
     }

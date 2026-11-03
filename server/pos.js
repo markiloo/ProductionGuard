@@ -107,8 +107,8 @@ export function listPos(db, { accountId, state = 'pending_review', sort = 'desc'
   let rows = context.pos;
   if (state && state !== 'all') rows = rows.filter((po) => po.state === state);
   if (needle) {
-    rows = rows.filter((po) => [po.poId, po.item, po.sku, po.supplier, po.senderAddress, po.senderName, po.subject, po.mappedSku]
-      .some((value) => String(value || '').toLowerCase().includes(needle)));
+    rows = rows.filter((po) => [po.poId, po.item, po.sku, po.supplier, po.senderAddress, po.senderName, po.subject, po.mappedSku,
+      po.receivedAt, po.expectedArrival, po.eta].some((value) => String(value || '').toLowerCase().includes(needle)));
   }
   rows = [...rows].sort((left, right) => {
     const byTime = String(left.receivedAt).localeCompare(String(right.receivedAt)) || String(left.poId).localeCompare(String(right.poId));
@@ -183,7 +183,9 @@ export function transitionPo(db, accountId, poId, action, { reason = '', today, 
   } else if (action === 'order') {
     if (po.state !== 'approved') throw fail('Only Approved POs can be set to Ordered/Incoming.');
     if (!enriched.sku) throw fail('Map this item to an inventory SKU before ordering.');
-    if (!context.inventoryBySku.get(enriched.sku.toLowerCase())) throw fail('The mapped inventory item no longer exists.');
+    const inventory = context.inventoryBySku.get(enriched.sku.toLowerCase());
+    if (!inventory) throw fail('The mapped inventory item no longer exists.');
+    if (String(po.unit).toLowerCase() !== String(inventory.unit).toLowerCase()) throw fail(`Correct the unit mismatch before ordering (${inventory.sku} uses ${inventory.unit}).`);
     if (!Number.isInteger(po.etaDays) || po.etaDays <= 0) throw fail('This PO has no valid ETA duration.');
     const expectedArrival = addDays(today, po.etaDays);
     db.transaction(() => {
@@ -241,7 +243,10 @@ export function correctPo(db, accountId, poId, input, { today, now }) {
   if (mappedInput) {
     const matched = inventory.find((row) => row.sku.toLowerCase() === mappedInput.toLowerCase());
     if (!matched) errors.push('Choose an existing inventory SKU');
-    else mappedSku = matched.sku;
+    else {
+      mappedSku = matched.sku;
+      if (unit && String(matched.unit).toLowerCase() !== unit.toLowerCase()) errors.push(`Unit must match inventory for ${matched.sku} (${matched.unit})`);
+    }
   }
   const authorized = Boolean(db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(po.senderAddress)));
   if (!authorized) errors.push('Sender is not authorized');

@@ -64,10 +64,13 @@ export function updateDelivery(db, accountId, id, input, now) {
   const existing = getDelivery(db, accountId, id);
   if (!existing) return null;
   if (existing.status === 'received') throw fail('Received deliveries cannot be edited. Correct stock through inventory instead.', 409);
+  if (existing.poId && input.itemSku.toLowerCase() !== existing.itemSku.toLowerCase()) throw fail('A delivery linked to an ordered PO must keep its item SKU.', 409);
   db.prepare(`UPDATE incoming_deliveries SET item_sku=?, quantity=?, unit=?, expected_arrival=?, supplier=?, notes=?, updated_at=?
     WHERE account_id=? AND id=?`).run(input.itemSku, input.quantity, input.unit, input.expectedArrival, input.supplier, input.notes, now, accountId, id);
   if (existing.poId) {
-    db.prepare('UPDATE emails SET expected_arrival=? WHERE account_id=? AND po_id=?').run(input.expectedArrival, accountId, existing.poId);
+    db.prepare('UPDATE emails SET expected_arrival=?, quantity=?, unit=?, supplier=? WHERE account_id=? AND po_id=?').run(
+      input.expectedArrival, input.quantity, input.unit, input.supplier, accountId, existing.poId,
+    );
   }
   return getDelivery(db, accountId, id);
 }
@@ -78,8 +81,9 @@ export function receiveDelivery(db, accountId, id, now) {
     const delivery = getDelivery(db, accountId, id);
     if (!delivery) return null;
     if (delivery.status === 'received') return { delivery, alreadyReceived: true };
-    const inventory = db.prepare('SELECT id, quantity FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, delivery.itemSku);
+    const inventory = db.prepare('SELECT id, quantity, unit FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, delivery.itemSku);
     if (!inventory) throw fail('The mapped inventory item no longer exists.', 409);
+    if (String(inventory.unit).toLowerCase() !== String(delivery.unit).toLowerCase()) throw fail(`Unit must match inventory (${inventory.unit}) before receiving.`, 409);
     db.prepare('UPDATE incoming_deliveries SET status=\'received\', received_at=?, updated_at=? WHERE account_id=? AND id=?').run(now, now, accountId, id);
     db.prepare('UPDATE inventory SET quantity=quantity+?, updated_at=? WHERE account_id=? AND id=?').run(delivery.quantity, now, accountId, inventory.id);
     return { delivery: getDelivery(db, accountId, id), alreadyReceived: false };

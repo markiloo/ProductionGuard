@@ -1070,7 +1070,7 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
 .delivery-po { padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink-3); font: 600 10px/1.5 var(--mono); }
 .delivery-side { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
 .delivery-actions { display: flex; flex: none; gap: 6px; }
-.alert-success { border-color: color-mix(in oklab, var(--valid-ink) 24%, var(--line)); background: var(--valid-bg); }
+.alert-success { border-color: color-mix(in oklab, var(--valid-ink) 24%, var(--line)); background: var(--valid-bg); color: var(--valid-ink); }
 .alert-success .alert-message { color: var(--valid-ink); }
 
 @media (max-width: 780px) {

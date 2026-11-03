@@ -1,28 +1,40 @@
-# PO Checker — purchase order collector
+# PO Checker — purchase order review
 
-A local Windows dashboard that saves purchase orders from Gmail Inbox messages sent by approved addresses during each server run. A message qualifies when its subject is `PO` (ignoring case and surrounding spaces). It uses Gmail's IMAP service, so there is no Microsoft Graph, Microsoft account, or Google Cloud app registration.
+A local Windows dashboard that collects purchase orders from Gmail Inbox messages sent by approved addresses, then assesses each request against stock on hand, incoming deliveries, and outstanding production demand. A message qualifies when its subject is `PO` (ignoring case and surrounding spaces). It uses Gmail's IMAP service, so there is no Microsoft Graph, Microsoft account, or Google Cloud app registration.
 
-Each PO email should contain these fields in order:
+Each PO email requests exactly one item:
 
 ```text
-ITEM: Steel
-QUANTITY: 2
-UNIT: kg
-ETA: 1 week
-SUPPLIER: Acme Supply
+ITEM: ITEM-B
+QUANTITY: 100
+UNIT: pieces
+ETA: 5 days
+SUPPLIER: Example Materials Supplier
 ```
 
-Quantity must be a positive whole number, unit must be `kg` or `units`, ETA must be `1 week` or `2 weeks`, and supplier must be a nonempty string. Labels are case-insensitive and extra whitespace is accepted. A qualifying email with invalid fields is saved and marked **Needs review**. Previously saved subject-PO emails are reprocessed when the database is upgraded; unrelated saved emails remain stored but are hidden from the PO view.
+Labels are case-insensitive and extra whitespace is accepted. Quantity must be a positive whole number, the unit can be any label that matches the item's inventory unit, and ETA is a whole number of days or weeks (one week is seven calendar days). Emails with more than one ITEM block stay unverified with a request to submit a separate email for each item; the system never selects or combines items.
+
+Complete POs from approved senders enter **Pending Review**. Unauthorized, incomplete, malformed, or multi-item PO mail goes to the **Unverified** queue with a reason so the manager can correct it. The item is mapped to the inventory SKU case-insensitively; unmapped items and unit mismatches show **Manual Review Required** and do not affect assessments or coverage.
+
+## Review and assessment
+
+The **Orders** view lists Pending Review, Unverified, Approved, Ordered / Incoming, Rejected, and all saved POs, newest-first or oldest-first, with search. Each Pending Review PO gets a deterministic assessment: **Recommended**, **Redundant / Overstock**, or **Adjust Quantity**, plus any **Timing Conflict / Expedite Needed**, **Arriving Early**, **Potential Duplicate**, or stockout warnings. The detail sheet shows the current stock and its last update, incoming deliveries, outstanding demand, projected balances before and after the PO, net requirement, quantity difference, need date, planning end date, and provisional coverage from earlier Pending or Approved POs.
+
+Approve keeps the ETA provisional; reject requires a reason and preserves the history. An Approved PO can be set to **Ordered / Incoming**, which fixes the expected arrival (ordered date + ETA) and creates exactly one linked delivery. A Rejected PO can be corrected and resubmitted on the same record. Ordered POs cannot be moved backward.
 
 ## Inventory
 
-The **Inventory** view keeps a local stock list for the connected Gmail account. Add, edit, or delete an item's name, SKU, quantity, unit, supplier, reorder level, and notes. Items at or below their reorder level are marked **Low stock**. Inventory lives in the same local SQLite database and is never sent to Gmail.
+The **Inventory** view keeps a local stock list for the connected Gmail account. Add, edit, or delete an item's name, required unique SKU (the item code), quantity, unit, supplier, reorder level, and notes. The SKU is the join key for POs, deliveries, and production demand. Items at or below their reorder level are marked **Low stock**. Inventory lives in the same local SQLite database and is never sent to Gmail.
+
+## Incoming deliveries
+
+The **Deliveries** view lists incoming and received deliveries with their item SKU, quantity, expected arrival, supplier, and linked PO. Add or edit an unreceived delivery manually; ordering a PO creates one linked delivery automatically. **Receive** adds the quantity to on-hand stock and removes it from incoming supply in one transaction, exactly once. Received deliveries stay visible and cannot be edited; correct stock through inventory instead.
 
 ## Production schedule
 
-The **Production** view shows existing production runs for the connected account. Each run has a run number, item, planned quantity and unit, scheduled date, status (Scheduled, In progress, Completed, On hold), and optional notes. Run numbers are generated automatically as sequential `PR-####` values and are read-only. Add, edit, or delete runs from the view; active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
+The **Production** view shows existing production runs for the connected account. Each run has a run number, status, scheduled date, optional notes, and one or more material requirement rows (item SKU, quantity, unit, and outstanding or consumed status). Run numbers are generated automatically as sequential `PR-####` values and are read-only. Only outstanding requirements from non-completed runs count as demand. Active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
 
-The header has an explicit **Light / Dark** selector. Light is the default, and the choice is remembered in the browser.
+The header has an explicit **Light / Dark** selector. Light is the default, and the choice is remembered in the browser. The Orders sidebar stores the plant time zone used for provisional ETAs and calendar-day checks.
 
 ## Gmail setup
 
@@ -39,20 +51,22 @@ Gmail IMAP is enabled automatically for personal accounts according to [Gmail He
 - `npm start`: production server at `http://127.0.0.1:4174`.
 - `launch.bat`: starts the production server and opens the dashboard after it is ready.
 
-Closing the browser leaves collection running. Stop the server console to end the run. Each server start records a fresh UTC cutoff; only mail received strictly after it can be saved. Restarting excludes mail received while the server was stopped. Adding a sender checks the whole current-run window. Exact sender addresses are matched, not domains or display names. Inbox-only polling can miss messages moved out before a check.
+Closing the browser leaves collection running. Stop the server console to end the run. Each server start records a fresh UTC cutoff; only mail received strictly after it can be saved. Restarting excludes mail received while the server was stopped. Adding a sender checks the whole current-run window and promotes that sender's queued unverified mail back into Pending Review. Exact sender addresses are matched, not domains or display names. Inbox-only polling can miss messages moved out before a check.
 
 ## Local data and privacy
 
-Saved mail, sender settings, inventory, and production runs live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
+Saved mail, sender settings, inventory, incoming deliveries, production requirements, PO history, and assessments' source data live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
 
-The **Clear saved orders** button deletes the connected account's locally saved purchase orders after confirmation. It does not delete or change anything in Gmail. Mail received before the clear time stays excluded from later polls; newer eligible mail can still appear.
+The **Clear saved orders** button deletes the connected account's locally saved purchase orders after confirmation. It does not delete or change anything in Gmail. Mail received before the clear time stays excluded from later polls; newer eligible mail can still appear. Incoming deliveries are separate supply records and are not deleted by this action.
 
-The collector does not download attachment parts, mark mail read, send mail, or modify messages. Text is displayed as escaped text and cannot load remote email content.
+Unauthorized PO mail is stored locally in the unverified queue so the manager can see why it was rejected; it never enters Pending Review, assessments, or provisional coverage unless its sender is added to the allowlist. Attachments are never downloaded, and text is displayed as escaped text that cannot load remote content. The collector does not mark mail read, send mail, or modify messages.
 
 ## Troubleshooting
 
 - For an app-password error, verify 2-Step Verification and create a new app password. A changed Google account password can revoke existing app passwords.
 - Check that the message is still in Gmail Inbox, came after the displayed run cutoff, has subject `PO`, and its actual From address is on the allowlist.
+- For a PO that stays in Unverified, open it, read the reason, correct the fields or map the SKU, and save. Adding the sender to the allowlist also promotes queued mail.
+- For **Manual Review Required**, map the item to an inventory SKU, fix a unit mismatch, or add outstanding production demand for that item.
 - A transient connection error is retried on later checks; verify network access to `imap.gmail.com:993`.
 
 See [docs/API.md](docs/API.md) for endpoint shapes.
