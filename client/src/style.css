@@ -801,7 +801,7 @@ summary:focus-visible,
 
 .inventory-form,
 .production-form { align-content: start; }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 12px; }
 .form-grid .field { margin-bottom: 0; }
 .field-wide { grid-column: 1 / -1; }
 .field-hint { margin-top: 2px; color: var(--ink-3); font-size: 11px; line-height: 1.4; }
