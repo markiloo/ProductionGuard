@@ -38,6 +38,15 @@ const PO_STATES = {
   rejected: 'Rejected',
 };
 
+const ORDER_FILTERS = [
+  { value: 'pending_review', label: 'Pending review' },
+  { value: 'unverified', label: 'Unverified' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'ordered', label: 'Ordered / Incoming' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'all', label: 'All orders' },
+];
+
 const FLAG_LABEL = {
   recommended: 'Recommended',
   redundant: 'Redundant / Overstock',
@@ -317,8 +326,35 @@ function PoRow({ item, selected, onSelect }) {
   );
 }
 
-function PosPanel({ status, pos, stateFilter, setStateFilter, sort, setSort, query, setQuery, offset, setOffset, selected, setSelected, busy, refreshing, onRefresh, onClear }) {
-  const counts = pos.counts || {};
+function OrderNav({ counts, stateFilter, setStateFilter, setOffset }) {
+  return (
+    <aside className="panel order-nav" aria-labelledby="order-nav-title">
+      <div className="panel-head">
+        <div>
+          <p className="eyebrow">Queues</p>
+          <h2 id="order-nav-title">Orders</h2>
+        </div>
+      </div>
+      <nav aria-label="Order status">
+        {ORDER_FILTERS.map((filter) => (
+          <button
+            key={filter.value}
+            type="button"
+            className={`order-nav-item${stateFilter === filter.value ? ' is-current' : ''}${filter.value === 'all' ? ' order-nav-all' : ''}`}
+            aria-current={stateFilter === filter.value ? 'page' : undefined}
+            onClick={() => { setStateFilter(filter.value); setOffset(0); }}
+          >
+            <span>{filter.label}</span>
+            <span className="count">{counts[filter.value] || 0}</span>
+          </button>
+        ))}
+      </nav>
+      <p className="order-nav-hint">New POs appear after the next inbox check.</p>
+    </aside>
+  );
+}
+
+function PosPanel({ status, pos, stateFilter, sort, setSort, query, setQuery, offset, setOffset, selected, setSelected, busy, refreshing, onRefresh, onClear }) {
   const emptyCopy = stateFilter === 'unverified'
     ? { title: 'No unverified orders', body: 'Incomplete, unauthorized, or multi-item PO mail appears here with its reason.' }
     : stateFilter === 'rejected'
@@ -333,7 +369,7 @@ function PosPanel({ status, pos, stateFilter, setStateFilter, sort, setSort, que
       <header className="panel-head inbox-head">
         <div>
           <p className="eyebrow">Purchase orders</p>
-          <h2 id="orders-title">Review queue</h2>
+          <h2 id="orders-title">{stateFilter === 'all' ? 'All orders' : PO_STATES[stateFilter] || 'Review queue'}</h2>
         </div>
         <div className="inbox-actions">
           <span className="count">{pos.total} {pos.total === 1 ? 'order' : 'orders'}</span>
@@ -346,17 +382,6 @@ function PosPanel({ status, pos, stateFilter, setStateFilter, sort, setSort, que
         </div>
       </header>
       <div className="tools">
-        <label className="scope-field">
-          <span className="sr-only">Order status</span>
-          <select value={stateFilter} onChange={(event) => { setStateFilter(event.target.value); setOffset(0); }}>
-            <option value="pending_review">Pending review ({counts.pending_review || 0})</option>
-            <option value="unverified">Unverified ({counts.unverified || 0})</option>
-            <option value="approved">Approved ({counts.approved || 0})</option>
-            <option value="ordered">Ordered / Incoming ({counts.ordered || 0})</option>
-            <option value="rejected">Rejected ({counts.rejected || 0})</option>
-            <option value="all">All orders ({counts.all || 0})</option>
-          </select>
-        </label>
         <label className="search-field">
           <span className="sr-only">Search purchase orders</span>
           <SearchIcon />
@@ -509,7 +534,7 @@ function InventoryDialog({ draft, skuOptions = [], busy, onClose, onSave, onDele
   }
 
   return (
-    <dialog ref={dialogRef} className="detail inventory-dialog" aria-labelledby="inventory-dialog-title" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <dialog ref={dialogRef} className="detail inventory-dialog" aria-labelledby="inventory-dialog-title">
       <header className="detail-head">
         <div><p className="eyebrow">Inventory</p><h2 id="inventory-dialog-title">{editing ? 'Edit inventory item' : 'Add inventory item'}</h2></div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close inventory form" disabled={busy}>×</button>
@@ -707,7 +732,7 @@ function ProductionDialog({ draft, productionItems = [], busy, onClose, onSave, 
   }
 
   return (
-    <dialog ref={dialogRef} className="detail production-dialog" aria-labelledby="production-dialog-title" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <dialog ref={dialogRef} className="detail production-dialog" aria-labelledby="production-dialog-title">
       <header className="detail-head">
         <div><p className="eyebrow">Production</p><h2 id="production-dialog-title">{editing ? 'Edit production run' : 'Add production run'}</h2></div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close production form" disabled={busy}>×</button>
@@ -894,7 +919,7 @@ function ItemDefinitionDialog({ draft, busy, onClose, onSave, onDelete }) {
   }
 
   return (
-    <dialog ref={dialogRef} className="detail" aria-labelledby="item-definition-dialog-title" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <dialog ref={dialogRef} className="detail" aria-labelledby="item-definition-dialog-title">
       <header className="detail-head">
         <div><p className="eyebrow">Item definition</p><h2 id="item-definition-dialog-title">{editing ? 'Edit SKU' : 'Define a SKU'}</h2></div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close item definition form" disabled={busy}>×</button>
@@ -969,7 +994,7 @@ function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, o
   }
 
   return (
-    <dialog ref={dialogRef} className="detail" aria-labelledby="production-item-dialog-title" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <dialog ref={dialogRef} className="detail" aria-labelledby="production-item-dialog-title">
       <header className="detail-head">
         <div><p className="eyebrow">Item definition</p><h2 id="production-item-dialog-title">{editing ? 'Edit production item' : 'Define a production item'}</h2></div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close production item form" disabled={busy}>×</button>
@@ -1113,7 +1138,7 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
   }
 
   return (
-    <dialog ref={dialogRef} className="detail delivery-dialog" aria-labelledby="delivery-dialog-title" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <dialog ref={dialogRef} className="detail delivery-dialog" aria-labelledby="delivery-dialog-title">
       <header className="detail-head">
         <div><p className="eyebrow">Incoming supply</p><h2 id="delivery-dialog-title">{editing ? 'Edit delivery' : 'Add delivery'}</h2></div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close delivery form" disabled={busy}>×</button>
@@ -1223,7 +1248,7 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
   }
 
   return (
-    <dialog ref={dialogRef} className="detail" aria-labelledby="po-detail-title" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <dialog ref={dialogRef} className="detail" aria-labelledby="po-detail-title">
       <header className="detail-head">
         <div>
           <p className="eyebrow">{po?.poId || 'Purchase order'}</p>
@@ -2035,24 +2060,26 @@ export function App() {
       ) : view === 'orders' ? (
         <>
           <RunStrip status={status} />
-          <PosPanel
-            status={status}
-            pos={pos}
-            stateFilter={stateFilter}
-            setStateFilter={setStateFilter}
-            sort={sort}
-            setSort={setSort}
-            query={query}
-            setQuery={setQuery}
-            offset={offset}
-            setOffset={setOffset}
-            selected={selected}
-            setSelected={setSelected}
-            busy={busy}
-            refreshing={refreshing}
-            onRefresh={manualRefresh}
-            onClear={clearOrders}
-          />
+          <div className="workspace">
+            <OrderNav counts={pos.counts || {}} stateFilter={stateFilter} setStateFilter={setStateFilter} setOffset={setOffset} />
+            <PosPanel
+              status={status}
+              pos={pos}
+              stateFilter={stateFilter}
+              sort={sort}
+              setSort={setSort}
+              query={query}
+              setQuery={setQuery}
+              offset={offset}
+              setOffset={setOffset}
+              selected={selected}
+              setSelected={setSelected}
+              busy={busy}
+              refreshing={refreshing}
+              onRefresh={manualRefresh}
+              onClear={clearOrders}
+            />
+          </div>
         </>
       ) : view === 'deliveries' ? (
         <DeliveriesView deliveries={deliveries} onAdd={openNewDelivery} onEdit={openDelivery} onReceive={receiveDelivery} busy={deliveryBusy} />

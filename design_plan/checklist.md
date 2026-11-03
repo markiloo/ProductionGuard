@@ -247,4 +247,5 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Add received-time sort order plus status, item, and date search and filter for POs and inventory, and refresh assessments after any save without a full reload.
 - [x] Add a manual Refresh action that recomputes and reloads the PO assessment list.
 - [x] Add a confirmed Clear all data action in Settings that removes account business data and senders, keeps the Gmail connection and plant time zone, and suppresses older Inbox mail.
+- [x] Replace the Orders status dropdown with a side queue nav listing Pending Review, Unverified, Approved, Ordered / Incoming, Rejected, and All orders with counts.
 - [x] Move the sender allowlist and plant time zone into a Settings view opened from a header button next to Sign out.
