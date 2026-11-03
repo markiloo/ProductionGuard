@@ -35,6 +35,7 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           client = createClient(credentials);
+          client.on?.('error', () => { /* Connection errors surface through connect/fetch. */ });
           await client.connect();
           if (version !== generation || account() !== accountId) return;
           const lock = await client.getMailboxLock('INBOX', { readOnly: true });

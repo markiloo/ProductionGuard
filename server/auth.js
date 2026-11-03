@@ -48,6 +48,7 @@ export function getCredentials() { return credential; }
 
 export async function connectGmail(email, appPassword) {
   const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user: email, pass: appPassword }, logger: false });
+  client.on('error', () => { /* Sign-in failures surface through connect(). */ });
   try {
     await client.connect();
     const lock = await client.getMailboxLock('INBOX', { readOnly: true });

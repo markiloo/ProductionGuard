@@ -36,11 +36,11 @@ Run everything from the repository root:
 - `npm start` serves the production app at `http://127.0.0.1:4174`.
 - `launch.bat` starts the production server, waits for `/api/status`, then opens the dashboard.
 
-`npm run lint` currently fails on the unused `client/src/components/ui/button.jsx` (`ButtonPrimitive` is only referenced in JSX, which the current ESLint config does not track). Fix or remove that file rather than ignoring the failure, or configure a React JSX plugin.
+`npm run lint` includes `eslint-plugin-react`'s `jsx-uses-vars`, so components referenced only in JSX are not reported as unused.
 
 ## Design Reviews
 
-UI/UX work uses the imported `apple-design` skill at `.opencode/skills/apple-design/SKILL.md`. Load it for design reviews, HIG compliance and accessibility audits, dark-mode checks, and requests to make the dashboard feel less generic. The skill routes to Apple's guideline pages under `.opencode/skills/apple-design/references/hig/` and to the cross-platform translation in `references/cross-platform.md`. Treat the generated HIG pages as read-only references; refresh them with `node .opencode/skills/apple-design/scripts/pull-hig.mjs` only when explicitly asked.
+UI/UX work uses the imported `apple-design` skill at `.agents/skills/apple-design/SKILL.md`. Load it for design reviews, HIG compliance and accessibility audits, dark-mode checks, and requests to make the dashboard feel less generic. The skill routes to Apple's guideline pages under `.agents/skills/apple-design/references/hig/` and to the cross-platform translation in `references/cross-platform.md`. Treat the generated HIG pages as read-only references; refresh them with `node .agents/skills/apple-design/scripts/pull-hig.mjs` only when explicitly asked.
 
 ## Coding Style & Naming Conventions
 
@@ -50,7 +50,8 @@ UI/UX work uses the imported `apple-design` skill at `.opencode/skills/apple-des
 - Keep SQL parameterized and scope every query to `account_id`.
 - Prefix client API calls with `/api`; the Vite dev server proxies them to port 4174.
 - Stored timestamps are UTC ISO strings; convert to local time only for display.
-- The dashboard is intentionally a single file using `React.createElement` for the root render. New UI work should stay consistent with that file and the existing CSS classes unless a refactor is explicitly requested.
+- The dashboard is intentionally a single file with small local components. New UI work should stay consistent with that file and the existing CSS classes unless a refactor is explicitly requested.
+- UI styling lives in `client/src/style.css` and uses CSS custom properties for color, type, spacing, and focus. The dashboard supports light and dark system appearances, `prefers-reduced-motion`, `prefers-reduced-transparency`, and `prefers-contrast: more`. Keep new controls on the shared `.button`, `.field`, and `.panel` patterns and preserve visible keyboard focus.
 - Never log or commit credentials, tokens, or message bodies.
 
 ## Testing Guidelines
