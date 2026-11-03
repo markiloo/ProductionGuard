@@ -197,6 +197,26 @@ function ProductionStatusChip({ status }) {
 
 function RunStrip({ status }) {
   const { collection, senders, totalCount } = status;
+  const nextCheckAt = collection.nextCheckAt ?? null;
+  const countdown = () => {
+    if (nextCheckAt == null) return null;
+    const now = Date.now();
+    let target = nextCheckAt;
+    if (target <= now) target += Math.ceil((now - target + 1) / 15000) * 15000;
+    return Math.max(0, Math.ceil((target - now) / 1000));
+  };
+  const [secondsUntilCheck, setSecondsUntilCheck] = useState(() => countdown());
+  useEffect(() => {
+    if (nextCheckAt == null) {
+      setSecondsUntilCheck(null);
+      return undefined;
+    }
+    const update = () => setSecondsUntilCheck(countdown());
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [nextCheckAt]);
+  const polling = senders.length > 0;
   const label = collection.error ? 'Attention needed' : collection.collecting ? 'Checking now' : senders.length ? 'Monitoring' : 'Ready';
   const note = collection.error || (senders.length ? 'Polls every 15 seconds' : 'Add a sender to begin');
   return (
@@ -207,9 +227,9 @@ function RunStrip({ status }) {
         <small>{note}</small>
       </div>
       <div className="metric">
-        <span className="metric-label">Run started</span>
-        <strong title={fullDate(collection.cutoff)}>{metricDate(collection.cutoff)}</strong>
-        <small>Orders after this time are eligible</small>
+        <span className="metric-label">Next inbox check</span>
+        <strong>{secondsUntilCheck == null ? '—' : `${secondsUntilCheck}s`}</strong>
+        <small>{!polling ? 'Add a sender to begin' : collection.collecting ? 'Checking now · Gmail polls every 15 seconds' : 'Gmail poll every 15 seconds'}</small>
       </div>
       <div className="metric">
         <span className="metric-label">Last complete check</span>
@@ -1479,6 +1499,8 @@ export function App() {
   const [deliveryDraft, setDeliveryDraft] = useState(null);
   const [deliveryBusy, setDeliveryBusy] = useState(false);
   const refreshSequence = useRef(0);
+  const tabsRef = useRef(null);
+  const [tabIndicator, setTabIndicator] = useState(null);
   const definitionOptions = itemDefinitions || [];
   const inventoryOptions = inventory || [];
   const stockedSkus = new Set(inventoryOptions.map((item) => item.sku.toLowerCase()));
@@ -1514,6 +1536,29 @@ export function App() {
       return false;
     }
   }
+
+  useEffect(() => {
+    if (!status?.auth.connected) return undefined;
+    function measure() {
+      const nav = tabsRef.current;
+      if (!nav) return;
+      const active = nav.querySelector('.view-tab[aria-current="page"]');
+      if (!active) {
+        setTabIndicator((current) => (current ? { ...current, active: false } : null));
+        return;
+      }
+      setTabIndicator({ left: active.offsetLeft, width: active.offsetWidth, active: true });
+    }
+    measure();
+    globalThis.addEventListener('resize', measure);
+    const Observer = globalThis.ResizeObserver;
+    const observer = typeof Observer === 'undefined' ? null : new Observer(measure);
+    if (observer && tabsRef.current) observer.observe(tabsRef.current);
+    return () => {
+      globalThis.removeEventListener('resize', measure);
+      observer?.disconnect();
+    };
+  }, [view, status?.auth.connected]);
 
   useEffect(() => {
     refresh();
@@ -1994,12 +2039,19 @@ export function App() {
       </header>
 
       {status.auth.connected ? (
-        <nav className="view-tabs" aria-label="Dashboard views">
+        <nav className="view-tabs" aria-label="Dashboard views" ref={tabsRef}>
           <button type="button" className="view-tab" aria-current={view === 'orders' ? 'page' : undefined} onClick={() => showView('orders')}>Orders</button>
           <button type="button" className="view-tab" aria-current={view === 'deliveries' ? 'page' : undefined} onClick={() => showView('deliveries')}>Deliveries</button>
           <button type="button" className="view-tab" aria-current={view === 'inventory' ? 'page' : undefined} onClick={() => showView('inventory')}>Inventory</button>
           <button type="button" className="view-tab" aria-current={view === 'production' ? 'page' : undefined} onClick={() => showView('production')}>Production</button>
           <button type="button" className="view-tab" aria-current={view === 'item-definition' ? 'page' : undefined} onClick={() => showView('item-definition')}>Item definition</button>
+          {tabIndicator ? (
+            <span
+              className="view-tab-indicator"
+              aria-hidden="true"
+              style={{ left: `${tabIndicator.left}px`, width: `${tabIndicator.width}px`, opacity: tabIndicator.active ? 1 : 0 }}
+            />
+          ) : null}
         </nav>
       ) : null}
 
@@ -2060,7 +2112,7 @@ export function App() {
       ) : view === 'orders' ? (
         <>
           <RunStrip status={status} />
-          <div className="workspace">
+          <div className="workspace orders-workspace">
             <OrderNav counts={pos.counts || {}} stateFilter={stateFilter} setStateFilter={setStateFilter} setOffset={setOffset} />
             <PosPanel
               status={status}

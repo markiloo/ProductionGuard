@@ -7,20 +7,28 @@ import { nextPoId, authorizeQueuedMail } from './pos.js';
 
 const now = () => new Date().toISOString();
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const POLL_MS = 15_000;
 
 /** Collect Gmail INBOX mail during one server run. Dependencies may be injected for offline checks. */
 export function createCollector({ db, cutoff, getAccountId, getCredentials, createClient = (credentials) => new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user: credentials.email, pass: credentials.password }, logger: false }), clock = now, sleep = wait }) {
   const runId = crypto.randomUUID();
   db.prepare("INSERT INTO runs(id, cutoff, started_at, status) VALUES (?, ?, ?, 'waiting')").run(runId, cutoff, clock());
-  let timer = null; let active = false; let generation = 0; let rerun = false; let client = null; let error = null;
+  let timer = null; let active = false; let generation = 0; let rerun = false; let client = null; let error = null; let nextCheckAt = null;
   const account = () => getAccountId() || null;
   const state = () => {
     const run = db.prepare('SELECT last_success_at FROM runs WHERE id=?').get(runId);
     const currentRunCount = db.prepare('SELECT COUNT(*) count FROM emails WHERE account_id=? AND run_id=? AND po_status IS NOT NULL').get(account() || '', runId).count;
-    return { runId, cutoff, lastSuccessAt: run.last_success_at, error, collecting: active, currentRunCount };
+    const nowMs = Date.now();
+    const scheduled = nextCheckAt == null ? null : nextCheckAt > nowMs ? nextCheckAt : nextCheckAt + Math.ceil((nowMs - nextCheckAt + 1) / POLL_MS) * POLL_MS;
+    return { runId, cutoff, lastSuccessAt: run.last_success_at, error, collecting: active, currentRunCount, nextCheckAt: scheduled };
   };
-  const stop = () => { clearInterval(timer); timer = null; generation += 1; rerun = false; if (client) client.close(); };
-  const begin = () => { if (timer) return; timer = setInterval(() => collect().catch(() => {}), 15_000); collect({ rerunIfActive: true }).catch(() => {}); };
+  const stop = () => { clearInterval(timer); timer = null; nextCheckAt = null; generation += 1; rerun = false; if (client) client.close(); };
+  const begin = () => {
+    if (timer) return;
+    nextCheckAt = Date.now() + POLL_MS;
+    timer = setInterval(() => { nextCheckAt = Date.now() + POLL_MS; collect().catch(() => {}); }, POLL_MS);
+    collect({ rerunIfActive: true }).catch(() => {});
+  };
   async function collect({ rerunIfActive = false } = {}) {
     if (active) { if (rerunIfActive) rerun = true; return; }
     active = true;

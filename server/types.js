@@ -18,6 +18,7 @@
  * @property {string|null} error Current collector error, if any.
  * @property {boolean} collecting Whether an IMAP check is active.
  * @property {number} currentRunCount Number of messages saved since cutoff.
+ * @property {number|null} nextCheckAt Epoch milliseconds of the next scheduled Inbox check, or null when polling is stopped.
  */
 
 /** @typedef {{ address: string }} SenderSetting */

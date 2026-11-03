@@ -249,4 +249,7 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Add a confirmed Clear all data action in Settings that removes account business data and senders, keeps the Gmail connection and plant time zone, and suppresses older Inbox mail.
 - [x] Replace the Orders status dropdown with a side queue nav listing Pending Review, Unverified, Approved, Ordered / Incoming, Rejected, and All orders with counts.
 - [x] Keep edit sheets open when clicking the backdrop; close them only through Cancel, the close button, or Escape.
+- [x] Align the Orders queue nav and PO list panel on their top and bottom edges, with the nav footer and list pagination pinned to the shared bottom.
+- [x] Animate the active-view underline so it slides between Orders, Deliveries, Inventory, Production, and Item definition.
+- [x] Replace the Run started metric with a live countdown to the next Gmail inbox check, showing seconds until the collector's 15-second poll.
 - [x] Move the sender allowlist and plant time zone into a Settings view opened from a header button next to Sign out.
