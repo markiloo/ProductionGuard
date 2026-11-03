@@ -1,2 +1,23 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><meta name="theme-color" content="#f5f6f8"/><title>PO Checker · Inbox collector</title></head><body><div id="root"></div><script type="module" src="/client/src/main.jsx"></script></body></html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fbf6f6" />
+    <title>PO Checker · Inbox collector</title>
+    <script>
+      try {
+        const storedTheme = localStorage.getItem('po-checker-theme');
+        const theme = storedTheme === 'dark' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#141610' : '#fbf6f6');
+      } catch {
+        document.documentElement.dataset.theme = 'light';
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/client/src/main.jsx"></script>
+  </body>
+</html>

@@ -23,6 +23,7 @@ export default [
         queueMicrotask: 'readonly',
         AbortController: 'readonly',
         URL: 'readonly',
+        localStorage: 'readonly',
       },
     },
     rules: { 'no-unused-vars': ['error', { argsIgnorePattern: '^_' }] },

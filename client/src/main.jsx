@@ -54,6 +54,50 @@ function Brand() {
   );
 }
 
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="10" cy="10" r="3.1" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10 2.4v1.8M10 15.8v1.8M2.4 10h1.8M15.8 10h1.8M4.6 4.6l1.3 1.3M14.1 14.1l1.3 1.3M15.4 4.6l-1.3 1.3M5.9 14.1l-1.3 1.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M16.1 12.3A6.4 6.4 0 0 1 7.7 3.9a6.5 6.5 0 1 0 8.4 8.4Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ThemeToggle({ theme, onChange }) {
+  return (
+    <div className="theme-toggle" role="group" aria-label="Color theme">
+      <button
+        type="button"
+        className="theme-option"
+        aria-pressed={theme === 'light'}
+        aria-label="Light theme"
+        onClick={() => onChange('light')}
+      >
+        <SunIcon />
+        <span>Light</span>
+      </button>
+      <button
+        type="button"
+        className="theme-option"
+        aria-pressed={theme === 'dark'}
+        aria-label="Dark theme"
+        onClick={() => onChange('dark')}
+      >
+        <MoonIcon />
+        <span>Dark</span>
+      </button>
+    </div>
+  );
+}
+
 function StatusChip({ status }) {
   const review = status !== 'valid';
   return (
@@ -390,6 +434,7 @@ export function App() {
   const [sender, setSender] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [theme, setTheme] = useState(() => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
   const refreshSequence = useRef(0);
 
   async function refresh() {
@@ -415,6 +460,18 @@ export function App() {
     const timer = setInterval(refresh, 5000);
     return () => clearInterval(timer);
   }, [scope, query, offset]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem('po-checker-theme', theme); } catch { /* Storage can be unavailable. */ }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#141610' : '#fbf6f6');
+  }, [theme]);
+
+  function changeTheme(next) {
+    document.documentElement.dataset.theme = next;
+    setTheme(next);
+  }
 
   useEffect(() => {
     if (!selected) { setDetail(null); return undefined; }
@@ -475,7 +532,10 @@ export function App() {
   if (!status) {
     return (
       <main className="shell">
-        <header className="app-head"><Brand /></header>
+        <header className="app-head">
+          <Brand />
+          <ThemeToggle theme={theme} onChange={changeTheme} />
+        </header>
         <section className="panel loading-card" role="status" aria-live="polite">
           <span className="spinner" aria-hidden="true" />
           <div>
@@ -493,18 +553,21 @@ export function App() {
       {status.auth.connected ? <a className="skip-link" href="#orders">Skip to purchase orders</a> : null}
       <header className="app-head">
         <Brand />
-        {status.auth.connected ? (
-          <div className="head-actions">
-            <div className="connection is-online" role="status">
-              <span className="connection-dot" aria-hidden="true" />
-              <span>
-                <strong>Connected</strong>
-                <small>{status.auth.account.username}</small>
-              </span>
-            </div>
-            <button type="button" className="button button-ghost button-small" onClick={signOut}>Sign out</button>
+        <div className="head-actions">
+          <div className={`connection${status.auth.connected ? ' is-online' : ''}`} role="status">
+            <span className="connection-dot" aria-hidden="true" />
+            <span>
+              <strong>{status.auth.connected ? 'Connected' : 'Not connected'}</strong>
+              <small>{status.auth.connected ? status.auth.account.username : 'Gmail setup'}</small>
+            </span>
           </div>
-        ) : null}
+          <div className="head-tools">
+            <ThemeToggle theme={theme} onChange={changeTheme} />
+            {status.auth.connected ? (
+              <button type="button" className="button button-ghost button-small" onClick={signOut}>Sign out</button>
+            ) : null}
+          </div>
+        </div>
       </header>
 
       {error ? (

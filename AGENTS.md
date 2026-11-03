@@ -51,7 +51,7 @@ UI/UX work uses the imported `apple-design` skill at `.agents/skills/apple-desig
 - Prefix client API calls with `/api`; the Vite dev server proxies them to port 4174.
 - Stored timestamps are UTC ISO strings; convert to local time only for display.
 - The dashboard is intentionally a single file with small local components. New UI work should stay consistent with that file and the existing CSS classes unless a refactor is explicitly requested.
-- UI styling lives in `client/src/style.css` and uses CSS custom properties for color, type, spacing, and focus. The dashboard supports light and dark system appearances, `prefers-reduced-motion`, `prefers-reduced-transparency`, and `prefers-contrast: more`. Keep new controls on the shared `.button`, `.field`, and `.panel` patterns and preserve visible keyboard focus.
+- UI styling lives in `client/src/style.css` and uses CSS custom properties for color, type, spacing, and focus. The dashboard has explicit light and dark themes selected from the header (light is the default and the choice persists in `localStorage`), plus `prefers-reduced-motion`, `prefers-reduced-transparency`, and `prefers-contrast: more`. Keep new controls on the shared `.button`, `.field`, and `.panel` patterns and preserve visible keyboard focus.
 - Never log or commit credentials, tokens, or message bodies.
 
 ## Testing Guidelines
