@@ -38,6 +38,10 @@ Run everything from the repository root:
 
 `npm run lint` currently fails on the unused `client/src/components/ui/button.jsx` (`ButtonPrimitive` is only referenced in JSX, which the current ESLint config does not track). Fix or remove that file rather than ignoring the failure, or configure a React JSX plugin.
 
+## Design Reviews
+
+UI/UX work uses the imported `apple-design` skill at `.opencode/skills/apple-design/SKILL.md`. Load it for design reviews, HIG compliance and accessibility audits, dark-mode checks, and requests to make the dashboard feel less generic. The skill routes to Apple's guideline pages under `.opencode/skills/apple-design/references/hig/` and to the cross-platform translation in `references/cross-platform.md`. Treat the generated HIG pages as read-only references; refresh them with `node .opencode/skills/apple-design/scripts/pull-hig.mjs` only when explicitly asked.
+
 ## Coding Style & Naming Conventions
 
 - Use ES modules, `.js` for server code, `.jsx` for React components, and two-space indentation.
