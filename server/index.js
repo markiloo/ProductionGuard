@@ -12,6 +12,7 @@ import { listItemDefinitions, createItemDefinition, updateItemDefinition, delete
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
 import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail } from './pos.js';
 import { listDeliveries, createDelivery, updateDelivery, receiveDelivery, parseDeliveryInput } from './deliveries.js';
+import { resetAccountData } from './reset.js';
 import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -352,6 +353,12 @@ app.put('/api/settings', (req, res) => {
   }
   const timeZone = setPlantTimeZone(db, resolveTimeZone(requested));
   res.json({ ok: true, plantTimeZone: timeZone, today: plantToday(timeZone) });
+});
+
+app.post('/api/reset', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirm the reset before clearing data.' });
+  res.json({ ok: true, ...resetAccountData(db, aid, isoNow()) });
 });
 
 const dist = path.resolve(__dirname, '../dist');

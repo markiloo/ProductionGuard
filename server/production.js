@@ -95,15 +95,26 @@ function invalid(message) {
   return error;
 }
 
-function resolveProductionItem(db, accountId, input) {
+function resolveProductionItem(db, accountId, input, previousRequirements = []) {
   if (!input.productionItemId) return { ...input, effectiveRequirements: input.effectiveRequirements || [], productionItemId: null };
   const productionItem = getProductionItem(db, accountId, input.productionItemId);
   if (!productionItem) {
     throw invalid('Choose a defined production item from Item definition.');
   }
-  const requirements = input.requirements?.length
-    ? input.effectiveRequirements
-    : productionItem.requirements.map((requirement) => ({ itemSku: requirement.itemSku, quantity: requirement.quantity, unit: requirement.unit, status: 'outstanding' }));
+  const previous = new Map(previousRequirements.map((requirement) => [requirement.itemSku.toLowerCase(), requirement]));
+  const requirements = productionItem.requirements.map((requirement) => {
+    const scaled = requirement.quantity * input.quantity;
+    if (!Number.isSafeInteger(scaled) || scaled <= 0 || scaled > MAX_QUANTITY) {
+      throw invalid(`Requirement quantity for ${requirement.itemSku} is too large.`);
+    }
+    const prior = previous.get(requirement.itemSku.toLowerCase());
+    return {
+      itemSku: requirement.itemSku,
+      quantity: scaled,
+      unit: requirement.unit,
+      status: prior && prior.quantity === scaled ? prior.status : 'outstanding',
+    };
+  });
   return { ...input, item: productionItem.name, unit: productionItem.unit, effectiveRequirements: requirements, productionItemId: productionItem.id };
 }
 
@@ -179,7 +190,9 @@ export function createProductionRun(db, accountId, input, now) {
 /** Update an account-owned production run and replace its requirement rows. */
 export function updateProductionRun(db, accountId, id, input, now) {
   if (runNumberTaken(db, accountId, input.runNumber, id)) throw conflict('That run number is already in use.');
-  const resolved = resolveProductionItem(db, accountId, input);
+  const existing = getProductionRun(db, accountId, id);
+  if (!existing) return null;
+  const resolved = resolveProductionItem(db, accountId, input, existing.requirements || []);
   validateRequirements(db, accountId, resolved.effectiveRequirements || []);
   return db.transaction(() => {
     const result = db.prepare('UPDATE production_runs SET run_number=?, item=?, quantity=?, unit=?, status=?, scheduled_date=?, notes=?, production_item_id=?, updated_at=? WHERE account_id=? AND id=?').run(

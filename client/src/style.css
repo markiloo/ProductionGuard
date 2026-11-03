@@ -934,6 +934,18 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
 .settings-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .settings-head h3 { margin-top: 2px; font-family: var(--font-display); font-size: 20px; font-weight: 500; letter-spacing: -0.01em; }
 .settings-copy { color: var(--ink-3); font-size: 12.5px; line-height: 1.55; }
+.settings-danger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border-top: 1px solid color-mix(in oklab, var(--rose) 24%, var(--line));
+  background: var(--rose-soft);
+}
+.settings-danger h3 { margin-top: 2px; font-family: var(--font-display); font-size: 20px; font-weight: 500; letter-spacing: -0.01em; color: var(--rose); }
+.settings-danger .settings-copy { max-width: 70ch; color: var(--ink-2); }
 .settings-section .sender-empty { margin: 0; }
 .head-tools .button.is-current { background: var(--accent-soft); color: var(--accent); }
 
@@ -1107,6 +1119,28 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
 .requirement-sku { font-family: var(--mono); font-weight: 600; }
 .requirement-qty { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .requirement-editor { display: grid; gap: 8px; }
+.locked-requirements {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  list-style: none;
+}
+.locked-requirements li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.locked-requirements li:last-child { border-bottom: 0; }
+.locked-requirement-math { color: var(--ink-3); font: 500 11.5px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
+.locked-requirement-math strong { color: var(--ink); font-weight: 650; }
 .requirement-row { display: grid; grid-template-columns: minmax(0, 1.4fr) 78px 78px 116px auto; gap: 6px; align-items: center; }
 .requirement-row select,
 .requirement-row input { min-width: 0; }

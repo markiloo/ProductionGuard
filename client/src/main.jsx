@@ -216,7 +216,7 @@ function RunStrip({ status }) {
   );
 }
 
-function SettingsView({ status, sender, setSender, onAdd, onRemove, busy, timeZone, setTimeZone, onSaveTimeZone }) {
+function SettingsView({ status, sender, setSender, onAdd, onRemove, busy, timeZone, setTimeZone, onSaveTimeZone, onClearAllData }) {
   return (
     <section className="panel settings-panel" id="settings" tabIndex={-1} aria-labelledby="settings-title">
       <header className="panel-head record-head">
@@ -272,6 +272,14 @@ function SettingsView({ status, sender, setSender, onAdd, onRemove, busy, timeZo
           <p className="hint">Current plant date: {status.today}. Use an IANA zone such as Asia/Manila.</p>
         </section>
       </div>
+      <section className="settings-danger" aria-labelledby="clear-data-title">
+        <div>
+          <p className="eyebrow">Danger zone</p>
+          <h3 id="clear-data-title">Clear all data</h3>
+          <p className="settings-copy">Delete all local test data for this account: PO requests and review history, inventory, incoming deliveries, production runs and definitions, SKUs, and approved senders. The Gmail connection and plant time zone are kept. Gmail is not changed. This cannot be undone.</p>
+        </div>
+        <button type="button" className="button button-danger" onClick={onClearAllData} disabled={busy}>Clear all data…</button>
+      </section>
     </section>
   );
 }
@@ -309,7 +317,7 @@ function PoRow({ item, selected, onSelect }) {
   );
 }
 
-function PosPanel({ status, pos, stateFilter, setStateFilter, sort, setSort, query, setQuery, offset, setOffset, selected, setSelected, busy, onClear }) {
+function PosPanel({ status, pos, stateFilter, setStateFilter, sort, setSort, query, setQuery, offset, setOffset, selected, setSelected, busy, refreshing, onRefresh, onClear }) {
   const counts = pos.counts || {};
   const emptyCopy = stateFilter === 'unverified'
     ? { title: 'No unverified orders', body: 'Incomplete, unauthorized, or multi-item PO mail appears here with its reason.' }
@@ -329,6 +337,9 @@ function PosPanel({ status, pos, stateFilter, setStateFilter, sort, setSort, que
         </div>
         <div className="inbox-actions">
           <span className="count">{pos.total} {pos.total === 1 ? 'order' : 'orders'}</span>
+          <button type="button" className="button button-secondary button-small" onClick={onRefresh} disabled={refreshing} aria-label="Recompute purchase order assessments">
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
           {status.features?.clearSavedInbox ? (
             <button type="button" className="button button-danger-ghost button-small" disabled={!status.totalCount || busy} onClick={onClear}>Clear saved</button>
           ) : null}
@@ -563,13 +574,16 @@ function ProductionRow({ run, onEdit }) {
         <span className="production-meta">Scheduled {scheduleDate(run.scheduledDate)}{run.notes ? ` · ${run.notes}` : ''}</span>
         {requirements.length ? (
           <ul className="requirement-list">
-            {requirements.map((requirement) => (
-              <li key={requirement.id}>
-                <span className="requirement-sku">{requirement.itemSku}</span>
-                <span className="requirement-qty">{requirement.quantity} {requirement.unit}</span>
-                <span className={`status-chip ${requirement.status === 'completed' ? 'completed' : 'scheduled'}`}>{requirement.status === 'completed' ? 'Consumed' : 'Outstanding'}</span>
-              </li>
-            ))}
+            {requirements.map((requirement) => {
+              const consumed = requirement.status === 'completed' || run.status === 'completed';
+              return (
+                <li key={requirement.id}>
+                  <span className="requirement-sku">{requirement.itemSku}</span>
+                  <span className="requirement-qty">{requirement.quantity} {requirement.unit}</span>
+                  <span className={`status-chip ${consumed ? 'completed' : 'scheduled'}`}>{consumed ? 'Consumed' : 'Outstanding'}</span>
+                </li>
+              );
+            })}
           </ul>
         ) : null}
       </div>
@@ -622,42 +636,51 @@ function ProductionView({ runs, onAdd, onEdit }) {
   );
 }
 
-function ProductionDialog({ draft, productionItems = [], skuOptions = [], busy, onClose, onSave, onDelete }) {
+function scaleRunRequirements(productionItem, quantity) {
+  const planned = Number(quantity);
+  if (!productionItem || !Number.isInteger(planned) || planned <= 0) return [];
+  return (productionItem.requirements || []).map((requirement) => ({
+    itemSku: requirement.itemSku,
+    perUnit: requirement.quantity,
+    quantity: requirement.quantity * planned,
+    unit: requirement.unit,
+  }));
+}
+
+function ProductionDialog({ draft, productionItems = [], busy, onClose, onSave, onDelete }) {
   const dialogRef = useSheetDialog(onClose);
   const editing = Boolean(draft.id);
   const runNumber = draft.runNumber || '';
+  const initialSelected = productionItems.find((option) => option.id === draft.productionItemId) || null;
   const [productionItemId, setProductionItemId] = useState(draft.productionItemId || '');
-  const [item, setItem] = useState(draft.item || '');
   const [quantity, setQuantity] = useState(String(draft.quantity ?? 1));
-  const [unit, setUnit] = useState(draft.unit || 'units');
+  const [unit, setUnit] = useState(initialSelected?.unit || draft.unit || 'units');
   const [status, setStatus] = useState(draft.status || 'scheduled');
   const [scheduledDate, setScheduledDate] = useState(draft.scheduledDate || todayDate());
   const [notes, setNotes] = useState(draft.notes || '');
   const [requirements, setRequirements] = useState(() => {
-    const existing = draft.requirements?.length ? draft.requirements : [{ itemSku: '', quantity: 1, unit: 'units', status: 'outstanding' }];
-    return existing.map((requirement) => ({ itemSku: requirement.itemSku || '', quantity: String(requirement.quantity ?? 1), unit: requirement.unit || 'units', status: requirement.status || 'outstanding' }));
+    if (initialSelected) return scaleRunRequirements(initialSelected, draft.quantity ?? 1);
+    return (draft.requirements || []).map((requirement) => ({
+      itemSku: requirement.itemSku,
+      perUnit: null,
+      quantity: requirement.quantity,
+      unit: requirement.unit,
+    }));
   });
   const [formError, setFormError] = useState('');
-
-  function updateRequirement(index, patch) {
-    setRequirements((current) => current.map((requirement, row) => (row === index ? { ...requirement, ...patch } : requirement)));
-  }
-
-  function chooseSku(index, itemSku) {
-    const definition = skuOptions.find((option) => option.sku.toLowerCase() === itemSku.toLowerCase());
-    updateRequirement(index, { itemSku, unit: definition?.unit || requirements[index].unit });
-  }
+  const selectedProductionItem = productionItems.find((option) => option.id === productionItemId) || null;
 
   function chooseProductionItem(value) {
     setProductionItemId(value);
     const selected = productionItems.find((option) => option.id === value);
     if (!selected) return;
-    setItem(selected.name);
     setUnit(selected.unit);
-    const next = selected.requirements?.length
-      ? selected.requirements.map((requirement) => ({ itemSku: requirement.itemSku, quantity: String(requirement.quantity), unit: requirement.unit, status: 'outstanding' }))
-      : [{ itemSku: '', quantity: '1', unit: 'units', status: 'outstanding' }];
-    setRequirements(next);
+    setRequirements(scaleRunRequirements(selected, quantity));
+  }
+
+  function changeQuantity(value) {
+    setQuantity(value);
+    if (selectedProductionItem) setRequirements(scaleRunRequirements(selectedProductionItem, value));
   }
 
   async function submit(event) {
@@ -667,18 +690,10 @@ function ProductionDialog({ draft, productionItems = [], skuOptions = [], busy, 
       await onSave({
         runNumber,
         productionItemId: productionItemId || null,
-        item,
-        unit,
         quantity: Number(quantity),
         status,
         scheduledDate,
         notes,
-        requirements: requirements.map((requirement) => ({
-          itemSku: requirement.itemSku,
-          quantity: Number(requirement.quantity),
-          unit: requirement.unit,
-          status: requirement.status,
-        })),
       });
     } catch (failure) {
       setFormError(failure.message);
@@ -716,11 +731,11 @@ function ProductionDialog({ draft, productionItems = [], skuOptions = [], busy, 
               <option value="">Choose a production item</option>
               {productionItems.map((option) => <option key={option.id} value={option.id}>{option.name} — {option.unit}</option>)}
             </select>
-            <p className="field-hint">Production items and their requirements are defined under Item definition.</p>
+            <p className="field-hint">Production items and their per-unit requirements are defined under Item definition.</p>
           </div>
           <div className="field">
             <label htmlFor="production-quantity">Planned quantity</label>
-            <input id="production-quantity" type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} required />
+            <input id="production-quantity" type="number" min="1" step="1" value={quantity} onChange={(event) => changeQuantity(event.target.value)} required />
           </div>
           <div className="field">
             <label htmlFor="production-unit">Unit</label>
@@ -731,29 +746,21 @@ function ProductionDialog({ draft, productionItems = [], skuOptions = [], busy, 
             <input id="production-date" type="date" value={scheduledDate} onChange={(event) => setScheduledDate(event.target.value)} required />
           </div>
           <div className="field field-wide">
-            <label>Material requirements</label>
-            <div className="requirement-editor">
-              {requirements.map((requirement, index) => (
-                <div className="requirement-row" key={index}>
-                  <label className="sr-only" htmlFor={`requirement-sku-${index}`}>Item SKU</label>
-                  <select id={`requirement-sku-${index}`} value={requirement.itemSku} onChange={(event) => chooseSku(index, event.target.value)} required>
-                    <option value="">Choose SKU</option>
-                    {skuOptions.map((option) => <option key={option.id} value={option.sku}>{option.sku} — {option.item}</option>)}
-                  </select>
-                  <label className="sr-only" htmlFor={`requirement-qty-${index}`}>Quantity</label>
-                  <input id={`requirement-qty-${index}`} type="number" min="1" step="1" value={requirement.quantity} onChange={(event) => updateRequirement(index, { quantity: event.target.value })} required />
-                  <label className="sr-only" htmlFor={`requirement-unit-${index}`}>Unit</label>
-                  <input id={`requirement-unit-${index}`} value={requirement.unit} onChange={(event) => updateRequirement(index, { unit: event.target.value })} maxLength={20} required />
-                  <label className="sr-only" htmlFor={`requirement-status-${index}`}>Demand status</label>
-                  <select id={`requirement-status-${index}`} value={requirement.status} onChange={(event) => updateRequirement(index, { status: event.target.value })}>
-                    <option value="outstanding">Outstanding</option>
-                    <option value="completed">Consumed</option>
-                  </select>
-                  <button type="button" className="button button-ghost button-small" onClick={() => setRequirements((current) => current.filter((_, row) => row !== index))} disabled={requirements.length === 1} aria-label="Remove requirement">Remove</button>
-                </div>
-              ))}
-              <button type="button" className="button button-secondary button-small" onClick={() => setRequirements((current) => [...current, { itemSku: '', quantity: '1', unit: 'units', status: 'outstanding' }])}>Add requirement</button>
-            </div>
+            <label>Material requirements (scaled and locked)</label>
+            {requirements.length ? (
+              <ul className="locked-requirements" aria-label="Scaled material requirements">
+                {requirements.map((requirement, index) => (
+                  <li key={`${requirement.itemSku}-${index}`}>
+                    <span className="requirement-sku">{requirement.itemSku}</span>
+                    <span className="locked-requirement-math">
+                      {requirement.perUnit != null ? `${requirement.perUnit} ${requirement.unit} × ${quantity || 0} = ` : ''}
+                      <strong>{requirement.quantity} {requirement.unit}</strong>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="muted">No material requirements defined for this production item.</p>}
+            <p className="field-hint">Requirements are scaled from the production item's per-unit template by the planned quantity and locked to the run. Change the planned quantity to re-derive them.</p>
           </div>
           <div className="field field-wide">
             <label htmlFor="production-notes">Notes</label>
@@ -802,7 +809,7 @@ function ProductionItemRow({ item, onEdit }) {
             {requirements.map((requirement) => (
               <li key={requirement.id}>
                 <span className="requirement-sku">{requirement.itemSku}</span>
-                <span className="requirement-qty">{requirement.quantity} {requirement.unit}</span>
+                <span className="requirement-qty">{requirement.quantity} {requirement.unit} / unit</span>
               </li>
             ))}
           </ul>
@@ -847,7 +854,7 @@ function ItemDefinitionView({ definitions, productionItems, onAddDefinition, onE
               <div><p className="eyebrow">Production master</p><h3 id="production-items-title">Items to make</h3></div>
               <button type="button" className="button button-primary button-small" onClick={onAddProductionItem}>Add item</button>
             </div>
-            <p className="settings-copy">Define what the plant produces and the materials each run needs. Production runs select one of these items.</p>
+            <p className="settings-copy">Define what the plant produces and the materials each unit needs. Production runs select one of these items, scale each requirement by the planned quantity, and lock the result.</p>
             <div className="record-list">
               {(productionItems || []).map((item) => <ProductionItemRow key={item.id} item={item} onEdit={onEditProductionItem} />)}
               {!productionItems?.length ? (
@@ -983,7 +990,7 @@ function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, o
             <input id="production-item-notes" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} placeholder="Optional" />
           </div>
           <div className="field field-wide">
-            <label>Material requirements</label>
+            <label>Material requirements (per unit)</label>
             <div className="requirement-editor">
               {requirements.map((requirement, index) => (
                 <div className="requirement-row" key={index}>
@@ -1423,6 +1430,7 @@ export function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [theme, setTheme] = useState(() => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
   const [view, setView] = useState('orders');
   const [inventory, setInventory] = useState(null);
@@ -1475,8 +1483,10 @@ export function App() {
         setDeliveries(null);
         setDeliveryDraft(null);
       }
+      return true;
     } catch (failure) {
       if (sequence === refreshSequence.current) setError(failure.message);
+      return false;
     }
   }
 
@@ -1576,6 +1586,25 @@ export function App() {
     }
   }
 
+  async function manualRefresh() {
+    setRefreshing(true);
+    setError('');
+    setNotice('');
+    try {
+      const ok = await refresh();
+      if (ok === false) return;
+      if (selected) {
+        const current = await api(`/api/pos/${encodeURIComponent(selected)}`);
+        setDetail(current);
+      }
+      setNotice('Purchase order assessments refreshed.');
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function poAction(poActionName, payload = {}) {
     if (!selected) return;
     setDetailMessage('');
@@ -1670,6 +1699,32 @@ export function App() {
       await api('/api/emails', { method: 'DELETE' });
       setSelected(null);
       setOffset(0);
+    });
+  };
+
+  const clearAllData = () => {
+    if (!globalThis.confirm('Clear ALL local data for this account?\n\nThis deletes PO requests and review history, inventory, incoming deliveries, production runs and definitions, SKUs, and approved senders. The Gmail connection and plant time zone are kept. Gmail is not changed. This cannot be undone.')) return;
+    action(async () => {
+      await api('/api/reset', { method: 'POST', body: JSON.stringify({ confirm: true }) });
+      setSelected(null);
+      setOffset(0);
+      setSender('');
+      setInventory(null);
+      setInventoryDraft(null);
+      setItemDefinitions(null);
+      setItemDefinitionDraft(null);
+      setProductionItems(null);
+      setProductionItemDraft(null);
+      setProductionRuns(null);
+      setProductionDraft(null);
+      setDeliveries(null);
+      setDeliveryDraft(null);
+      setInventoryRevision((revision) => revision + 1);
+      setItemDefinitionRevision((revision) => revision + 1);
+      setProductionItemRevision((revision) => revision + 1);
+      setProductionRevision((revision) => revision + 1);
+      setDeliveryRevision((revision) => revision + 1);
+      setNotice('All local data cleared. Re-add a sender to resume collection.');
     });
   };
 
@@ -1975,6 +2030,7 @@ export function App() {
           timeZone={timeZone}
           setTimeZone={setTimeZone}
           onSaveTimeZone={saveTimeZone}
+          onClearAllData={clearAllData}
         />
       ) : view === 'orders' ? (
         <>
@@ -1993,6 +2049,8 @@ export function App() {
             selected={selected}
             setSelected={setSelected}
             busy={busy}
+            refreshing={refreshing}
+            onRefresh={manualRefresh}
             onClear={clearOrders}
           />
         </>
@@ -2042,7 +2100,7 @@ export function App() {
         <ProductionItemDialog draft={productionItemDraft} skuOptions={definitionOptions} busy={productionItemBusy} onClose={() => { if (!productionItemBusy) setProductionItemDraft(null); }} onSave={saveProductionItem} onDelete={removeProductionItem} />
       ) : null}
       {productionDraft ? (
-        <ProductionDialog draft={productionDraft} productionItems={productionItems || []} skuOptions={definitionOptions} busy={productionBusy} onClose={() => { if (!productionBusy) setProductionDraft(null); }} onSave={saveProductionRun} onDelete={removeProductionRun} />
+        <ProductionDialog draft={productionDraft} productionItems={productionItems || []} busy={productionBusy} onClose={() => { if (!productionBusy) setProductionDraft(null); }} onSave={saveProductionRun} onDelete={removeProductionRun} />
       ) : null}
       {deliveryDraft ? (
         <DeliveryDialog draft={deliveryDraft} skuOptions={inventoryOptions} busy={deliveryBusy} onClose={() => { if (!deliveryBusy) setDeliveryDraft(null); }} onSave={saveDelivery} />

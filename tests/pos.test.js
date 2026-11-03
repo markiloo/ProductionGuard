@@ -31,9 +31,11 @@ test('PO correction maps a defined SKU without inventory and reruns assessment',
       requirements: [{ itemSku: 'SKU-0001', quantity: 2, unit: 'units' }],
     }), now);
     createProductionRun(db, account, parseProductionInput({
-      runNumber: 'PR-0001', productionItemId: productionItem.id, quantity: 1,
-      status: 'scheduled', scheduledDate: '2026-11-10', requirements: [],
+      runNumber: 'PR-0001', productionItemId: productionItem.id, quantity: 2,
+      status: 'scheduled', scheduledDate: '2026-11-10',
+      requirements: [{ itemSku: 'SKU-0001', quantity: 999, unit: 'units' }],
     }), now);
+    assert.equal(db.prepare('SELECT quantity FROM production_requirements WHERE account_id=?').get(account).quantity, 4, 'template quantity 2 is scaled by planned quantity 2 and client-supplied requirements are ignored');
 
     const body = 'ITEM: Carton Glue\nQUANTITY: 50\nUNIT: units\nETA: 5 days\nSUPPLIER: Supplier';
     db.prepare(`INSERT INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments,item,quantity,unit,eta,supplier,po_status,po_error,po_id,po_state,mapped_sku,eta_days)
@@ -60,8 +62,8 @@ test('PO correction maps a defined SKU without inventory and reruns assessment',
     createInventoryItem(db, account, parseInventoryInput({ item: 'Carton Glue', sku: 'SKU-0001', quantity: 0, unit: 'units' }), now);
     const assessed = getPo(db, account, 'PO-0001', today);
     assert.equal(assessed.assessment.decision, 'Adjust Quantity');
-    assert.equal(assessed.assessment.requirement, 2);
-    assert.equal(assessed.assessment.difference, 48);
+    assert.equal(assessed.assessment.requirement, 4);
+    assert.equal(assessed.assessment.difference, 46);
     assert.equal(assessed.assessment.inventory.quantity, 0);
 
     const mismatch = correctPo(db, account, 'PO-0001', { unit: 'kg' }, { today, now });

@@ -37,7 +37,7 @@
  * @property {string} id Stable requirement template ID.
  * @property {string} productionItemId Owning production item ID.
  * @property {string} itemSku Required material SKU.
- * @property {number} quantity Whole-number quantity.
+ * @property {number} quantity Whole-number quantity per unit of the produced item.
  * @property {string} unit Unit matching the SKU definition.
  */
 
@@ -88,7 +88,7 @@
  * @property {'scheduled'|'in_progress'|'completed'|'on_hold'} status Production status.
  * @property {string} scheduledDate Local calendar date in YYYY-MM-DD form.
  * @property {string} notes Optional local notes.
- * @property {ProductionRequirement[]} [requirements] Material demand rows for the run.
+ * @property {ProductionRequirement[]} [requirements] Material demand rows, scaled from the definition by the planned quantity and locked to the run.
  * @property {string} createdAt UTC creation timestamp.
  * @property {string} updatedAt UTC last-edit timestamp.
  */

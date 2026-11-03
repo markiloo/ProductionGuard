@@ -147,7 +147,8 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Add production item definitions with material requirement templates validated against defined SKUs and units.
 - [x] Add an Item definition view next to Production with sections for SKUs and for items to make.
 - [x] Select a defined production item when creating a production run; take its name, unit, and default requirements from the definition.
-- [x] Keep per-run requirement copies editable without changing the production item definition.
+- [x] Treat production item requirement templates as per-unit quantities, scale each run by its planned quantity, and lock the derived requirement rows against per-run edits.
+- [x] Keep per-run requirement rows derived from the definition instead of accepting client-supplied quantities.
 - [x] Block deleting a production item that is used by a production run.
 - [x] Allow a PO to map to a defined SKU even before that SKU has an inventory record, showing *Manual Review Required — Missing Inventory* until stock is added.
 - [x] Return correction validation errors to the correction form instead of reporting a successful save.
@@ -244,4 +245,6 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Add an unverified queue with reasons and a correction form that can map a SKU and revalidate the same record.
 - [x] Add an incoming-deliveries view with add, edit, and receive.
 - [x] Add received-time sort order plus status, item, and date search and filter for POs and inventory, and refresh assessments after any save without a full reload.
+- [x] Add a manual Refresh action that recomputes and reloads the PO assessment list.
+- [x] Add a confirmed Clear all data action in Settings that removes account business data and senders, keeps the Gmail connection and plant time zone, and suppresses older Inbox mail.
 - [x] Move the sender allowlist and plant time zone into a Settings view opened from a header button next to Sign out.
