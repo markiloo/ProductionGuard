@@ -1,0 +1,107 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import Database from 'better-sqlite3';
+import { parseProductionInput, listProductionRuns, createProductionRun, updateProductionRun } from '../server/production.js';
+
+function store() {
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE production_runs(
+    account_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    run_number TEXT NOT NULL,
+    item TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit TEXT NOT NULL,
+    status TEXT NOT NULL,
+    scheduled_date TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(account_id, id)
+  );
+  CREATE UNIQUE INDEX production_runs_number ON production_runs(account_id, run_number COLLATE NOCASE);`);
+  return db;
+}
+
+const now = '2026-11-03T09:00:00.000Z';
+
+test('production input trims fields, normalizes status, and accepts a valid date', () => {
+  assert.deepEqual(parseProductionInput({
+    runNumber: ' PR-1042 ',
+    item: ' Bearings ',
+    quantity: '12',
+    unit: ' units ',
+    status: 'In progress',
+    scheduledDate: '2026-11-05',
+    notes: ' line 2 ',
+  }), {
+    runNumber: 'PR-1042',
+    item: 'Bearings',
+    quantity: 12,
+    unit: 'units',
+    status: 'in_progress',
+    scheduledDate: '2026-11-05',
+    notes: 'line 2',
+  });
+  assert.equal(parseProductionInput({ runNumber: 'PR-1', item: 'Bolts', quantity: 1, unit: 'kg', scheduledDate: '2024-02-29' }).status, 'scheduled');
+});
+
+test('production input rejects missing, malformed, or impossible values', () => {
+  const invalid = [
+    {},
+    { runNumber: '', item: 'Bolts', quantity: 1, unit: 'units', scheduledDate: '2026-11-05' },
+    { runNumber: 'PR-1', item: '', quantity: 1, unit: 'units', scheduledDate: '2026-11-05' },
+    { runNumber: 'PR-1', item: 'Bolts', quantity: 0, unit: 'units', scheduledDate: '2026-11-05' },
+    { runNumber: 'PR-1', item: 'Bolts', quantity: -1, unit: 'units', scheduledDate: '2026-11-05' },
+    { runNumber: 'PR-1', item: 'Bolts', quantity: 1.5, unit: 'units', scheduledDate: '2026-11-05' },
+    { runNumber: 'PR-1', item: 'Bolts', quantity: 1, unit: '', scheduledDate: '2026-11-05' },
+    { runNumber: 'PR-1', item: 'Bolts', quantity: 1, unit: 'units', status: 'paused', scheduledDate: '2026-11-05' },
+    { runNumber: 'PR-1', item: 'Bolts', quantity: 1, unit: 'units', scheduledDate: '' },
+    { runNumber: 'PR-1', item: 'Bolts', quantity: 1, unit: 'units', scheduledDate: '2026-02-31' },
+    { runNumber: 'PR-1', item: 'Bolts', quantity: 1, unit: 'units', scheduledDate: '2026-13-01' },
+  ];
+  for (const body of invalid) assert.throws(() => parseProductionInput(body));
+});
+
+test('production runs are account-scoped, ordered, and editable', () => {
+  const db = store();
+  try {
+    const scheduled = createProductionRun(db, 'acct-a', parseProductionInput({
+      runNumber: 'PR-200', item: 'Bearings', quantity: 40, unit: 'units', scheduledDate: '2026-11-10', notes: ' line 3 ',
+    }), now);
+    const active = createProductionRun(db, 'acct-a', parseProductionInput({
+      runNumber: 'PR-100', item: 'Steel', quantity: 5, unit: 'kg', status: 'in_progress', scheduledDate: '2026-11-07',
+    }), now);
+    createProductionRun(db, 'acct-a', parseProductionInput({
+      runNumber: 'PR-050', item: 'Copper', quantity: 2, unit: 'kg', status: 'completed', scheduledDate: '2026-11-01',
+    }), now);
+    createProductionRun(db, 'acct-b', parseProductionInput({
+      runNumber: 'PR-100', item: 'Other account', quantity: 1, unit: 'units', scheduledDate: '2026-11-05',
+    }), now);
+
+    assert.deepEqual(listProductionRuns(db, 'acct-a').map((run) => run.runNumber), ['PR-100', 'PR-200', 'PR-050']);
+    assert.deepEqual(listProductionRuns(db, 'acct-b').map((run) => run.item), ['Other account']);
+
+    assert.throws(
+      () => createProductionRun(db, 'acct-a', parseProductionInput({
+        runNumber: 'pr-100', item: 'Duplicate', quantity: 1, unit: 'units', scheduledDate: '2026-11-09',
+      }), now),
+      (failure) => failure.status === 409 && /already in use/.test(failure.message),
+    );
+
+    const updated = updateProductionRun(db, 'acct-a', active.id, parseProductionInput({
+      runNumber: 'PR-100', item: 'Steel', quantity: 8, unit: 'kg', status: 'completed', scheduledDate: '2026-11-08', notes: ' done ',
+    }), '2026-11-04T09:00:00.000Z');
+    assert.equal(updated.quantity, 8);
+    assert.equal(updated.status, 'completed');
+    assert.equal(updated.notes, 'done');
+    assert.equal(updated.updatedAt, '2026-11-04T09:00:00.000Z');
+    assert.equal(updated.createdAt, active.createdAt);
+
+    assert.equal(updateProductionRun(db, 'acct-b', active.id, parseProductionInput({
+      runNumber: 'PR-999', item: 'Stolen', quantity: 1, unit: 'units', scheduledDate: '2026-11-09',
+    }), now), null);
+  } finally {
+    db.close();
+  }
+});

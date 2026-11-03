@@ -33,7 +33,9 @@ test('migration adds suppliers to saved POs and flags older messages missing the
     assert.equal(getEmail(db, 'a', 'other'), null);
     assert.equal(clearSavedEmails(db, 'a', '2026-01-04T00:00:00.000Z'), 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emails').get().count, 1);
-    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 4);
+    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 6);
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inventory'").get());
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_runs'").get());
   } finally {
     loaded?.db.close();
     loaded?.releaseInstanceLock();

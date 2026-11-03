@@ -6,6 +6,8 @@ import { restoreGmail, connectGmail, authState, signOut } from './auth.js';
 import { beginCollector, stopCollector, collectionState, startupCutoff, collect } from './collector.js';
 import { normalizeSender, isValidSender } from './rules.js';
 import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email-queries.js';
+import { listInventory, createInventoryItem, updateInventoryItem, parseInventoryInput } from './inventory.js';
+import { listProductionRuns, createProductionRun, updateProductionRun, parseProductionInput } from './production.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -25,6 +27,30 @@ app.use('/api', (req, res, next) => {
 const PORT = Number(process.env.PORT || 4174);
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
 const accountId = () => { syncAccount(); return authState().account?.id || ''; };
+
+function readInventoryInput(body, res) {
+  try {
+    return parseInventoryInput(body);
+  } catch (failure) {
+    res.status(400).json({ error: failure.message || 'Invalid inventory item.' });
+    return null;
+  }
+}
+
+function readProductionInput(body, res) {
+  try {
+    return parseProductionInput(body);
+  } catch (failure) {
+    res.status(400).json({ error: failure.message || 'Invalid production run.' });
+    return null;
+  }
+}
+
+function sendProductionError(res, failure) {
+  if (failure.status === 409) return res.status(409).json({ error: failure.message });
+  if (String(failure.code || '').startsWith('SQLITE_CONSTRAINT')) return res.status(409).json({ error: 'That run number is already in use.' });
+  return res.status(500).json({ error: 'Could not save production run.' });
+}
 
 app.get('/api/status', (_req, res) => {
   const state = authState();
@@ -75,6 +101,48 @@ app.get('/api/emails/:id', (req, res) => {
   const row = getEmail(db, accountId(), req.params.id);
   if (!row) return res.status(404).json({ error: 'Message not found.' });
   res.json(row);
+});
+
+app.get('/api/inventory', (_req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  res.json({ items: listInventory(db, aid) });
+});
+app.post('/api/inventory', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const input = readInventoryInput(req.body, res); if (!input) return;
+  res.status(201).json({ ok: true, item: createInventoryItem(db, aid, input, isoNow()) });
+});
+app.put('/api/inventory/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const input = readInventoryInput(req.body, res); if (!input) return;
+  const item = updateInventoryItem(db, aid, req.params.id, input, isoNow());
+  if (!item) return res.status(404).json({ error: 'Inventory item not found.' });
+  res.json({ ok: true, item });
+});
+
+app.get('/api/production-runs', (_req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  res.json({ items: listProductionRuns(db, aid) });
+});
+app.post('/api/production-runs', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const input = readProductionInput(req.body, res); if (!input) return;
+  try {
+    res.status(201).json({ ok: true, item: createProductionRun(db, aid, input, isoNow()) });
+  } catch (failure) {
+    sendProductionError(res, failure);
+  }
+});
+app.put('/api/production-runs/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const input = readProductionInput(req.body, res); if (!input) return;
+  try {
+    const item = updateProductionRun(db, aid, req.params.id, input, isoNow());
+    if (!item) return res.status(404).json({ error: 'Production run not found.' });
+    res.json({ ok: true, item });
+  } catch (failure) {
+    sendProductionError(res, failure);
+  }
 });
 
 const dist = path.resolve(__dirname, '../dist');

@@ -104,3 +104,17 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Parse `ITEM`, `QUANTITY`, `UNIT`, `ETA`, and `SUPPLIER`; retain malformed PO mail with a review reason.
 - [x] Convert previously saved PO messages, hide unrelated legacy mail from the PO view, and show structured fields in the dashboard and API.
 - [x] Clear locally saved POs without changing Gmail, and document the new behavior.
+
+## Inventory update
+
+- [x] Add an account-scoped Inventory view with add and edit forms.
+- [x] Store item name, SKU, quantity, unit, supplier, reorder level, and notes in SQLite.
+- [x] Validate inventory input and scope inventory API access to the connected account.
+- [x] Document the inventory endpoints, fields, and local-storage behavior.
+
+## Production update
+
+- [x] Add an account-scoped Production view for existing schedules and runs.
+- [x] Store run number, item, quantity, unit, status, scheduled date, and notes in SQLite.
+- [x] Allow adding and editing production runs with unique run numbers per account.
+- [x] Document the production endpoints, fields, and local-storage behavior.

@@ -14,6 +14,8 @@ The stack is Node.js ES modules, Express 5, React 19, Vite 6, Tailwind CSS v4 wi
 - `server/collector-core.js` — Collection engine: cutoff filtering, IMAP search, text-only MIME download, race checks, dedup, insert.
 - `server/db.js` — SQLite connection, single-instance data-directory lock, ordered schema migrations.
 - `server/email-queries.js` — Account-scoped list/search/pagination, detail lookup, and clear.
+- `server/inventory.js` — Account-scoped inventory validation, list, create, and update.
+- `server/production.js` — Account-scoped production run validation, list, create, and update.
 - `server/po.js` — `PO` subject matching and PO field parsing.
 - `server/rules.js` — Exact sender address normalization and validation.
 - `server/types.js` — JSDoc typedefs for API and data shapes.
@@ -78,4 +80,5 @@ Use short, imperative commit subjects (for example, `Add sender settings`). Pull
 - Each server start records a fresh UTC cutoff; only mail received strictly after it is eligible. Restarting excludes mail received while stopped.
 - Collection is Inbox-only, matches exact addresses (not domains or display names), and polls every 15 seconds without overlapping checks.
 - "Clear saved orders" deletes only the connected account's local POs and suppresses older mail on later polls; Gmail is untouched.
+- Inventory and production runs are local to the connected account, stored in the same SQLite database, and are never sent to Gmail.
 - To erase local state, stop the server and delete `data/`.

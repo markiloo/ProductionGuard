@@ -23,6 +23,28 @@ const metricDate = (value) => value
   ? new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   : 'Not yet';
 
+const PRODUCTION_STATUS = {
+  scheduled: 'Scheduled',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  on_hold: 'On hold',
+};
+
+function scheduleDate(value) {
+  if (!value) return '—';
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function todayDate() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 function shortDate(value) {
   if (!value) return '—';
   const date = new Date(value);
@@ -31,6 +53,31 @@ function shortDate(value) {
   return date.toDateString() === today.toDateString()
     ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function useSheetDialog(onClose) {
+  const dialogRef = useRef(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (dialog?.open) dialog.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+    const handleCancel = (event) => { event.preventDefault(); onClose(); };
+    dialog.addEventListener('cancel', handleCancel);
+    return () => dialog.removeEventListener('cancel', handleCancel);
+  }, [onClose]);
+
+  return dialogRef;
 }
 
 function SearchIcon() {
@@ -104,6 +151,15 @@ function StatusChip({ status }) {
     <span className={`status-chip ${review ? 'review' : 'valid'}`}>
       <span className="status-dot" aria-hidden="true" />
       {review ? 'Needs review' : 'Parsed'}
+    </span>
+  );
+}
+
+function ProductionStatusChip({ status }) {
+  return (
+    <span className={`status-chip ${status.split('_').join('-')}`}>
+      <span className="status-dot" aria-hidden="true" />
+      {PRODUCTION_STATUS[status] || status}
     </span>
   );
 }
@@ -320,27 +376,429 @@ function Inbox({ status, emails, query, setQuery, scope, setScope, offset, setOf
   );
 }
 
+function InventoryRow({ item, onEdit }) {
+  const lowStock = item.reorderLevel != null && item.quantity <= item.reorderLevel;
+  const meta = [item.supplier, item.reorderLevel != null ? `Reorder at ${item.reorderLevel} ${item.unit}` : null].filter(Boolean).join(' · ');
+  return (
+    <div className="inventory-row">
+      <div className="inventory-main">
+        <div className="inventory-top">
+          <strong className="inventory-name">{item.item}</strong>
+          {item.sku ? <span className="inventory-sku">{item.sku}</span> : null}
+          {lowStock ? <span className="status-chip review">Low stock</span> : null}
+        </div>
+        <span className="inventory-meta">{meta || 'No supplier'}</span>
+        {item.notes ? <span className="inventory-notes">{item.notes}</span> : null}
+      </div>
+      <div className="inventory-side">
+        <span className="inventory-qty">{item.quantity}<small>{item.unit}</small></span>
+        <time className="inventory-updated" dateTime={item.updatedAt} title={fullDate(item.updatedAt)}>Updated {shortDate(item.updatedAt)}</time>
+      </div>
+      <button
+        type="button"
+        className="button button-ghost button-small inventory-edit"
+        onClick={() => onEdit(item)}
+        aria-label={`Edit ${item.item}`}
+      >
+        Edit
+      </button>
+    </div>
+  );
+}
+
+function InventoryView({ items, onAdd, onEdit }) {
+  const lowStock = items ? items.filter((item) => item.reorderLevel != null && item.quantity <= item.reorderLevel).length : 0;
+  const lastUpdated = items && items.length
+    ? items.reduce((latest, item) => (item.updatedAt > latest ? item.updatedAt : latest), items[0].updatedAt)
+    : null;
+  return (
+    <section className="panel record-panel inventory" id="inventory" tabIndex={-1} aria-labelledby="inventory-title">
+      <header className="panel-head record-head">
+        <div>
+          <p className="eyebrow">Stock</p>
+          <h2 id="inventory-title">Inventory</h2>
+        </div>
+        <div className="record-actions">
+          <span className="count">{items ? `${items.length} ${items.length === 1 ? 'item' : 'items'}` : '—'}</span>
+          <button type="button" className="button button-primary button-small" onClick={onAdd}>Add item</button>
+        </div>
+      </header>
+      {items === null ? (
+        <div className="record-loading" role="status">
+          <span className="spinner" aria-hidden="true" />
+          Loading inventory…
+        </div>
+      ) : (
+        <>
+          <div className="record-summary">
+            <div>
+              <span className="metric-label">Items</span>
+              <strong>{items.length}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Low stock</span>
+              <strong className={lowStock ? 'text-danger' : ''}>{lowStock}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Last updated</span>
+              <strong>{lastUpdated ? metricDate(lastUpdated) : '—'}</strong>
+            </div>
+          </div>
+          <div className="record-list">
+            {items.map((item) => <InventoryRow key={item.id} item={item} onEdit={onEdit} />)}
+            {!items.length ? (
+              <div className="empty">
+                <span className="empty-mark" aria-hidden="true">ST</span>
+                <strong>No inventory items yet</strong>
+                <p>Add an item to start tracking stock on this PC.</p>
+                <button type="button" className="button button-secondary button-small" onClick={onAdd}>Add your first item</button>
+              </div>
+            ) : null}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function InventoryDialog({ draft, busy, onClose, onSave }) {
+  const dialogRef = useSheetDialog(onClose);
+  const editing = Boolean(draft.id);
+  const [item, setItem] = useState(draft.item || '');
+  const [sku, setSku] = useState(draft.sku || '');
+  const [quantity, setQuantity] = useState(String(draft.quantity ?? 0));
+  const [unit, setUnit] = useState(draft.unit || 'units');
+  const [supplier, setSupplier] = useState(draft.supplier || '');
+  const [reorderLevel, setReorderLevel] = useState(draft.reorderLevel == null ? '' : String(draft.reorderLevel));
+  const [notes, setNotes] = useState(draft.notes || '');
+  const [formError, setFormError] = useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    setFormError('');
+    try {
+      await onSave({
+        item,
+        sku,
+        quantity: Number(quantity),
+        unit,
+        supplier,
+        reorderLevel: reorderLevel === '' ? null : Number(reorderLevel),
+        notes,
+      });
+    } catch (failure) {
+      setFormError(failure.message);
+    }
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="detail inventory-dialog"
+      aria-labelledby="inventory-dialog-title"
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <header className="detail-head">
+        <div>
+          <p className="eyebrow">Inventory</p>
+          <h2 id="inventory-dialog-title">{editing ? 'Edit inventory item' : 'Add inventory item'}</h2>
+        </div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close inventory form" disabled={busy}>×</button>
+      </header>
+      <form className="detail-body inventory-form" onSubmit={submit}>
+        <div className="form-grid">
+          <div className="field field-wide">
+            <label htmlFor="inventory-item">Item name</label>
+            <input
+              id="inventory-item"
+              value={item}
+              onChange={(event) => setItem(event.target.value)}
+              maxLength={120}
+              placeholder="e.g. Bearings"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="inventory-sku">SKU</label>
+            <input id="inventory-sku" value={sku} onChange={(event) => setSku(event.target.value)} maxLength={60} placeholder="Optional" />
+          </div>
+          <div className="field">
+            <label htmlFor="inventory-supplier">Supplier</label>
+            <input id="inventory-supplier" value={supplier} onChange={(event) => setSupplier(event.target.value)} maxLength={120} placeholder="Optional" />
+          </div>
+          <div className="field">
+            <label htmlFor="inventory-quantity">Quantity on hand</label>
+            <input
+              id="inventory-quantity"
+              type="number"
+              min="0"
+              step="1"
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="inventory-unit">Unit</label>
+            <input id="inventory-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="inventory-units" required />
+            <datalist id="inventory-units">
+              <option value="units" />
+              <option value="kg" />
+              <option value="boxes" />
+              <option value="liters" />
+            </datalist>
+          </div>
+          <div className="field">
+            <label htmlFor="inventory-reorder">Reorder level</label>
+            <input
+              id="inventory-reorder"
+              type="number"
+              min="0"
+              step="1"
+              value={reorderLevel}
+              onChange={(event) => setReorderLevel(event.target.value)}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="field field-wide">
+            <label htmlFor="inventory-notes">Notes</label>
+            <textarea
+              id="inventory-notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              maxLength={500}
+              rows={3}
+              placeholder="Optional storage notes, bin location, etc."
+            />
+          </div>
+        </div>
+        {formError ? <p className="form-error" role="alert">{formError}</p> : null}
+        <div className="dialog-actions">
+          <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}>
+            {busy ? 'Saving…' : editing ? 'Save changes' : 'Add item'}
+          </button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+function ProductionRow({ run, onEdit }) {
+  return (
+    <div className="production-row">
+      <div className="production-main">
+        <div className="production-top">
+          <span className="production-run">{run.runNumber}</span>
+          <strong className="production-name">{run.item}</strong>
+          <ProductionStatusChip status={run.status} />
+        </div>
+        <span className="production-meta">
+          Scheduled {scheduleDate(run.scheduledDate)}{run.notes ? ` · ${run.notes}` : ''}
+        </span>
+      </div>
+      <div className="production-side">
+        <span className="production-qty">{run.quantity}<small>{run.unit}</small></span>
+        <time className="production-updated" dateTime={run.updatedAt} title={fullDate(run.updatedAt)}>Updated {shortDate(run.updatedAt)}</time>
+      </div>
+      <button
+        type="button"
+        className="button button-ghost button-small production-edit"
+        onClick={() => onEdit(run)}
+        aria-label={`Edit ${run.runNumber}`}
+      >
+        Edit
+      </button>
+    </div>
+  );
+}
+
+function ProductionView({ runs, onAdd, onEdit }) {
+  const inProgress = runs ? runs.filter((run) => run.status === 'in_progress').length : 0;
+  const nextRun = runs
+    ? runs
+      .filter((run) => run.status === 'scheduled' || run.status === 'in_progress')
+      .sort((first, second) => first.scheduledDate.localeCompare(second.scheduledDate))[0] || null
+    : null;
+  return (
+    <section className="panel record-panel production" id="production" tabIndex={-1} aria-labelledby="production-title">
+      <header className="panel-head record-head">
+        <div>
+          <p className="eyebrow">Schedule</p>
+          <h2 id="production-title">Production</h2>
+        </div>
+        <div className="record-actions">
+          <span className="count">{runs ? `${runs.length} ${runs.length === 1 ? 'run' : 'runs'}` : '—'}</span>
+          <button type="button" className="button button-primary button-small" onClick={onAdd}>Add run</button>
+        </div>
+      </header>
+      {runs === null ? (
+        <div className="record-loading" role="status">
+          <span className="spinner" aria-hidden="true" />
+          Loading production schedule…
+        </div>
+      ) : (
+        <>
+          <div className="record-summary">
+            <div>
+              <span className="metric-label">Runs</span>
+              <strong>{runs.length}</strong>
+            </div>
+            <div>
+              <span className="metric-label">In progress</span>
+              <strong>{inProgress}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Next run</span>
+              <strong>{nextRun ? scheduleDate(nextRun.scheduledDate) : '—'}</strong>
+            </div>
+          </div>
+          <div className="record-list">
+            {runs.map((run) => <ProductionRow key={run.id} run={run} onEdit={onEdit} />)}
+            {!runs.length ? (
+              <div className="empty">
+                <span className="empty-mark" aria-hidden="true">PR</span>
+                <strong>No production runs yet</strong>
+                <p>Add a scheduled run to see it on the production board.</p>
+                <button type="button" className="button button-secondary button-small" onClick={onAdd}>Add your first run</button>
+              </div>
+            ) : null}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function ProductionDialog({ draft, busy, onClose, onSave }) {
+  const dialogRef = useSheetDialog(onClose);
+  const editing = Boolean(draft.id);
+  const [runNumber, setRunNumber] = useState(draft.runNumber || '');
+  const [item, setItem] = useState(draft.item || '');
+  const [quantity, setQuantity] = useState(String(draft.quantity ?? 1));
+  const [unit, setUnit] = useState(draft.unit || 'units');
+  const [status, setStatus] = useState(draft.status || 'scheduled');
+  const [scheduledDate, setScheduledDate] = useState(draft.scheduledDate || todayDate());
+  const [notes, setNotes] = useState(draft.notes || '');
+  const [formError, setFormError] = useState('');
+
+  async function submit(event) {
+    event.preventDefault();
+    setFormError('');
+    try {
+      await onSave({
+        runNumber,
+        item,
+        quantity: Number(quantity),
+        unit,
+        status,
+        scheduledDate,
+        notes,
+      });
+    } catch (failure) {
+      setFormError(failure.message);
+    }
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="detail production-dialog"
+      aria-labelledby="production-dialog-title"
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <header className="detail-head">
+        <div>
+          <p className="eyebrow">Production</p>
+          <h2 id="production-dialog-title">{editing ? 'Edit production run' : 'Add production run'}</h2>
+        </div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close production form" disabled={busy}>×</button>
+      </header>
+      <form className="detail-body production-form" onSubmit={submit}>
+        <div className="form-grid">
+          <div className="field">
+            <label htmlFor="production-run">Run number</label>
+            <input
+              id="production-run"
+              value={runNumber}
+              onChange={(event) => setRunNumber(event.target.value)}
+              maxLength={40}
+              placeholder="e.g. PR-1042"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="production-status">Status</label>
+            <select id="production-status" value={status} onChange={(event) => setStatus(event.target.value)}>
+              {Object.entries(PRODUCTION_STATUS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field field-wide">
+            <label htmlFor="production-item">Item</label>
+            <input id="production-item" value={item} onChange={(event) => setItem(event.target.value)} maxLength={120} placeholder="e.g. Bearings" required />
+          </div>
+          <div className="field">
+            <label htmlFor="production-quantity">Quantity</label>
+            <input
+              id="production-quantity"
+              type="number"
+              min="1"
+              step="1"
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="production-unit">Unit</label>
+            <input id="production-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="production-units" required />
+            <datalist id="production-units">
+              <option value="units" />
+              <option value="kg" />
+              <option value="boxes" />
+              <option value="liters" />
+            </datalist>
+          </div>
+          <div className="field field-wide">
+            <label htmlFor="production-date">Scheduled date</label>
+            <input
+              id="production-date"
+              type="date"
+              value={scheduledDate}
+              onChange={(event) => setScheduledDate(event.target.value)}
+              required
+            />
+          </div>
+          <div className="field field-wide">
+            <label htmlFor="production-notes">Notes</label>
+            <textarea
+              id="production-notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              maxLength={500}
+              rows={3}
+              placeholder="Optional line, machine, or handoff notes."
+            />
+          </div>
+        </div>
+        {formError ? <p className="form-error" role="alert">{formError}</p> : null}
+        <div className="dialog-actions">
+          <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}>
+            {busy ? 'Saving…' : editing ? 'Save changes' : 'Add run'}
+          </button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
 function DetailDialog({ detail, error, onClose }) {
-  const dialogRef = useRef(null);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      if (dialog?.open) dialog.close();
-    };
-  }, []);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return undefined;
-    const handleCancel = (event) => { event.preventDefault(); onClose(); };
-    dialog.addEventListener('cancel', handleCancel);
-    return () => dialog.removeEventListener('cancel', handleCancel);
-  }, [onClose]);
+  const dialogRef = useSheetDialog(onClose);
 
   return (
     <dialog
@@ -435,6 +893,15 @@ export function App() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [theme, setTheme] = useState(() => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
+  const [view, setView] = useState('orders');
+  const [inventory, setInventory] = useState(null);
+  const [inventoryRevision, setInventoryRevision] = useState(0);
+  const [inventoryDraft, setInventoryDraft] = useState(null);
+  const [inventoryBusy, setInventoryBusy] = useState(false);
+  const [productionRuns, setProductionRuns] = useState(null);
+  const [productionRevision, setProductionRevision] = useState(0);
+  const [productionDraft, setProductionDraft] = useState(null);
+  const [productionBusy, setProductionBusy] = useState(false);
   const refreshSequence = useRef(0);
 
   async function refresh() {
@@ -449,6 +916,10 @@ export function App() {
       } else {
         setEmails({ items: [], total: 0 });
         setSelected(null);
+        setInventory(null);
+        setInventoryDraft(null);
+        setProductionRuns(null);
+        setProductionDraft(null);
       }
     } catch (failure) {
       if (sequence === refreshSequence.current) setError(failure.message);
@@ -472,6 +943,36 @@ export function App() {
     document.documentElement.dataset.theme = next;
     setTheme(next);
   }
+
+  useEffect(() => {
+    if (!status?.auth.connected || view !== 'inventory') return undefined;
+    let active = true;
+    setInventory(null);
+    api('/api/inventory')
+      .then((data) => { if (active) setInventory(data.items); })
+      .catch((failure) => {
+        if (active) {
+          setInventory([]);
+          setError(failure.message);
+        }
+      });
+    return () => { active = false; };
+  }, [view, status?.auth.connected, status?.auth.account?.id, inventoryRevision]);
+
+  useEffect(() => {
+    if (!status?.auth.connected || view !== 'production') return undefined;
+    let active = true;
+    setProductionRuns(null);
+    api('/api/production-runs')
+      .then((data) => { if (active) setProductionRuns(data.items); })
+      .catch((failure) => {
+        if (active) {
+          setProductionRuns([]);
+          setError(failure.message);
+        }
+      });
+    return () => { active = false; };
+  }, [view, status?.auth.connected, status?.auth.account?.id, productionRevision]);
 
   useEffect(() => {
     if (!selected) { setDetail(null); return undefined; }
@@ -501,6 +1002,11 @@ export function App() {
     action(async () => {
       await api('/api/setup', { method: 'POST', body: JSON.stringify({ email, appPassword }) });
       setAppPassword('');
+      setView('orders');
+      setInventory(null);
+      setInventoryDraft(null);
+      setProductionRuns(null);
+      setProductionDraft(null);
     });
   };
 
@@ -518,6 +1024,11 @@ export function App() {
     await api('/api/sign-out', { method: 'POST', body: '{}' });
     setSelected(null);
     setOffset(0);
+    setView('orders');
+    setInventory(null);
+    setInventoryDraft(null);
+    setProductionRuns(null);
+    setProductionDraft(null);
   });
 
   const clearOrders = () => {
@@ -528,6 +1039,62 @@ export function App() {
       setOffset(0);
     });
   };
+
+  function showView(next) {
+    setView(next);
+    setSelected(null);
+  }
+
+  function openNewInventoryItem() {
+    setInventoryDraft({ id: null, item: '', sku: '', quantity: 0, unit: 'units', supplier: '', reorderLevel: null, notes: '' });
+  }
+
+  function openInventoryItem(item) {
+    setInventoryDraft({ ...item });
+  }
+
+  async function saveInventory(values) {
+    setInventoryBusy(true);
+    try {
+      const editing = Boolean(inventoryDraft?.id);
+      const url = editing ? `/api/inventory/${encodeURIComponent(inventoryDraft.id)}` : '/api/inventory';
+      await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
+      setInventoryDraft(null);
+      setInventoryRevision((revision) => revision + 1);
+    } finally {
+      setInventoryBusy(false);
+    }
+  }
+
+  function openNewProductionRun() {
+    setProductionDraft({
+      id: null,
+      runNumber: '',
+      item: '',
+      quantity: 1,
+      unit: 'units',
+      status: 'scheduled',
+      scheduledDate: todayDate(),
+      notes: '',
+    });
+  }
+
+  function openProductionRun(run) {
+    setProductionDraft({ ...run });
+  }
+
+  async function saveProductionRun(values) {
+    setProductionBusy(true);
+    try {
+      const editing = Boolean(productionDraft?.id);
+      const url = editing ? `/api/production-runs/${encodeURIComponent(productionDraft.id)}` : '/api/production-runs';
+      await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
+      setProductionDraft(null);
+      setProductionRevision((revision) => revision + 1);
+    } finally {
+      setProductionBusy(false);
+    }
+  }
 
   if (!status) {
     return (
@@ -550,7 +1117,14 @@ export function App() {
 
   return (
     <main className="shell">
-      {status.auth.connected ? <a className="skip-link" href="#orders">Skip to purchase orders</a> : null}
+      {status.auth.connected ? (
+        <a
+          className="skip-link"
+          href={view === 'orders' ? '#orders' : view === 'inventory' ? '#inventory' : '#production'}
+        >
+          Skip to {view === 'orders' ? 'purchase orders' : view === 'inventory' ? 'inventory' : 'production'}
+        </a>
+      ) : null}
       <header className="app-head">
         <Brand />
         <div className="head-actions">
@@ -569,6 +1143,35 @@ export function App() {
           </div>
         </div>
       </header>
+
+      {status.auth.connected ? (
+        <nav className="view-tabs" aria-label="Dashboard views">
+          <button
+            type="button"
+            className="view-tab"
+            aria-current={view === 'orders' ? 'page' : undefined}
+            onClick={() => showView('orders')}
+          >
+            Orders
+          </button>
+          <button
+            type="button"
+            className="view-tab"
+            aria-current={view === 'inventory' ? 'page' : undefined}
+            onClick={() => showView('inventory')}
+          >
+            Inventory
+          </button>
+          <button
+            type="button"
+            className="view-tab"
+            aria-current={view === 'production' ? 'page' : undefined}
+            onClick={() => showView('production')}
+          >
+            Production
+          </button>
+        </nav>
+      ) : null}
 
       {error ? (
         <div className="alert" role="alert">
@@ -629,7 +1232,7 @@ export function App() {
             </p>
           </form>
         </section>
-      ) : (
+      ) : view === 'orders' ? (
         <>
           <RunStrip status={status} />
           <div className="workspace">
@@ -657,6 +1260,10 @@ export function App() {
             />
           </div>
         </>
+      ) : view === 'inventory' ? (
+        <InventoryView items={inventory} onAdd={openNewInventoryItem} onEdit={openInventoryItem} />
+      ) : (
+        <ProductionView runs={productionRuns} onAdd={openNewProductionRun} onEdit={openProductionRun} />
       )}
 
       <footer className="app-foot">
@@ -666,6 +1273,22 @@ export function App() {
       </footer>
 
       {selected ? <DetailDialog detail={detail} error={error} onClose={() => setSelected(null)} /> : null}
+      {inventoryDraft ? (
+        <InventoryDialog
+          draft={inventoryDraft}
+          busy={inventoryBusy}
+          onClose={() => { if (!inventoryBusy) setInventoryDraft(null); }}
+          onSave={saveInventory}
+        />
+      ) : null}
+      {productionDraft ? (
+        <ProductionDialog
+          draft={productionDraft}
+          busy={productionBusy}
+          onClose={() => { if (!productionBusy) setProductionDraft(null); }}
+          onSave={saveProductionRun}
+        />
+      ) : null}
     </main>
   );
 }

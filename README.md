@@ -14,6 +14,16 @@ SUPPLIER: Acme Supply
 
 Quantity must be a positive whole number, unit must be `kg` or `units`, ETA must be `1 week` or `2 weeks`, and supplier must be a nonempty string. Labels are case-insensitive and extra whitespace is accepted. A qualifying email with invalid fields is saved and marked **Needs review**. Previously saved subject-PO emails are reprocessed when the database is upgraded; unrelated saved emails remain stored but are hidden from the PO view.
 
+## Inventory
+
+The **Inventory** view keeps a local stock list for the connected Gmail account. Add or edit an item's name, SKU, quantity, unit, supplier, reorder level, and notes. Items at or below their reorder level are marked **Low stock**. Inventory lives in the same local SQLite database and is never sent to Gmail.
+
+## Production schedule
+
+The **Production** view shows existing production runs for the connected account. Each run has a run number, item, planned quantity and unit, scheduled date, status (Scheduled, In progress, Completed, On hold), and optional notes. Run numbers must be unique per account. Add or edit runs from the view; active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
+
+The header has an explicit **Light / Dark** selector. Light is the default, and the choice is remembered in the browser.
+
 ## Gmail setup
 
 1. Turn on [Google 2-Step Verification](https://myaccount.google.com/security).
@@ -33,7 +43,7 @@ Closing the browser leaves collection running. Stop the server console to end th
 
 ## Local data and privacy
 
-Saved mail and sender settings live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
+Saved mail, sender settings, inventory, and production runs live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
 
 The **Clear saved orders** button deletes the connected account's locally saved purchase orders after confirmation. It does not delete or change anything in Gmail. Mail received before the clear time stays excluded from later polls; newer eligible mail can still appear.
 

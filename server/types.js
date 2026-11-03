@@ -23,6 +23,34 @@
 /** @typedef {{ address: string }} SenderSetting */
 
 /**
+ * @typedef {Object} InventoryItem
+ * @property {string} id Stable local inventory ID.
+ * @property {string} item Item name.
+ * @property {string} sku Optional SKU or part number.
+ * @property {number} quantity Whole-number quantity on hand.
+ * @property {string} unit Unit label, such as kg, units, or boxes.
+ * @property {string} supplier Optional supplier name.
+ * @property {number|null} reorderLevel Whole-number threshold, or null when unset.
+ * @property {string} notes Optional local notes.
+ * @property {string} createdAt UTC creation timestamp.
+ * @property {string} updatedAt UTC last-edit timestamp.
+ */
+
+/**
+ * @typedef {Object} ProductionRun
+ * @property {string} id Stable local production run ID.
+ * @property {string} runNumber Human-readable run number, unique per account.
+ * @property {string} item Item or product being produced.
+ * @property {number} quantity Whole-number planned quantity.
+ * @property {string} unit Unit label, such as kg, units, or boxes.
+ * @property {'scheduled'|'in_progress'|'completed'|'on_hold'} status Production status.
+ * @property {string} scheduledDate Local calendar date in YYYY-MM-DD form.
+ * @property {string} notes Optional local notes.
+ * @property {string} createdAt UTC creation timestamp.
+ * @property {string} updatedAt UTC last-edit timestamp.
+ */
+
+/**
  * @typedef {Object} CollectedEmail
  * @property {string} id Stable Gmail IMAP message ID.
  * @property {string} senderAddress Exact From address.

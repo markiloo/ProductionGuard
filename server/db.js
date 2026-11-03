@@ -47,6 +47,37 @@ export function migrate() {
      ALTER TABLE emails ADD COLUMN po_status TEXT;
      ALTER TABLE emails ADD COLUMN po_error TEXT;`,
     `ALTER TABLE emails ADD COLUMN supplier TEXT;`,
+    `CREATE TABLE inventory (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       id TEXT NOT NULL,
+       item TEXT NOT NULL CHECK (length(trim(item)) > 0),
+       sku TEXT NOT NULL DEFAULT '',
+       quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+       unit TEXT NOT NULL DEFAULT 'units' CHECK (length(trim(unit)) > 0),
+       supplier TEXT NOT NULL DEFAULT '',
+       reorder_level INTEGER CHECK (reorder_level IS NULL OR reorder_level >= 0),
+       notes TEXT NOT NULL DEFAULT '',
+       created_at TEXT NOT NULL,
+       updated_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, id)
+     );
+     CREATE INDEX inventory_item ON inventory(account_id, item COLLATE NOCASE);`,
+    `CREATE TABLE production_runs (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       id TEXT NOT NULL,
+       run_number TEXT NOT NULL CHECK (length(trim(run_number)) > 0),
+       item TEXT NOT NULL CHECK (length(trim(item)) > 0),
+       quantity INTEGER NOT NULL CHECK (quantity > 0),
+       unit TEXT NOT NULL CHECK (length(trim(unit)) > 0),
+       status TEXT NOT NULL CHECK (status IN ('scheduled', 'in_progress', 'completed', 'on_hold')),
+       scheduled_date TEXT NOT NULL,
+       notes TEXT NOT NULL DEFAULT '',
+       created_at TEXT NOT NULL,
+       updated_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, id)
+     );
+     CREATE UNIQUE INDEX production_runs_number ON production_runs(account_id, run_number COLLATE NOCASE);
+     CREATE INDEX production_runs_date ON production_runs(account_id, scheduled_date);`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;
