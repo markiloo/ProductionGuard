@@ -182,7 +182,36 @@ export function setPoProof(db, accountId, poId, proof, now) {
   return db.prepare('SELECT mime_type AS mimeType, file_name AS fileName, created_at AS createdAt FROM po_proofs WHERE account_id=? AND po_id=?').get(accountId, poId);
 }
 
-/** Apply one allowed PO lifecycle transition. */
+/** Revise an approved PO's ETA or an ordered PO's delivery date, recording the reason. */
+export function schedulePo(db, accountId, poId, input, { today, now }) {
+  const po = getStateRow(db, accountId, poId);
+  if (!po) return null;
+  const note = String(input?.note || '').trim();
+  if (!note) throw fail('Enter a note for the schedule change.', 400);
+  if (note.length > 500) throw fail('The correction note must be 500 characters or fewer.', 400);
+  if (po.state === 'approved') {
+    const days = Number(input?.etaDays);
+    if (!Number.isInteger(days) || days <= 0 || days > 3650) throw fail('ETA must be a whole number of days greater than 0.', 400);
+    if (days === po.etaDays) throw fail('The ETA has not changed.', 400);
+    db.transaction(() => {
+      db.prepare('UPDATE emails SET eta=?, eta_days=? WHERE account_id=? AND po_id=?').run(`${days} days`, days, accountId, po.poId);
+      recordEvent(db, accountId, po.poId, 'corrected', `ETA changed from ${po.etaDays ?? 'unknown'} days to ${days} days — ${note}`, now);
+    })();
+  } else if (po.state === 'ordered') {
+    if (!isValidDate(input?.expectedArrival)) throw fail('Choose a valid delivery date.', 400);
+    if (input.expectedArrival === po.expectedArrival) throw fail('The delivery date has not changed.', 400);
+    const delivery = db.prepare('SELECT id, status FROM incoming_deliveries WHERE account_id=? AND po_id=?').get(accountId, po.poId);
+    if (delivery?.status === 'received') throw fail('Received deliveries cannot be rescheduled.', 409);
+    db.transaction(() => {
+      db.prepare('UPDATE emails SET expected_arrival=? WHERE account_id=? AND po_id=?').run(input.expectedArrival, accountId, po.poId);
+      if (delivery) db.prepare('UPDATE incoming_deliveries SET expected_arrival=?, updated_at=? WHERE account_id=? AND id=?').run(input.expectedArrival, now, accountId, delivery.id);
+      recordEvent(db, accountId, po.poId, 'corrected', `Delivery date changed from ${po.expectedArrival || 'none'} to ${input.expectedArrival} — ${note}`, now);
+    })();
+  } else {
+    throw fail('Only Approved or Ordered/Incoming POs can be rescheduled.', 409);
+  }
+  return getPo(db, accountId, po.poId, today);
+}
 export function transitionPo(db, accountId, poId, action, { reason = '', today, now, proof = null }) {
   const po = getStateRow(db, accountId, poId);
   if (!po) return null;

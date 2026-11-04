@@ -73,19 +73,31 @@ export function createDelivery(db, accountId, input, now) {
 }
 
 /** Update an unreceived delivery; received deliveries stay immutable. */
-export function updateDelivery(db, accountId, id, input, now) {
+export function updateDelivery(db, accountId, id, input, now, correctionNote = '') {
   const existing = getDelivery(db, accountId, id);
   if (!existing) return null;
   if (existing.status === 'received') throw fail('Received deliveries cannot be edited. Correct stock through inventory instead.', 409);
   if (existing.poId && input.itemSku.toLowerCase() !== existing.itemSku.toLowerCase()) throw fail('A delivery linked to an ordered PO must keep its item SKU.', 409);
-  db.prepare(`UPDATE incoming_deliveries SET item_sku=?, quantity=?, unit=?, expected_arrival=?, supplier=?, notes=?, updated_at=?
-    WHERE account_id=? AND id=?`).run(input.itemSku, input.quantity, input.unit, input.expectedArrival, input.supplier, input.notes, now, accountId, id);
-  if (existing.poId) {
-    db.prepare('UPDATE emails SET expected_arrival=?, quantity=?, unit=?, supplier=? WHERE account_id=? AND po_id=?').run(
-      input.expectedArrival, input.quantity, input.unit, input.supplier, accountId, existing.poId,
-    );
-  }
-  return getDelivery(db, accountId, id);
+  const note = String(correctionNote || '').trim();
+  const dateChanged = input.expectedArrival !== existing.expectedArrival;
+  if (dateChanged && existing.poId && !note) throw fail('Enter a note for the delivery date change.');
+  if (note.length > 500) throw fail('The correction note must be 500 characters or fewer.');
+  return db.transaction(() => {
+    db.prepare(`UPDATE incoming_deliveries SET item_sku=?, quantity=?, unit=?, expected_arrival=?, supplier=?, notes=?, updated_at=?
+      WHERE account_id=? AND id=?`).run(input.itemSku, input.quantity, input.unit, input.expectedArrival, input.supplier, input.notes, now, accountId, id);
+    if (existing.poId) {
+      db.prepare('UPDATE emails SET expected_arrival=?, quantity=?, unit=?, supplier=? WHERE account_id=? AND po_id=?').run(
+        input.expectedArrival, input.quantity, input.unit, input.supplier, accountId, existing.poId,
+      );
+      if (dateChanged) {
+        db.prepare('INSERT INTO po_events(account_id,id,po_id,type,reason,created_at) VALUES(?,?,?,?,?,?)').run(
+          accountId, randomUUID(), existing.poId, 'corrected',
+          `Delivery date changed from ${existing.expectedArrival} to ${input.expectedArrival} — ${note}`, now,
+        );
+      }
+    }
+    return getDelivery(db, accountId, id);
+  })();
 }
 
 /** Receive a delivery exactly once, adding its quantity to on-hand stock in the same transaction. */

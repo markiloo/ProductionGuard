@@ -9,7 +9,7 @@ import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email
 import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
 import { listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
-import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail, setPoProof } from './pos.js';
+import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail, setPoProof, schedulePo } from './pos.js';
 import { listDeliveries, createDelivery, updateDelivery, receiveDelivery, parseDeliveryInput } from './deliveries.js';
 import { resetAccountData } from './reset.js';
 import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
@@ -287,6 +287,18 @@ app.patch('/api/pos/:poId', (req, res) => {
   }
 });
 
+app.patch('/api/pos/:poId/schedule', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const { today, now } = nowAndToday();
+  try {
+    const po = schedulePo(db, aid, req.params.poId, req.body, { today, now });
+    if (!po) return res.status(404).json({ error: 'Purchase order not found.' });
+    res.json({ ok: true, po });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not update the delivery schedule.');
+  }
+});
+
 app.post('/api/pos/:poId/order', express.raw({ type: [...PROOF_TYPES], limit: '5mb' }), (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   const proof = readProof(req, res); if (!proof) return;
@@ -355,7 +367,7 @@ app.put('/api/deliveries/:id', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   try {
     const input = parseDeliveryInput(db, aid, req.body);
-    const item = updateDelivery(db, aid, req.params.id, input, isoNow());
+    const item = updateDelivery(db, aid, req.params.id, input, isoNow(), req.body?.correctionNote);
     if (!item) return res.status(404).json({ error: 'Delivery not found.' });
     res.json({ ok: true, item });
   } catch (failure) {

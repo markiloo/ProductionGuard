@@ -12,8 +12,8 @@ test('ordering an approved PO requires and stores an incoming proof picture', as
   try {
     loaded = await import('../server/db.js?order-test');
     const { db, isoNow, releaseInstanceLock } = loaded;
-    const { getPo, transitionPo, setPoProof } = await import('../server/pos.js');
-    const { listDeliveries } = await import('../server/deliveries.js');
+    const { getPo, transitionPo, setPoProof, schedulePo } = await import('../server/pos.js');
+    const { listDeliveries, updateDelivery, parseDeliveryInput } = await import('../server/deliveries.js');
 
     const account = 'gmail:test@example.com';
     const today = '2026-11-04';
@@ -30,6 +30,11 @@ test('ordering an approved PO requires and stores an incoming proof picture', as
     );
 
     transitionPo(db, account, 'PO-0001', 'approve', { today, now });
+    const revisedEta = schedulePo(db, account, 'PO-0001', { etaDays: 8, note: 'Supplier delay' }, { today, now });
+    assert.equal(revisedEta.etaDays, 8);
+    assert.equal(revisedEta.eta, '8 days');
+    assert.ok(revisedEta.events.some((event) => /ETA changed from 5 days to 8 days/.test(event.reason) && /Supplier delay/.test(event.reason)));
+
     assert.throws(
       () => transitionPo(db, account, 'PO-0001', 'order', { today, now }),
       (failure) => failure.status === 400 && /Upload a picture of proof/.test(failure.message),
@@ -50,6 +55,18 @@ test('ordering an approved PO requires and stores an incoming proof picture', as
     assert.equal(deliveries[0].poId, 'PO-0001');
     assert.equal(deliveries[0].proof.mimeType, 'image/png');
     assert.equal(deliveries[0].proof.fileName, 'proof.png');
+
+    const revisedDate = schedulePo(db, account, 'PO-0001', { expectedArrival: '2026-11-20', note: 'Port delay' }, { today, now });
+    assert.equal(revisedDate.expectedArrival, '2026-11-20');
+    assert.equal(revisedDate.delivery.expectedArrival, '2026-11-20');
+    assert.ok(revisedDate.events.some((event) => /Delivery date changed from .* to 2026-11-20/.test(event.reason) && /Port delay/.test(event.reason)));
+
+    const deliveryInput = parseDeliveryInput(db, account, { itemSku: 'SKU-0001', quantity: 10, unit: 'units', expectedArrival: '2026-11-22', supplier: 'Supplier', notes: '' });
+    assert.throws(() => updateDelivery(db, account, deliveries[0].id, deliveryInput, now), /Enter a note for the delivery date change/);
+    const deliveryUpdated = updateDelivery(db, account, deliveries[0].id, deliveryInput, now, 'Carrier delay');
+    assert.equal(deliveryUpdated.expectedArrival, '2026-11-22');
+    assert.equal(getPo(db, account, 'PO-0001', today).expectedArrival, '2026-11-22');
+    assert.ok(getPo(db, account, 'PO-0001', today).events.some((event) => /Delivery date changed from 2026-11-20 to 2026-11-22/.test(event.reason) && /Carrier delay/.test(event.reason)));
 
     const corrected = Buffer.from([0xff, 0xd8, 0xff, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     const updated = setPoProof(db, account, 'PO-0001', { mimeType: 'image/jpeg', fileName: 'corrected.jpg', data: corrected }, now);

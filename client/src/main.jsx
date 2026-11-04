@@ -1042,6 +1042,7 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
   const [expectedArrival, setExpectedArrival] = useState(draft.expectedArrival || todayDate());
   const [supplier, setSupplier] = useState(draft.supplier || '');
   const [notes, setNotes] = useState(draft.notes || '');
+  const [correctionNote, setCorrectionNote] = useState('');
   const [formError, setFormError] = useState('');
   const [proofFile, setProofFile] = useState(null);
   const [proofPreview, setProofPreview] = useState('');
@@ -1085,8 +1086,12 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
       setProofError('Choose a new proof picture to save.');
       return;
     }
+    if (!received && editing && expectedArrival !== draft.expectedArrival && !correctionNote.trim()) {
+      setFormError('Enter a note for the delivery date change.');
+      return;
+    }
     try {
-      await onSave({ itemSku, quantity: Number(quantity), unit, expectedArrival, supplier, notes }, proofFile);
+      await onSave({ itemSku, quantity: Number(quantity), unit, expectedArrival, supplier, notes }, proofFile, correctionNote);
     } catch (failure) {
       setFormError(failure.message);
     }
@@ -1130,6 +1135,13 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
             <label htmlFor="delivery-notes">Notes</label>
             <textarea id="delivery-notes" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={2} disabled={received} />
           </div>
+          {draft.poId && !received ? (
+            <div className="field field-wide">
+              <label htmlFor="delivery-correction">Correction note</label>
+              <input id="delivery-correction" value={correctionNote} onChange={(event) => setCorrectionNote(event.target.value)} maxLength={500} placeholder="Required when the delivery date changes" />
+              <p className="field-hint">Saved in the PO review history when the expected arrival changes.</p>
+            </div>
+          ) : null}
           {draft.poId ? (
             <div className="field field-wide">
               <label htmlFor="delivery-proof">Incoming proof</label>
@@ -1156,7 +1168,7 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
   );
 }
 
-function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose, onAction, onOrder, onUpdateProof, onCorrect }) {
+function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose, onAction, onOrder, onUpdateProof, onReschedule, onCorrect }) {
   const dialogRef = useSheetDialog(onClose);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
@@ -1165,6 +1177,10 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
   const [formError, setFormError] = useState('');
   const [ordering, setOrdering] = useState(false);
   const [replacingProof, setReplacingProof] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [scheduleValue, setScheduleValue] = useState('');
+  const [scheduleNote, setScheduleNote] = useState('');
+  const [scheduleError, setScheduleError] = useState('');
   const [proofFile, setProofFile] = useState(null);
   const [proofPreview, setProofPreview] = useState('');
   const [proofError, setProofError] = useState('');
@@ -1279,6 +1295,36 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
       setProofPreview('');
     } catch (failure) {
       setProofError(failure.message);
+    }
+  }
+
+  function openReschedule() {
+    setRescheduling(true);
+    setOrdering(false);
+    setReplacingProof(false);
+    setRejecting(false);
+    setCorrecting(false);
+    setScheduleValue(po.state === 'approved' ? String(po.etaDays ?? '') : po.expectedArrival || '');
+    setScheduleNote('');
+    setScheduleError('');
+  }
+
+  async function submitSchedule(event) {
+    event.preventDefault();
+    setScheduleError('');
+    const note = scheduleNote.trim();
+    if (!note) {
+      setScheduleError('Enter a note for the schedule change.');
+      return;
+    }
+    try {
+      await onReschedule(po.state === 'approved'
+        ? { etaDays: Number(scheduleValue), note }
+        : { expectedArrival: scheduleValue, note });
+      setRescheduling(false);
+      setScheduleNote('');
+    } catch (failure) {
+      setScheduleError(failure.message);
     }
   }
 
@@ -1485,6 +1531,31 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
             </form>
           ) : null}
 
+          {rescheduling ? (
+            <form className="correction-form" onSubmit={submitSchedule}>
+              <h4>{po.state === 'approved' ? 'Revise ETA' : 'Reschedule delivery'}</h4>
+              <div className="field">
+                <label htmlFor="schedule-value">{po.state === 'approved' ? 'ETA days' : 'Expected delivery date'}</label>
+                {po.state === 'approved' ? (
+                  <input id="schedule-value" type="number" min="1" step="1" value={scheduleValue} onChange={(event) => setScheduleValue(event.target.value)} required />
+                ) : (
+                  <input id="schedule-value" type="date" value={scheduleValue} onChange={(event) => setScheduleValue(event.target.value)} required />
+                )}
+                <p className="field-hint">{po.state === 'approved' ? `Current ETA: ${po.etaDays} days` : `Current delivery date: ${po.expectedArrival}`}</p>
+              </div>
+              <div className="field">
+                <label htmlFor="schedule-note">Correction note</label>
+                <textarea id="schedule-note" value={scheduleNote} onChange={(event) => setScheduleNote(event.target.value)} rows={2} maxLength={500} required placeholder="e.g. Supplier delay" autoFocus />
+                <p className="field-hint">Saved in the PO review history.</p>
+              </div>
+              {scheduleError ? <p className="form-error" role="alert">{scheduleError}</p> : null}
+              <div className="dialog-actions">
+                <button type="button" className="button button-secondary button-small" onClick={() => { setRescheduling(false); setScheduleError(''); }}>Cancel</button>
+                <button type="submit" className="button button-primary button-small" disabled={busy}>Save schedule</button>
+              </div>
+            </form>
+          ) : null}
+
           <details className="source">
             <summary>Original email text</summary>
             <pre>{po.body || po.preview || '(No text body)'}</pre>
@@ -1501,7 +1572,8 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
             {po.state === 'approved' ? (
               <>
                 <button type="button" className="button button-danger-ghost button-small" onClick={() => setRejecting(true)}>Reject…</button>
-                <button type="button" className="button button-primary" onClick={() => { setOrdering(true); setReplacingProof(false); setRejecting(false); setCorrecting(false); setProofError(''); setProofFile(null); setProofPreview(''); }} disabled={busy}>Set Ordered / Incoming…</button>
+                <button type="button" className="button button-secondary button-small" onClick={openReschedule} disabled={busy}>Revise ETA…</button>
+                <button type="button" className="button button-primary" onClick={() => { setOrdering(true); setReplacingProof(false); setRescheduling(false); setRejecting(false); setCorrecting(false); setProofError(''); setProofFile(null); setProofPreview(''); }} disabled={busy}>Set Ordered / Incoming…</button>
               </>
             ) : null}
             {po.state === 'rejected' || po.state === 'unverified' ? (
@@ -1511,9 +1583,14 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
               <button type="button" className="button button-primary" onClick={() => onAction('resubmit')} disabled={busy || po.poStatus !== 'valid'}>Resubmit for review</button>
             ) : null}
             {po.state === 'ordered' ? (
-              <button type="button" className="button button-secondary button-small" onClick={() => { setReplacingProof(true); setOrdering(false); setProofError(''); setProofFile(null); setProofPreview(''); }}>
-                {po.proof ? 'Replace proof…' : 'Add proof…'}
-              </button>
+              <>
+                {po.delivery?.status === 'received' ? null : (
+                  <button type="button" className="button button-secondary button-small" onClick={openReschedule} disabled={busy}>Reschedule delivery…</button>
+                )}
+                <button type="button" className="button button-secondary button-small" onClick={() => { setReplacingProof(true); setOrdering(false); setRescheduling(false); setProofError(''); setProofFile(null); setProofPreview(''); }}>
+                  {po.proof ? 'Replace proof…' : 'Add proof…'}
+                </button>
+              </>
             ) : null}
           </div>
         </div>
@@ -1797,6 +1874,27 @@ export function App() {
     }
   }
 
+  async function reschedulePo(values) {
+    if (!selected) return null;
+    setError('');
+    setDetailMessage('');
+    setDetailLoading(true);
+    setBusy(true);
+    try {
+      const result = await api(`/api/pos/${encodeURIComponent(selected)}/schedule`, { method: 'PATCH', body: JSON.stringify(values) });
+      setDetail(result.po);
+      setDetailMessage('Schedule updated and correction noted.');
+      await refresh();
+      return result.po;
+    } catch (failure) {
+      setError(failure.message);
+      throw failure;
+    } finally {
+      setDetailLoading(false);
+      setBusy(false);
+    }
+  }
+
   async function correctPo(values) {
     if (!selected) return null;
     try {
@@ -2016,7 +2114,7 @@ export function App() {
     setDeliveryDraft({ ...delivery });
   }
 
-  async function saveDelivery(values, proofFile) {
+  async function saveDelivery(values, proofFile, correctionNote = '') {
     setDeliveryBusy(true);
     try {
       const editing = Boolean(deliveryDraft?.id);
@@ -2024,7 +2122,7 @@ export function App() {
       if (received && !proofFile) throw new Error('Choose a new proof picture to save.');
       if (!received) {
         const url = editing ? `/api/deliveries/${encodeURIComponent(deliveryDraft.id)}` : '/api/deliveries';
-        await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
+        await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify({ ...values, correctionNote }) });
       }
       if (proofFile) {
         if (!deliveryDraft?.poId) throw new Error('This delivery is not linked to an ordered PO.');
@@ -2236,6 +2334,7 @@ export function App() {
           onAction={poAction}
           onOrder={orderPo}
           onUpdateProof={updateProof}
+          onReschedule={reschedulePo}
           onCorrect={correctPo}
         />
       ) : null}

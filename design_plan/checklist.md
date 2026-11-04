@@ -198,6 +198,9 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Add a regression test that ordering without proof fails and ordering with proof stores the picture and linked delivery.
 - [x] Show the linked incoming proof in the delivery edit view and allow replacing it, including for received linked deliveries.
 - [x] Add a Replace proof action in the Orders detail for ordered POs, with the same validation and storage as the delivery edit view.
+- [x] Allow Approved POs to revise their ETA and Ordered POs to reschedule their delivery date from Orders, requiring a correction note.
+- [x] Allow changing a linked incoming delivery's expected arrival from the delivery edit view with a required correction note.
+- [x] Record every ETA or delivery-date correction in the PO history and keep the linked delivery date in sync.
 
 ## ETA and daily refresh update
 

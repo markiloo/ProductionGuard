@@ -15,6 +15,7 @@ All routes are served from the same loopback origin as the dashboard. State-chan
 | `GET /api/pos` | `state=pending_review\|unverified\|approved\|ordered\|rejected\|all` (default `pending_review`), `sort=asc\|desc` (received time), `q`, `limit`, `offset` | `{ items: PurchaseOrder[], total, counts: Record<string, number> }`, each with an assessment summary |
 | `GET /api/pos/:poId` | PO ID such as `PO-0001` | `PurchaseOrder` with full `assessment`, `events`, linked `delivery`, and `proof` metadata |
 | `PATCH /api/pos/:poId` | `{ item, mappedSku, quantity, unit, etaDays, supplier }` | `{ ok: true, po }`; corrects an Unverified, Pending Review, or Rejected PO, preserving its identity and history |
+| `PATCH /api/pos/:poId/schedule` | `{ etaDays, note }` for Approved, or `{ expectedArrival, note }` for Ordered / Incoming | `{ ok: true, po }`; revises the ETA or delivery date, updates the linked delivery, and records the note in the PO history |
 | `POST /api/pos/:poId/approve` | `{}` | `{ ok: true, po }`; Pending Review → Approved |
 | `POST /api/pos/:poId/reject` | `{ reason: string }` | `{ ok: true, po }`; Pending Review or Approved → Rejected; reason required |
 | `POST /api/pos/:poId/order` | Raw image body (`image/jpeg`, `image/png`, or `image/webp`, max 5 MB) with optional `X-File-Name` | `{ ok: true, po }`; requires a proof picture, Approved → Ordered / Incoming, fixes the arrival date, creates exactly one linked delivery, and stores the proof |
@@ -31,7 +32,7 @@ All routes are served from the same loopback origin as the dashboard. State-chan
 | `DELETE /api/production-items/:id` | None | `{ ok: true }`; returns 409 while a production run references the assembly |
 | `GET /api/deliveries` | None | `{ items: Delivery[] }`; incoming first, then received |
 | `POST /api/deliveries` | `{ itemSku, quantity, unit, expectedArrival, supplier, notes }` | `{ ok: true, item: Delivery }`; the unit must match inventory |
-| `PUT /api/deliveries/:id` | Same body as create | `{ ok: true, item: Delivery }`; unreceived only; linked deliveries keep their SKU and update the PO ETA |
+| `PUT /api/deliveries/:id` | Same body as create, plus `correctionNote` when the expected arrival changes | `{ ok: true, item: Delivery }`; unreceived only; linked deliveries keep their SKU, update the PO ETA, and record the correction note |
 | `POST /api/deliveries/:id/receive` | `{}` | `{ ok: true, delivery, alreadyReceived }`; adds stock once and removes the delivery from incoming supply |
 | `GET /api/production-runs` | None | `{ items: ProductionRun[] }`, each with `requirements[]`, active work first and then by scheduled date |
 | `GET /api/production-runs/next-number` | None | `{ runNumber: string }`; suggests the next sequential `PR-####` number |
