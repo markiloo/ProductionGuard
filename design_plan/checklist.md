@@ -1,6 +1,6 @@
 # Gmail Inbox Collector — Implementation Checklist
 
-Build a local Windows application using Node.js, Express, React, JavaScript, Vite, and SQLite. Connect one Gmail account through IMAP with a Google app password and collect subject-`PO` Inbox emails from an editable list of exact sender addresses. No Microsoft Graph, Entra registration, or Microsoft sign-in is required.
+Build a local Windows application using Node.js, Express, React, JavaScript, Vite, and SQLite. Connect one Gmail account through IMAP with a Google app password and collect subject-`PO` Inbox emails from an editable list of exact sender addresses.
 
 ## 1. Project foundation
 
