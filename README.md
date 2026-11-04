@@ -18,7 +18,7 @@ Complete POs from approved senders enter **Pending Review**. Unauthorized, incom
 
 ## Review and assessment
 
-The **Orders** view uses a side queue navigation for Pending Review, Unverified, Approved, Ordered / Incoming, Rejected, and all saved POs, newest-first or oldest-first, with search. Each Pending Review PO gets a deterministic assessment: **Recommended**, **Redundant / Overstock**, or **Adjust Quantity**, plus any **Timing Conflict / Expedite Needed**, **Arriving Early**, **Potential Duplicate**, or stockout warnings. The detail sheet shows the current stock and its last update, incoming deliveries, outstanding demand, projected balances before and after the PO, net requirement, quantity difference, need date, planning end date, and provisional coverage from earlier Pending or Approved POs.
+The **Orders** view uses a side queue navigation for Pending Review, Unverified, Approved, Ordered / Incoming, Rejected, and all saved POs, newest-first or oldest-first, with search. Each Pending Review PO gets a deterministic assessment: **Recommended**, **Redundant / Overstock**, or **Adjust Quantity**, plus any **Timing Conflict / Expedite Needed**, **Arriving Early**, **Potential Duplicate**, or stockout warnings. Arrival exactly one day before the need date is the desired buffer and is not flagged as early; only arrivals more than one day early show **Arriving Early**. The detail sheet shows the current stock and its last update, incoming deliveries, outstanding demand, projected balances before and after the PO, net requirement, quantity difference, need date, planning end date, and provisional coverage from earlier Pending or Approved POs.
 
 Approve keeps the ETA provisional; reject requires a reason and preserves the history. An Approved PO can be set to **Ordered / Incoming**, which fixes the expected arrival (ordered date + ETA) and creates exactly one linked delivery. A Rejected PO can be corrected and resubmitted on the same record. Ordered POs cannot be moved backward.
 
@@ -63,14 +63,14 @@ Saved mail, sender settings, inventory, incoming deliveries, production requirem
 
 The **Clear saved orders** button deletes the connected account's locally saved purchase orders after confirmation. It does not delete or change anything in Gmail. Mail received before the clear time stays excluded from later polls; newer eligible mail can still appear. Incoming deliveries are separate supply records and are not deleted by this action.
 
-**Settings → Clear all data** is a full test reset. It deletes the account's PO requests and review history, inventory, incoming deliveries, production runs and requirements, production item definitions, SKU definitions, and approved senders. The Gmail connection and plant time zone are kept, and a fresh clear time prevents older Inbox mail from reappearing. Gmail is never changed. The action asks for confirmation first.
+**Settings → Clear all data** is a full test reset for the account's business data. It deletes PO requests and review history, inventory, incoming deliveries, production runs and requirements, production item definitions, and SKU definitions. The Gmail connection, approved senders, and plant time zone are kept, and a fresh clear time prevents older Inbox mail from reappearing. Gmail is never changed. The action asks for confirmation first.
 
 Unauthorized PO mail is stored locally in the unverified queue so the manager can see why it was rejected; it never enters Pending Review, assessments, or provisional coverage unless its sender is added to the allowlist. Attachments are never downloaded, and text is displayed as escaped text that cannot load remote content. The collector does not mark mail read, send mail, or modify messages.
 
 ## Troubleshooting
 
 - For an app-password error, verify 2-Step Verification and create a new app password. A changed Google account password can revoke existing app passwords.
-- Check that the message is still in Gmail Inbox, came after the displayed run cutoff, has subject `PO`, and its actual From address is on the allowlist.
+- Check that the message is still in Gmail Inbox, arrived after the current server run started, has subject `PO`, and its actual From address is on the allowlist.
 - For a PO that stays in Unverified, open it, read the reason, correct the fields or map the SKU, and save. Adding the sender to the allowlist also promotes queued mail.
 - For **Manual Review Required**, map the item to an inventory SKU, fix a unit mismatch, or add outstanding production demand for that item.
 - A transient connection error is retried on later checks; verify network access to `imap.gmail.com:993`.

@@ -42,7 +42,7 @@ All routes are served from the same loopback origin as the dashboard. State-chan
 | `DELETE /api/production-runs/:id` | None | `{ ok: true }`; deletes the run and its requirement rows |
 | `GET /api/settings` | None | `{ plantTimeZone, today }`; defaults to `Asia/Manila` |
 | `PUT /api/settings` | `{ plantTimeZone: string }` | `{ ok: true, plantTimeZone, today }`; rejects invalid IANA zones |
-| `POST /api/reset` | `{ confirm: true }` | `{ ok: true, counts, clearedAt }`; deletes the account's POs and event history, inventory, deliveries, production runs/requirements, production item definitions, SKU definitions, and senders; keeps the Gmail connection and plant time zone and records a cutoff so older Inbox mail stays excluded |
+| `POST /api/reset` | `{ confirm: true }` | `{ ok: true, counts, clearedAt }`; deletes the account's POs and event history, inventory, deliveries, production runs/requirements, production item definitions, and SKU definitions; keeps the Gmail connection, approved senders, and plant time zone and records a cutoff so older Inbox mail stays excluded |
 
 Errors use `{ error: string }` JSON. Pagination defaults to 25 rows and clamps offsets to one million. PO search covers PO ID, item/SKU, supplier, sender address/name, subject, received date, expected arrival, and ETA. Inventory and production records are local to the connected account and are never read from or written to Gmail.
 
@@ -54,7 +54,7 @@ Errors use `{ error: string }` JSON. Pagination defaults to 25 rows and clamps o
 - `decision`: `Recommended`, `Redundant / Overstock`, `Adjust Quantity`, or a `Manual Review Required — …` reason
 - `requirement`, `difference`, `arrival`, `provisional`, `planningEnd`, `needDate`, `daysEarly`
 - `balances[]`: `{ date, before, after }` at the arrival date and each outstanding production date
-- `warnings[]`: timing conflict, arriving early, potential duplicate with `coveredAmount`, and projected stockout entries
+- `warnings[]`: timing conflict, arriving early (only when more than one calendar day before the need date), potential duplicate with `coveredAmount`, and projected stockout entries
 - `coverage[]`: earlier Pending or Approved POs supplying provisional coverage
 - `inventory`: current stock, unit, and `updatedAt`
 - `deliveries[]`, `demand[]`, `stockoutDates[]`, and a plain-language `note`

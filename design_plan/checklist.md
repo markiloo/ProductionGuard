@@ -210,7 +210,7 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Show *Manual Review Required — No Scheduled Demand* and skip requirement math when the item has no outstanding runs.
 - [x] Apply a one-calendar-day arrival buffer, treating arrival on the run date or later as *Timing Conflict / Expedite Needed*.
 - [x] Report the missed run date and the projected balance or stockout separately from the quantity decision.
-- [x] Report *Arriving Early* with the first need date and days early when arrival precedes the first run needing the quantity.
+- [x] Report *Arriving Early* with the first need date and days early only when arrival is more than one calendar day before the first run needing the quantity; exactly one day satisfies the buffer.
 - [x] Count earlier pending or approved POs as provisional coverage only on dates on or after their expected arrival, ordered by receipt time then ascending PO ID.
 - [x] Report *Potential Duplicate / Covered by Pending or Approved PO* with the covered amount and count each PO once.
 - [x] Show balances before and after the evaluated PO, with provisional contributions shown separately.
@@ -219,7 +219,7 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 ## Assessment verification update
 
 - [ ] Add unit tests that run each PRD scenario from its exact stated data and assert balances, requirement, difference, decision, and warnings.
-- [ ] Worked shortage: 50 on Day 4 and 30 on Day 10 → requirement 80; an 80-unit PO on Day 3 → balances 30 and 0, *Recommended* + *Arriving Early*, Day 4 need, one day early.
+- [ ] Worked shortage: 50 on Day 4 and 30 on Day 10 → requirement 80; an 80-unit PO on Day 3 → balances 30 and 0, *Recommended*, Day 4 need, one-day buffer met with no early warning.
 - [ ] T-02: 100 stock, 50 due Day 3, demand 120 Day 4 and 80 Day 10 → 30 and −50 before; 50-unit PO on Day 5 → 30 and 0, Day 10 need, five days early.
 - [ ] T-03: requirement 100 with 100, 50, and 150-unit POs → *Recommended*, *Adjust −50*, *Adjust +50*; zero requirement → *Redundant*; no runs → *Manual Review — No Scheduled Demand*.
 - [ ] T-03 late supply: zero stock, 100 demand Day 4, 100 delivery Day 5, 100-unit PO Day 6 → requirement 0, difference +100, *Redundant*, Day 4 conflict warning, Day 6 balance +100.
@@ -246,7 +246,7 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Add an incoming-deliveries view with add, edit, and receive.
 - [x] Add received-time sort order plus status, item, and date search and filter for POs and inventory, and refresh assessments after any save without a full reload.
 - [x] Add a manual Refresh action that recomputes and reloads the PO assessment list.
-- [x] Add a confirmed Clear all data action in Settings that removes account business data and senders, keeps the Gmail connection and plant time zone, and suppresses older Inbox mail.
+- [x] Add a confirmed Clear all data action in Settings that removes account business data while keeping the Gmail connection, approved senders, and plant time zone, and suppresses older Inbox mail.
 - [x] Replace the Orders status dropdown with a side queue nav listing Pending Review, Unverified, Approved, Ordered / Incoming, Rejected, and All orders with counts.
 - [x] Keep edit sheets open when clicking the backdrop; close them only through Cancel, the close button, or Escape.
 - [x] Align the Orders queue nav and PO list panel on their top and bottom edges, with the nav footer and list pagination pinned to the shared bottom.

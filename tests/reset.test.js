@@ -36,13 +36,14 @@ test('reset clears one account business data, keeps settings, and isolates other
     const result = resetAccountData(db, 'acct-a', '2026-11-04T00:00:00.000Z');
     assert.deepEqual(result, {
       events: 1, emails: 1, deliveries: 1, inventory: 1, requirements: 1, runs: 1,
-      productionItemRequirements: 1, productionItems: 1, itemDefinitions: 1, senders: 1,
+      productionItemRequirements: 1, productionItems: 1, itemDefinitions: 1,
       clearedAt: '2026-11-04T00:00:00.000Z',
     });
 
-    for (const table of ['emails', 'po_events', 'inventory', 'incoming_deliveries', 'production_runs', 'production_requirements', 'production_items', 'production_item_requirements', 'item_definitions', 'senders']) {
+    for (const table of ['emails', 'po_events', 'inventory', 'incoming_deliveries', 'production_runs', 'production_requirements', 'production_items', 'production_item_requirements', 'item_definitions']) {
       assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE account_id=?`).get('acct-a').count, 0, `${table} is cleared for acct-a`);
     }
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM senders WHERE account_id=?').get('acct-a').count, 1, 'approved senders survive the reset');
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM item_definitions WHERE account_id=?').get('acct-b').count, 1, 'other accounts keep their data');
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM senders WHERE account_id=?').get('acct-b').count, 1, 'other accounts keep their senders');
     assert.equal(getPlantTimeZone(db), 'Asia/Manila', 'plant time zone survives the reset');

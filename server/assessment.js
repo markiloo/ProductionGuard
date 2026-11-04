@@ -163,7 +163,7 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
       balance: stockout.balance,
     });
   }
-  if (daysEarly != null && daysEarly > 0) {
+  if (daysEarly != null && daysEarly > 1) {
     warnings.push({ type: 'early', label: 'Arriving Early', needDate, daysEarly });
   }
   if (coveredAmount > 0) {
@@ -175,7 +175,7 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
   }
 
   const parts = [];
-  if (needDate) parts.push(`Needed by ${needDate}${daysEarly > 0 ? ` (${daysEarly} day${daysEarly === 1 ? '' : 's'} early)` : ''}.`);
+  if (needDate) parts.push(`Needed by ${needDate}${daysEarly > 1 ? ` (${daysEarly} days early)` : daysEarly === 1 ? ' (one-day buffer met)' : ''}.`);
   parts.push(`Net requirement ${requirement}; this PO requests ${po.quantity} (${difference >= 0 ? '+' : ''}${difference}).`);
   if (timingConflicts.length) parts.push(`Late arrival is flagged for ${timingConflicts.map((conflict) => conflict.runDate).join(', ')}.`);
 

@@ -1,6 +1,6 @@
 /**
  * Remove every local business record for one account, keep the Gmail connection,
- * account settings, and the plant time zone, and suppress older Inbox mail.
+ * approved senders, and the plant time zone, and suppress older Inbox mail.
  */
 export function resetAccountData(db, accountId, clearedAt) {
   return db.transaction(() => {
@@ -14,7 +14,6 @@ export function resetAccountData(db, accountId, clearedAt) {
       productionItemRequirements: db.prepare('DELETE FROM production_item_requirements WHERE account_id=?').run(accountId).changes,
       productionItems: db.prepare('DELETE FROM production_items WHERE account_id=?').run(accountId).changes,
       itemDefinitions: db.prepare('DELETE FROM item_definitions WHERE account_id=?').run(accountId).changes,
-      senders: db.prepare('DELETE FROM senders WHERE account_id=?').run(accountId).changes,
     };
     db.prepare('INSERT INTO account_clears(account_id,cleared_at) VALUES(?,?) ON CONFLICT(account_id) DO UPDATE SET cleared_at=max(account_clears.cleared_at,excluded.cleared_at)').run(accountId, clearedAt);
     return { ...counts, clearedAt };

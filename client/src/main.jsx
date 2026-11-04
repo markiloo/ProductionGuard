@@ -305,7 +305,7 @@ function SettingsView({ status, sender, setSender, onAdd, onRemove, busy, timeZo
         <div>
           <p className="eyebrow">Danger zone</p>
           <h3 id="clear-data-title">Clear all data</h3>
-          <p className="settings-copy">Delete all local test data for this account: PO requests and review history, inventory, incoming deliveries, production runs and definitions, SKUs, and approved senders. The Gmail connection and plant time zone are kept. Gmail is not changed. This cannot be undone.</p>
+          <p className="settings-copy">Delete all local test data for this account: PO requests and review history, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.</p>
         </div>
         <button type="button" className="button button-danger" onClick={onClearAllData} disabled={busy}>Clear all data…</button>
       </section>
@@ -1306,7 +1306,7 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
                   <div><dt>Net requirement</dt><dd>{assessment?.requirement ?? '—'}</dd></div>
                   <div><dt>Quantity difference</dt><dd>{assessment?.difference == null ? '—' : `${assessment.difference >= 0 ? '+' : ''}${assessment.difference}`}</dd></div>
                   <div><dt>Expected arrival</dt><dd>{assessment?.arrival || '—'} <small>{assessment?.provisional ? 'provisional' : 'fixed'}</small></dd></div>
-                  <div><dt>Need date</dt><dd>{assessment?.needDate || '—'}{assessment?.daysEarly > 0 ? ` (${assessment.daysEarly} days early)` : ''}</dd></div>
+                  <div><dt>Need date</dt><dd>{assessment?.needDate || '—'}{assessment?.daysEarly > 1 ? ` (${assessment.daysEarly} days early)` : assessment?.daysEarly === 1 ? ' (one-day buffer met)' : ''}</dd></div>
                   <div><dt>Planning end</dt><dd>{assessment?.planningEnd || '—'}</dd></div>
                   <div><dt>Inventory updated</dt><dd>{assessment?.inventory ? metricDate(assessment.inventory.updatedAt) : '—'}</dd></div>
                 </dl>
@@ -1773,7 +1773,7 @@ export function App() {
   };
 
   const clearAllData = () => {
-    if (!globalThis.confirm('Clear ALL local data for this account?\n\nThis deletes PO requests and review history, inventory, incoming deliveries, production runs and definitions, SKUs, and approved senders. The Gmail connection and plant time zone are kept. Gmail is not changed. This cannot be undone.')) return;
+    if (!globalThis.confirm('Clear ALL local data for this account?\n\nThis deletes PO requests and review history, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.')) return;
     action(async () => {
       await api('/api/reset', { method: 'POST', body: JSON.stringify({ confirm: true }) });
       setSelected(null);
@@ -1794,7 +1794,7 @@ export function App() {
       setProductionItemRevision((revision) => revision + 1);
       setProductionRevision((revision) => revision + 1);
       setDeliveryRevision((revision) => revision + 1);
-      setNotice('All local data cleared. Re-add a sender to resume collection.');
+      setNotice('All local data cleared. Approved senders and the plant time zone were kept.');
     });
   };
 
