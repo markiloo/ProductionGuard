@@ -24,31 +24,21 @@
 /** @typedef {{ address: string }} SenderSetting */
 
 /**
- * @typedef {Object} ItemDefinition
- * @property {string} id Stable definition ID.
- * @property {string} sku Required per-account unique item code.
- * @property {string} item Display name.
- * @property {string} unit Unit used for every quantity of this item.
- * @property {string} createdAt UTC creation timestamp.
- * @property {string} updatedAt UTC last-edit timestamp.
- */
-
-/**
  * @typedef {Object} ProductionItemRequirement
- * @property {string} id Stable requirement template ID.
- * @property {string} productionItemId Owning production item ID.
- * @property {string} itemSku Required material SKU.
- * @property {number} quantity Whole-number quantity per unit of the produced item.
- * @property {string} unit Unit matching the SKU definition.
+ * @property {string} id Stable material template ID.
+ * @property {string} productionItemId Owning assembly ID.
+ * @property {string} itemSku Material inventory SKU.
+ * @property {number} quantity Whole-number quantity per unit of the assembly.
+ * @property {string} unit Unit matching the inventory item.
  */
 
 /**
  * @typedef {Object} ProductionItem
- * @property {string} id Stable production item ID.
- * @property {string} name Item to make, unique per account.
- * @property {string} unit Unit of the produced item.
+ * @property {string} id Stable assembly ID.
+ * @property {string} name Assembly name, unique per account.
+ * @property {string} unit Unit of the assembly.
  * @property {string} notes Optional notes.
- * @property {ProductionItemRequirement[]} requirements Material template rows.
+ * @property {ProductionItemRequirement[]} requirements Materials required per unit, selected from inventory.
  * @property {string} createdAt UTC creation timestamp.
  * @property {string} updatedAt UTC last-edit timestamp.
  */
@@ -57,8 +47,9 @@
  * @typedef {Object} InventoryItem
  * @property {string} id Stable local inventory ID.
  * @property {string} item Display name.
- * @property {string} sku Required per-account unique item code; the join key for POs, deliveries, and demand.
- * @property {number} quantity Whole-number quantity on hand. * @property {string} unit Inventory unit used for every quantity of this item.
+ * @property {string} sku Required per-account unique item code; adding this row defines the item.
+ * @property {number} quantity Whole-number quantity on hand.
+ * @property {string} unit Inventory unit used for every quantity of this item.
  * @property {string} supplier Optional supplier name.
  * @property {number|null} reorderLevel Whole-number threshold, or null when unset.
  * @property {string} notes Optional local notes.
@@ -70,7 +61,7 @@
  * @typedef {Object} ProductionRequirement
  * @property {string} id Stable requirement ID.
  * @property {string} runId Owning production run ID.
- * @property {string} itemSku Required material item code.
+ * @property {string} itemSku Required material inventory SKU.
  * @property {number} quantity Whole-number required quantity.
  * @property {string} unit Unit matching the item's inventory unit.
  * @property {'outstanding'|'completed'} status Outstanding demand or consumed demand.
@@ -82,14 +73,14 @@
  * @typedef {Object} ProductionRun
  * @property {string} id Stable local production run ID.
  * @property {string} runNumber Human-readable run number, unique per account.
- * @property {string|null} productionItemId Definition selected for the run.
- * @property {string} item Run header label, taken from the production item definition.
- * @property {number} quantity Whole-number planned quantity of the produced item.
- * @property {string} unit Unit of the produced item, taken from the definition.
+ * @property {string|null} productionItemId Assembly selected for the run.
+ * @property {string} item Assembly name.
+ * @property {number} quantity Whole-number planned quantity of the assembly.
+ * @property {string} unit Unit of the assembly.
  * @property {'scheduled'|'in_progress'|'completed'|'on_hold'} status Production status.
  * @property {string} scheduledDate Local calendar date in YYYY-MM-DD form.
  * @property {string} notes Optional local notes.
- * @property {ProductionRequirement[]} [requirements] Material demand rows, scaled from the definition by the planned quantity and locked to the run.
+ * @property {ProductionRequirement[]} [requirements] Material demand rows, scaled from the assembly's per-unit materials by the planned quantity and locked to the run.
  * @property {string} createdAt UTC creation timestamp.
  * @property {string} updatedAt UTC last-edit timestamp.
  */
@@ -105,6 +96,7 @@
  * @property {'incoming'|'received'} status Delivery status.
  * @property {string|null} receivedAt UTC receipt time, or null while incoming.
  * @property {string|null} poId Linked PO ID for an ordered PO, or null for a manual delivery.
+ * @property {PoProof|null} proof Incoming proof metadata for a linked PO, or null.
  * @property {string} notes Optional local notes.
  * @property {string} createdAt UTC creation timestamp.
  * @property {string} updatedAt UTC last-edit timestamp.
@@ -156,6 +148,13 @@
  */
 
 /**
+ * @typedef {Object} PoProof
+ * @property {string} mimeType Stored proof image MIME type.
+ * @property {string} fileName Original file name, or an empty string.
+ * @property {string} createdAt UTC upload time.
+ */
+
+/**
  * @typedef {Object} PurchaseOrder
  * @property {string} id Gmail message ID.
  * @property {string} poId Sequential per-account PO ID such as `PO-0001`.
@@ -179,6 +178,7 @@
  * @property {PoAssessment} [assessment] Deterministic assessment.
  * @property {PoEvent[]} [events] Lifecycle history on detail responses.
  * @property {Delivery|null} [delivery] Linked delivery after ordering.
+ * @property {PoProof|null} [proof] Incoming proof picture metadata on detail responses.
  */
 
 /**

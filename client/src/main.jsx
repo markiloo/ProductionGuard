@@ -305,7 +305,7 @@ function SettingsView({ status, sender, setSender, onAdd, onRemove, busy, timeZo
         <div>
           <p className="eyebrow">Danger zone</p>
           <h3 id="clear-data-title">Clear all data</h3>
-          <p className="settings-copy">Delete all local test data for this account: PO requests and review history, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.</p>
+          <p className="settings-copy">Delete all local test data for this account: PO requests and review history, incoming proof pictures, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.</p>
         </div>
         <button type="button" className="button button-danger" onClick={onClearAllData} disabled={busy}>Clear all data…</button>
       </section>
@@ -516,7 +516,7 @@ function InventoryView({ items, onAdd, onEdit }) {
   );
 }
 
-function InventoryDialog({ draft, skuOptions = [], busy, onClose, onSave, onDelete }) {
+function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
   const dialogRef = useSheetDialog(onClose);
   const editing = Boolean(draft.id);
   const [item, setItem] = useState(draft.item || '');
@@ -527,15 +527,6 @@ function InventoryDialog({ draft, skuOptions = [], busy, onClose, onSave, onDele
   const [reorderLevel, setReorderLevel] = useState(draft.reorderLevel == null ? '' : String(draft.reorderLevel));
   const [notes, setNotes] = useState(draft.notes || '');
   const [formError, setFormError] = useState('');
-
-  function chooseSku(value) {
-    const definition = skuOptions.find((option) => option.sku.toLowerCase() === value.toLowerCase());
-    setSku(value);
-    if (definition) {
-      setItem(definition.item);
-      setUnit(definition.unit);
-    }
-  }
 
   async function submit(event) {
     event.preventDefault();
@@ -562,16 +553,13 @@ function InventoryDialog({ draft, skuOptions = [], busy, onClose, onSave, onDele
       <form className="detail-body inventory-form" onSubmit={submit}>
         <div className="form-grid">
           <div className="field field-wide">
-            <label htmlFor="inventory-sku">Item code (SKU)</label>
-            <select id="inventory-sku" value={sku} onChange={(event) => chooseSku(event.target.value)} required autoFocus={!editing} disabled={editing && Boolean(draft.sku)}>
-              <option value="">Choose a defined SKU</option>
-              {skuOptions.map((option) => <option key={option.id} value={option.sku}>{option.sku} — {option.item}</option>)}
-            </select>
-            <p className="field-hint">{editing && draft.sku ? 'The SKU is fixed for an existing inventory item.' : 'SKUs are defined under Item definition.'}</p>
-          </div>
-          <div className="field field-wide">
             <label htmlFor="inventory-item">Item name</label>
-            <input id="inventory-item" value={item} readOnly aria-readonly="true" placeholder="Selected from Item definition" required />
+            <input id="inventory-item" value={item} onChange={(event) => setItem(event.target.value)} maxLength={120} placeholder="e.g. Carton Glue" required autoFocus={!editing} />
+          </div>
+          <div className="field">
+            <label htmlFor="inventory-sku">Item code (SKU)</label>
+            <input id="inventory-sku" value={sku} onChange={(event) => setSku(event.target.value)} maxLength={60} placeholder="e.g. SKU-0001" required readOnly={editing && Boolean(draft.sku)} aria-readonly={editing && Boolean(draft.sku)} />
+            <p className="field-hint">{editing && draft.sku ? 'The SKU is fixed for an existing inventory item.' : 'Adding this inventory item defines the SKU used by POs, deliveries, assemblies, and demand.'}</p>
           </div>
           <div className="field">
             <label htmlFor="inventory-supplier">Supplier</label>
@@ -583,7 +571,8 @@ function InventoryDialog({ draft, skuOptions = [], busy, onClose, onSave, onDele
           </div>
           <div className="field">
             <label htmlFor="inventory-unit">Unit</label>
-            <input id="inventory-unit" value={unit} readOnly aria-readonly="true" required />
+            <input id="inventory-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="inventory-units" required />
+            <datalist id="inventory-units"><option value="units" /><option value="kg" /><option value="boxes" /><option value="liters" /></datalist>
           </div>
           <div className="field">
             <label htmlFor="inventory-reorder">Reorder level</label>
@@ -594,12 +583,11 @@ function InventoryDialog({ draft, skuOptions = [], busy, onClose, onSave, onDele
             <textarea id="inventory-notes" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={3} placeholder="Optional storage notes, bin location, etc." />
           </div>
         </div>
-        {!skuOptions.length ? <p className="form-error" role="alert">Every defined SKU is already stocked, or none are defined yet. Add a new SKU under Item definition first.</p> : null}
         {formError ? <p className="form-error" role="alert">{formError}</p> : null}
         <div className="dialog-actions">
           {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy || (!editing && !skuOptions.length)}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add item'}</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add item'}</button>
         </div>
       </form>
     </dialog>
@@ -670,7 +658,7 @@ function ProductionView({ runs, onAdd, onEdit }) {
               <div className="empty">
                 <span className="empty-mark" aria-hidden="true">PR</span>
                 <strong>No production runs yet</strong>
-                <p>Add a scheduled run, select a defined production item, and adjust its requirement copies.</p>
+                <p>Add a scheduled run, select a defined assembly, and set the planned quantity.</p>
                 <button type="button" className="button button-secondary button-small" onClick={onAdd}>Add your first run</button>
               </div>
             ) : null}
@@ -771,12 +759,12 @@ function ProductionDialog({ draft, productionItems = [], busy, onClose, onSave, 
             </select>
           </div>
           <div className="field field-wide">
-            <label htmlFor="production-item">Item to make</label>
+            <label htmlFor="production-item">Assembly</label>
             <select id="production-item" value={productionItemId} onChange={(event) => chooseProductionItem(event.target.value)} required>
-              <option value="">Choose a production item</option>
+              <option value="">Choose an assembly</option>
               {productionItems.map((option) => <option key={option.id} value={option.id}>{option.name} — {option.unit}</option>)}
             </select>
-            <p className="field-hint">Production items and their per-unit requirements are defined under Item definition.</p>
+            <p className="field-hint">Assemblies and their per-unit materials are defined under Assemblies.</p>
           </div>
           <div className="field">
             <label htmlFor="production-quantity">Planned quantity</label>
@@ -804,8 +792,8 @@ function ProductionDialog({ draft, productionItems = [], busy, onClose, onSave, 
                   </li>
                 ))}
               </ul>
-            ) : <p className="muted">No material requirements defined for this production item.</p>}
-            <p className="field-hint">Requirements are scaled from the production item's per-unit template by the planned quantity and locked to the run. Change the planned quantity to re-derive them.</p>
+            ) : <p className="muted">No materials defined for this assembly.</p>}
+            <p className="field-hint">Materials are scaled from the assembly's per-unit list by the planned quantity and locked to the run. Change the planned quantity to re-derive them.</p>
           </div>
           <div className="field field-wide">
             <label htmlFor="production-notes">Notes</label>
@@ -813,7 +801,7 @@ function ProductionDialog({ draft, productionItems = [], busy, onClose, onSave, 
           </div>
         </div>
         {formError ? <p className="form-error" role="alert">{formError}</p> : null}
-        {!productionItems.length ? <p className="form-error" role="alert">Define a production item under Item definition before adding a run.</p> : null}
+        {!productionItems.length ? <p className="form-error" role="alert">Define an assembly under Assemblies before adding a run.</p> : null}
         <div className="dialog-actions">
           {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
@@ -824,18 +812,35 @@ function ProductionDialog({ draft, productionItems = [], busy, onClose, onSave, 
   );
 }
 
-function DefinitionRow({ definition, onEdit }) {
+function AssembliesView({ assemblies, onAdd, onEdit }) {
   return (
-    <div className="definition-row">
-      <div className="definition-main">
-        <div className="definition-top">
-          <strong className="definition-name">{definition.item}</strong>
-          <span className="inventory-sku">{definition.sku}</span>
-          <span className="definition-unit">{definition.unit}</span>
+    <section className="panel record-panel definitions" id="assemblies" tabIndex={-1} aria-labelledby="assemblies-title">
+      <header className="panel-head record-head">
+        <div><p className="eyebrow">Assembly master</p><h2 id="assemblies-title">Assemblies</h2></div>
+        <div className="record-actions">
+          <span className="count">{assemblies ? `${assemblies.length} ${assemblies.length === 1 ? 'assembly' : 'assemblies'}` : '—'}</span>
+          <button type="button" className="button button-primary button-small" onClick={onAdd}>Add assembly</button>
         </div>
-      </div>
-      <button type="button" className="button button-ghost button-small" onClick={() => onEdit(definition)} aria-label={`Edit ${definition.sku}`}>Edit</button>
-    </div>
+      </header>
+      {assemblies === null ? (
+        <div className="record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading assemblies…</div>
+      ) : (
+        <>
+          <p className="definition-intro">Define what the plant assembles and the materials each unit needs, selected from Inventory. Production runs scale these per-unit materials by the planned quantity and lock the result.</p>
+          <div className="record-list">
+            {assemblies.map((item) => <ProductionItemRow key={item.id} item={item} onEdit={onEdit} />)}
+            {!assemblies.length ? (
+              <div className="empty">
+                <span className="empty-mark" aria-hidden="true">AS</span>
+                <strong>No assemblies defined</strong>
+                <p>Add an assembly and choose its materials from Inventory.</p>
+                <button type="button" className="button button-secondary button-small" onClick={onAdd}>Add your first assembly</button>
+              </div>
+            ) : null}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -858,119 +863,13 @@ function ProductionItemRow({ item, onEdit }) {
               </li>
             ))}
           </ul>
-        ) : <span className="definition-meta">No requirements defined</span>}
+        ) : <span className="definition-meta">No materials defined</span>}
       </div>
       <button type="button" className="button button-ghost button-small" onClick={() => onEdit(item)} aria-label={`Edit ${item.name}`}>Edit</button>
     </div>
   );
 }
 
-function ItemDefinitionView({ definitions, productionItems, onAddDefinition, onEditDefinition, onAddProductionItem, onEditProductionItem }) {
-  return (
-    <section className="panel record-panel definitions" id="item-definition" tabIndex={-1} aria-labelledby="item-definition-title">
-      <header className="panel-head record-head">
-        <div><p className="eyebrow">Master data</p><h2 id="item-definition-title">Item definition</h2></div>
-        <span className="count">{definitions ? `${definitions.length} ${definitions.length === 1 ? 'SKU' : 'SKUs'}` : '—'}</span>
-      </header>
-      {definitions === null ? (
-        <div className="record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading item definitions…</div>
-      ) : (
-        <div className="definition-grid">
-          <section className="definition-section" aria-labelledby="sku-definitions-title">
-            <div className="panel-head record-head">
-              <div><p className="eyebrow">Inventory master</p><h3 id="sku-definitions-title">SKUs and items</h3></div>
-              <button type="button" className="button button-primary button-small" onClick={onAddDefinition}>Add SKU</button>
-            </div>
-            <p className="settings-copy">Every inventory item must use one of these SKUs. POs, deliveries, and production demand join on the SKU.</p>
-            <div className="record-list">
-              {definitions.map((definition) => <DefinitionRow key={definition.id} definition={definition} onEdit={onEditDefinition} />)}
-              {!definitions.length ? (
-                <div className="empty">
-                  <span className="empty-mark" aria-hidden="true">SKU</span>
-                  <strong>No SKUs defined</strong>
-                  <p>Define an item code, name, and unit before adding inventory.</p>
-                  <button type="button" className="button button-secondary button-small" onClick={onAddDefinition}>Define your first SKU</button>
-                </div>
-              ) : null}
-            </div>
-          </section>
-          <section className="definition-section" aria-labelledby="production-items-title">
-            <div className="panel-head record-head">
-              <div><p className="eyebrow">Production master</p><h3 id="production-items-title">Items to make</h3></div>
-              <button type="button" className="button button-primary button-small" onClick={onAddProductionItem}>Add item</button>
-            </div>
-            <p className="settings-copy">Define what the plant produces and the materials each unit needs. Production runs select one of these items, scale each requirement by the planned quantity, and lock the result.</p>
-            <div className="record-list">
-              {(productionItems || []).map((item) => <ProductionItemRow key={item.id} item={item} onEdit={onEditProductionItem} />)}
-              {!productionItems?.length ? (
-                <div className="empty">
-                  <span className="empty-mark" aria-hidden="true">PI</span>
-                  <strong>No production items defined</strong>
-                  <p>Define an item to make and its material requirements.</p>
-                  <button type="button" className="button button-secondary button-small" onClick={onAddProductionItem}>Define your first item</button>
-                </div>
-              ) : null}
-            </div>
-          </section>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ItemDefinitionDialog({ draft, busy, onClose, onSave, onDelete }) {
-  const dialogRef = useSheetDialog(onClose);
-  const editing = Boolean(draft.id);
-  const [sku, setSku] = useState(draft.sku || '');
-  const [item, setItem] = useState(draft.item || '');
-  const [unit, setUnit] = useState(draft.unit || 'units');
-  const [formError, setFormError] = useState('');
-
-  async function submit(event) {
-    event.preventDefault();
-    setFormError('');
-    try { await onSave({ sku, item, unit }); } catch (failure) { setFormError(failure.message); }
-  }
-
-  async function remove() {
-    if (!globalThis.confirm(`Delete the definition for ${sku}? This cannot be undone.`)) return;
-    setFormError('');
-    try { await onDelete(); } catch (failure) { setFormError(failure.message); }
-  }
-
-  return (
-    <dialog ref={dialogRef} className="detail" aria-labelledby="item-definition-dialog-title">
-      <header className="detail-head">
-        <div><p className="eyebrow">Item definition</p><h2 id="item-definition-dialog-title">{editing ? 'Edit SKU' : 'Define a SKU'}</h2></div>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="Close item definition form" disabled={busy}>×</button>
-      </header>
-      <form className="detail-body" onSubmit={submit}>
-        <div className="form-grid">
-          <div className="field field-wide">
-            <label htmlFor="definition-sku">Item code (SKU)</label>
-            <input id="definition-sku" value={sku} onChange={(event) => setSku(event.target.value)} maxLength={60} placeholder="e.g. ITEM-B" required readOnly={editing} aria-readonly={editing} autoFocus={!editing} />
-            <p className="field-hint">{editing ? 'The SKU is the join key and cannot be changed.' : 'POs, deliveries, and demand match this code.'}</p>
-          </div>
-          <div className="field field-wide">
-            <label htmlFor="definition-item">Item name</label>
-            <input id="definition-item" value={item} onChange={(event) => setItem(event.target.value)} maxLength={120} placeholder="e.g. Bearings" required />
-          </div>
-          <div className="field">
-            <label htmlFor="definition-unit">Unit</label>
-            <input id="definition-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="definition-units" required />
-            <datalist id="definition-units"><option value="units" /><option value="kg" /><option value="boxes" /><option value="liters" /></datalist>
-          </div>
-        </div>
-        {formError ? <p className="form-error" role="alert">{formError}</p> : null}
-        <div className="dialog-actions">
-          {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
-          <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Define SKU'}</button>
-        </div>
-      </form>
-    </dialog>
-  );
-}
 
 function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, onDelete }) {
   const dialogRef = useSheetDialog(onClose);
@@ -990,8 +889,8 @@ function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, o
   }
 
   function chooseSku(index, itemSku) {
-    const definition = skuOptions.find((option) => option.sku.toLowerCase() === itemSku.toLowerCase());
-    updateRequirement(index, { itemSku, unit: definition?.unit || requirements[index].unit });
+    const inventoryItem = skuOptions.find((option) => option.sku.toLowerCase() === itemSku.toLowerCase());
+    updateRequirement(index, { itemSku, unit: inventoryItem?.unit || requirements[index].unit });
   }
 
   async function submit(event) {
@@ -1008,7 +907,7 @@ function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, o
   }
 
   async function remove() {
-    if (!globalThis.confirm(`Delete the production item ${name}? This cannot be undone.`)) return;
+    if (!globalThis.confirm(`Delete the assembly ${name}? This cannot be undone.`)) return;
     setFormError('');
     try { await onDelete(); } catch (failure) { setFormError(failure.message); }
   }
@@ -1016,14 +915,14 @@ function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, o
   return (
     <dialog ref={dialogRef} className="detail" aria-labelledby="production-item-dialog-title">
       <header className="detail-head">
-        <div><p className="eyebrow">Item definition</p><h2 id="production-item-dialog-title">{editing ? 'Edit production item' : 'Define a production item'}</h2></div>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="Close production item form" disabled={busy}>×</button>
+        <div><p className="eyebrow">Assemblies</p><h2 id="production-item-dialog-title">{editing ? 'Edit assembly' : 'Define an assembly'}</h2></div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close assembly form" disabled={busy}>×</button>
       </header>
       <form className="detail-body" onSubmit={submit}>
         <div className="form-grid">
           <div className="field field-wide">
-            <label htmlFor="production-item-name">Item to make</label>
-            <input id="production-item-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="e.g. Assembled Bearing Unit" required autoFocus />
+            <label htmlFor="production-item-name">Assembly name</label>
+            <input id="production-item-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="e.g. Carton Packaging" required autoFocus />
           </div>
           <div className="field">
             <label htmlFor="production-item-unit">Unit</label>
@@ -1035,13 +934,13 @@ function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, o
             <input id="production-item-notes" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} placeholder="Optional" />
           </div>
           <div className="field field-wide">
-            <label>Material requirements (per unit)</label>
+            <label>Materials per unit</label>
             <div className="requirement-editor">
               {requirements.map((requirement, index) => (
                 <div className="requirement-row" key={index}>
                   <label className="sr-only" htmlFor={`production-requirement-sku-${index}`}>Item SKU</label>
                   <select id={`production-requirement-sku-${index}`} value={requirement.itemSku} onChange={(event) => chooseSku(index, event.target.value)} required>
-                    <option value="">Choose SKU</option>
+                    <option value="">Choose inventory item</option>
                     {skuOptions.map((option) => <option key={option.id} value={option.sku}>{option.sku} — {option.item}</option>)}
                   </select>
                   <label className="sr-only" htmlFor={`production-requirement-qty-${index}`}>Quantity</label>
@@ -1059,7 +958,7 @@ function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, o
         <div className="dialog-actions">
           {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Define item'}</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Define assembly'}</button>
         </div>
       </form>
     </dialog>
@@ -1075,6 +974,7 @@ function DeliveryRow({ delivery, onEdit, onReceive, busy }) {
           <strong>{delivery.itemSku}</strong>
           <span className={`status-chip ${received ? 'completed' : 'scheduled'}`}>{received ? 'Received' : 'Incoming'}</span>
           {delivery.poId ? <span className="delivery-po">{delivery.poId}</span> : <span className="delivery-po">Manual</span>}
+          {delivery.proof ? <span className="status-chip valid">Proof</span> : null}
         </div>
         <span className="delivery-meta">{delivery.supplier || 'No supplier'} · arrives {scheduleDate(delivery.expectedArrival)}</span>
       </div>
@@ -1083,7 +983,9 @@ function DeliveryRow({ delivery, onEdit, onReceive, busy }) {
         {received ? <time className="inventory-updated" dateTime={delivery.receivedAt}>Received {shortDate(delivery.receivedAt)}</time> : null}
       </div>
       <div className="delivery-actions">
-        {received ? null : (
+        {received ? (
+          delivery.poId ? <button type="button" className="button button-ghost button-small" onClick={() => onEdit(delivery)} disabled={busy}>Proof</button> : null
+        ) : (
           <>
             <button type="button" className="button button-ghost button-small" onClick={() => onEdit(delivery)} disabled={busy}>Edit</button>
             <button type="button" className="button button-primary button-small" onClick={() => onReceive(delivery)} disabled={busy}>Receive</button>
@@ -1133,6 +1035,7 @@ function DeliveriesView({ deliveries, onAdd, onEdit, onReceive, busy }) {
 function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
   const dialogRef = useSheetDialog(onClose);
   const editing = Boolean(draft.id);
+  const received = draft.status === 'received';
   const [itemSku, setItemSku] = useState(draft.itemSku || '');
   const [quantity, setQuantity] = useState(String(draft.quantity ?? 1));
   const [unit, setUnit] = useState(draft.unit || 'units');
@@ -1140,6 +1043,11 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
   const [supplier, setSupplier] = useState(draft.supplier || '');
   const [notes, setNotes] = useState(draft.notes || '');
   const [formError, setFormError] = useState('');
+  const [proofFile, setProofFile] = useState(null);
+  const [proofPreview, setProofPreview] = useState('');
+  const [proofError, setProofError] = useState('');
+
+  useEffect(() => () => { if (proofPreview) globalThis.URL.revokeObjectURL(proofPreview); }, [proofPreview]);
 
   function chooseSku(value) {
     const option = skuOptions.find((item) => item.sku.toLowerCase() === value.toLowerCase());
@@ -1147,27 +1055,56 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
     if (option) setUnit(option.unit);
   }
 
+  function chooseProof(event) {
+    const file = event.target.files?.[0] || null;
+    setProofError('');
+    if (!file) {
+      setProofFile(null);
+      setProofPreview('');
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setProofError('Choose a JPEG, PNG, or WebP picture.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setProofError('Proof pictures must be 5 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+    setProofFile(file);
+    setProofPreview(globalThis.URL.createObjectURL(file));
+  }
+
   async function submit(event) {
     event.preventDefault();
     setFormError('');
+    setProofError('');
+    if (received && !proofFile) {
+      setProofError('Choose a new proof picture to save.');
+      return;
+    }
     try {
-      await onSave({ itemSku, quantity: Number(quantity), unit, expectedArrival, supplier, notes });
+      await onSave({ itemSku, quantity: Number(quantity), unit, expectedArrival, supplier, notes }, proofFile);
     } catch (failure) {
       setFormError(failure.message);
     }
   }
 
+  const proofUrl = draft.proof ? `/api/pos/${encodeURIComponent(draft.poId)}/proof?v=${encodeURIComponent(draft.proof.createdAt)}` : '';
+
   return (
     <dialog ref={dialogRef} className="detail delivery-dialog" aria-labelledby="delivery-dialog-title">
       <header className="detail-head">
-        <div><p className="eyebrow">Incoming supply</p><h2 id="delivery-dialog-title">{editing ? 'Edit delivery' : 'Add delivery'}</h2></div>
+        <div><p className="eyebrow">Incoming supply</p><h2 id="delivery-dialog-title">{received ? 'Delivery proof' : editing ? 'Edit delivery' : 'Add delivery'}</h2></div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close delivery form" disabled={busy}>×</button>
       </header>
       <form className="detail-body" onSubmit={submit}>
         <div className="form-grid">
           <div className="field field-wide">
             <label htmlFor="delivery-sku">Item SKU</label>
-            <select id="delivery-sku" value={itemSku} onChange={(event) => chooseSku(event.target.value)} required autoFocus disabled={Boolean(draft.poId)}>
+            <select id="delivery-sku" value={itemSku} onChange={(event) => chooseSku(event.target.value)} required autoFocus={!editing} disabled={received || Boolean(draft.poId)}>
               <option value="">Choose SKU</option>
               {skuOptions.map((option) => <option key={option.id} value={option.sku}>{option.sku} — {option.item}</option>)}
             </select>
@@ -1175,42 +1112,64 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
           </div>
           <div className="field">
             <label htmlFor="delivery-quantity">Quantity</label>
-            <input id="delivery-quantity" type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} required />
+            <input id="delivery-quantity" type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} required disabled={received} />
           </div>
           <div className="field">
             <label htmlFor="delivery-unit">Unit</label>
-            <input id="delivery-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} required />
+            <input id="delivery-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} required disabled={received} />
           </div>
           <div className="field">
             <label htmlFor="delivery-arrival">Expected arrival</label>
-            <input id="delivery-arrival" type="date" value={expectedArrival} onChange={(event) => setExpectedArrival(event.target.value)} required />
+            <input id="delivery-arrival" type="date" value={expectedArrival} onChange={(event) => setExpectedArrival(event.target.value)} required disabled={received} />
           </div>
           <div className="field">
             <label htmlFor="delivery-supplier">Supplier</label>
-            <input id="delivery-supplier" value={supplier} onChange={(event) => setSupplier(event.target.value)} maxLength={120} placeholder="Optional" />
+            <input id="delivery-supplier" value={supplier} onChange={(event) => setSupplier(event.target.value)} maxLength={120} placeholder="Optional" disabled={received} />
           </div>
           <div className="field field-wide">
             <label htmlFor="delivery-notes">Notes</label>
-            <textarea id="delivery-notes" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={2} />
+            <textarea id="delivery-notes" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={500} rows={2} disabled={received} />
           </div>
+          {draft.poId ? (
+            <div className="field field-wide">
+              <label htmlFor="delivery-proof">Incoming proof</label>
+              {proofPreview ? (
+                <img className="proof-preview" src={proofPreview} alt="Selected proof preview" />
+              ) : proofUrl ? (
+                <img className="proof-image" src={proofUrl} alt="Proof that the order is incoming" />
+              ) : <p className="muted">No proof picture yet.</p>}
+              <input id="delivery-proof" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseProof} />
+              <p className="field-hint">{received ? 'Choose a new picture to correct the existing proof.' : 'Choose a new picture to replace the current proof.'}</p>
+              {proofError ? <p className="form-error" role="alert">{proofError}</p> : null}
+            </div>
+          ) : null}
         </div>
         {formError ? <p className="form-error" role="alert">{formError}</p> : null}
         <div className="dialog-actions">
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add delivery'}</button>
+          <button type="submit" className="button button-primary" disabled={busy || (received && !proofFile)}>
+            {busy ? 'Saving…' : received ? 'Save proof' : editing ? 'Save changes' : 'Add delivery'}
+          </button>
         </div>
       </form>
     </dialog>
   );
 }
 
-function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose, onAction, onCorrect }) {
+function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose, onAction, onOrder, onUpdateProof, onCorrect }) {
   const dialogRef = useSheetDialog(onClose);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [correcting, setCorrecting] = useState(false);
   const [draft, setDraft] = useState(null);
   const [formError, setFormError] = useState('');
+  const [ordering, setOrdering] = useState(false);
+  const [replacingProof, setReplacingProof] = useState(false);
+  const [proofFile, setProofFile] = useState(null);
+  const [proofPreview, setProofPreview] = useState('');
+  const [proofError, setProofError] = useState('');
+
+  useEffect(() => () => { if (proofPreview) globalThis.URL.revokeObjectURL(proofPreview); }, [proofPreview]);
 
   useEffect(() => {
     if (!po) return;
@@ -1265,6 +1224,62 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
   function chooseSku(value) {
     const option = skuOptions.find((item) => item.sku.toLowerCase() === value.toLowerCase());
     setDraft((current) => ({ ...current, mappedSku: value, unit: option?.unit || current.unit }));
+  }
+
+  function chooseProof(event) {
+    const file = event.target.files?.[0] || null;
+    setProofError('');
+    if (!file) {
+      setProofFile(null);
+      setProofPreview('');
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setProofError('Choose a JPEG, PNG, or WebP picture.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setProofError('Proof pictures must be 5 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+    setProofFile(file);
+    setProofPreview(globalThis.URL.createObjectURL(file));
+  }
+
+  async function submitOrder(event) {
+    event.preventDefault();
+    setProofError('');
+    if (!proofFile) {
+      setProofError('Choose a picture of proof that this order is incoming.');
+      return;
+    }
+    try {
+      await onOrder(proofFile);
+      setOrdering(false);
+      setProofFile(null);
+      setProofPreview('');
+    } catch (failure) {
+      setProofError(failure.message);
+    }
+  }
+
+  async function submitProof(event) {
+    event.preventDefault();
+    setProofError('');
+    if (!proofFile) {
+      setProofError('Choose a replacement proof picture.');
+      return;
+    }
+    try {
+      await onUpdateProof(proofFile);
+      setReplacingProof(false);
+      setProofFile(null);
+      setProofPreview('');
+    } catch (failure) {
+      setProofError(failure.message);
+    }
   }
 
   return (
@@ -1380,6 +1395,19 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
             <p className="review-note">Linked delivery: {po.delivery.quantity} {po.delivery.unit} due {po.delivery.expectedArrival} ({po.delivery.status}).</p>
           ) : null}
 
+          {po.proof || po.state === 'ordered' ? (
+            <section aria-labelledby="proof-title">
+              <h4 id="proof-title">Incoming proof</h4>
+              {po.proof ? (
+                <img
+                  className="proof-image"
+                  src={`/api/pos/${encodeURIComponent(po.poId)}/proof?v=${encodeURIComponent(po.proof.createdAt)}`}
+                  alt="Proof that the order is incoming"
+                />
+              ) : <p className="muted">No proof picture on file.</p>}
+            </section>
+          ) : null}
+
           {formError ? <p className="form-error" role="alert">{formError}</p> : null}
 
           {correcting && draft ? (
@@ -1423,6 +1451,40 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
             </form>
           ) : null}
 
+          {ordering ? (
+            <form className="correction-form" onSubmit={submitOrder}>
+              <h4>Mark as Ordered / Incoming</h4>
+              <p className="field-hint">Upload a picture of proof that this order is incoming. JPEG, PNG, or WebP up to 5 MB.</p>
+              <div className="field">
+                <label htmlFor="order-proof">Proof picture</label>
+                <input id="order-proof" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseProof} required />
+              </div>
+              {proofPreview ? <img className="proof-preview" src={proofPreview} alt="Selected proof preview" /> : null}
+              {proofError ? <p className="form-error" role="alert">{proofError}</p> : null}
+              <div className="dialog-actions">
+                <button type="button" className="button button-secondary button-small" onClick={() => { setOrdering(false); setProofError(''); setProofFile(null); setProofPreview(''); }}>Cancel</button>
+                <button type="submit" className="button button-primary button-small" disabled={busy}>Confirm incoming</button>
+              </div>
+            </form>
+          ) : null}
+
+          {replacingProof ? (
+            <form className="correction-form" onSubmit={submitProof}>
+              <h4>{po.proof ? 'Replace incoming proof' : 'Add incoming proof'}</h4>
+              <p className="field-hint">Choose a JPEG, PNG, or WebP picture up to 5 MB to correct the proof.</p>
+              <div className="field">
+                <label htmlFor="replace-proof">Proof picture</label>
+                <input id="replace-proof" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseProof} required />
+              </div>
+              {proofPreview ? <img className="proof-preview" src={proofPreview} alt="Selected proof preview" /> : null}
+              {proofError ? <p className="form-error" role="alert">{proofError}</p> : null}
+              <div className="dialog-actions">
+                <button type="button" className="button button-secondary button-small" onClick={() => { setReplacingProof(false); setProofError(''); setProofFile(null); setProofPreview(''); }}>Cancel</button>
+                <button type="submit" className="button button-primary button-small" disabled={busy}>Save proof</button>
+              </div>
+            </form>
+          ) : null}
+
           <details className="source">
             <summary>Original email text</summary>
             <pre>{po.body || po.preview || '(No text body)'}</pre>
@@ -1439,7 +1501,7 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
             {po.state === 'approved' ? (
               <>
                 <button type="button" className="button button-danger-ghost button-small" onClick={() => setRejecting(true)}>Reject…</button>
-                <button type="button" className="button button-primary" onClick={() => onAction('order')} disabled={busy}>Set Ordered / Incoming</button>
+                <button type="button" className="button button-primary" onClick={() => { setOrdering(true); setReplacingProof(false); setRejecting(false); setCorrecting(false); setProofError(''); setProofFile(null); setProofPreview(''); }} disabled={busy}>Set Ordered / Incoming…</button>
               </>
             ) : null}
             {po.state === 'rejected' || po.state === 'unverified' ? (
@@ -1447,6 +1509,11 @@ function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose
             ) : null}
             {po.state === 'rejected' ? (
               <button type="button" className="button button-primary" onClick={() => onAction('resubmit')} disabled={busy || po.poStatus !== 'valid'}>Resubmit for review</button>
+            ) : null}
+            {po.state === 'ordered' ? (
+              <button type="button" className="button button-secondary button-small" onClick={() => { setReplacingProof(true); setOrdering(false); setProofError(''); setProofFile(null); setProofPreview(''); }}>
+                {po.proof ? 'Replace proof…' : 'Add proof…'}
+              </button>
             ) : null}
           </div>
         </div>
@@ -1482,10 +1549,6 @@ export function App() {
   const [inventoryRevision, setInventoryRevision] = useState(0);
   const [inventoryDraft, setInventoryDraft] = useState(null);
   const [inventoryBusy, setInventoryBusy] = useState(false);
-  const [itemDefinitions, setItemDefinitions] = useState(null);
-  const [itemDefinitionRevision, setItemDefinitionRevision] = useState(0);
-  const [itemDefinitionDraft, setItemDefinitionDraft] = useState(null);
-  const [itemDefinitionBusy, setItemDefinitionBusy] = useState(false);
   const [productionItems, setProductionItems] = useState(null);
   const [productionItemRevision, setProductionItemRevision] = useState(0);
   const [productionItemDraft, setProductionItemDraft] = useState(null);
@@ -1501,11 +1564,7 @@ export function App() {
   const refreshSequence = useRef(0);
   const tabsRef = useRef(null);
   const [tabIndicator, setTabIndicator] = useState(null);
-  const definitionOptions = itemDefinitions || [];
   const inventoryOptions = inventory || [];
-  const stockedSkus = new Set(inventoryOptions.map((item) => item.sku.toLowerCase()));
-  const availableDefinitionOptions = definitionOptions.filter((definition) => !stockedSkus.has(definition.sku.toLowerCase()));
-  const inventoryDialogOptions = inventoryDraft?.id ? definitionOptions : availableDefinitionOptions;
 
   async function refresh() {
     const sequence = ++refreshSequence.current;
@@ -1521,8 +1580,6 @@ export function App() {
         setSelected(null);
         setInventory(null);
         setInventoryDraft(null);
-        setItemDefinitions(null);
-        setItemDefinitionDraft(null);
         setProductionItems(null);
         setProductionItemDraft(null);
         setProductionRuns(null);
@@ -1590,15 +1647,6 @@ export function App() {
       .catch((failure) => { if (active) { setInventory([]); setError(failure.message); } });
     return () => { active = false; };
   }, [status?.auth.connected, status?.auth.account?.id, inventoryRevision]);
-
-  useEffect(() => {
-    if (!status?.auth.connected) return undefined;
-    let active = true;
-    api('/api/item-definitions')
-      .then((data) => { if (active) setItemDefinitions(data.items); })
-      .catch((failure) => { if (active) { setItemDefinitions([]); setError(failure.message); } });
-    return () => { active = false; };
-  }, [status?.auth.connected, status?.auth.account?.id, itemDefinitionRevision]);
 
   useEffect(() => {
     if (!status?.auth.connected) return undefined;
@@ -1681,16 +1729,71 @@ export function App() {
     setDetailLoading(true);
     try {
       if (poActionName === 'approve' && !globalThis.confirm('Approve this purchase order? Approval keeps the ETA provisional.')) return;
-      if (poActionName === 'order' && !globalThis.confirm('Set this PO to Ordered / Incoming? This fixes the expected arrival and creates one linked delivery.')) return;
       const result = await api(`/api/pos/${encodeURIComponent(selected)}/${poActionName}`, { method: 'POST', body: JSON.stringify(payload) });
       setDetail(result.po);
-      setDetailMessage(`${poActionName === 'approve' ? 'Approved' : poActionName === 'order' ? 'Ordered / Incoming' : poActionName === 'reject' ? 'Rejected' : 'Resubmitted'} ${result.po.poId}.`);
+      setDetailMessage(`${poActionName === 'approve' ? 'Approved' : poActionName === 'reject' ? 'Rejected' : 'Resubmitted'} ${result.po.poId}.`);
       await refresh();
     } catch (failure) {
       setError(failure.message);
       return false;
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  async function orderPo(file) {
+    if (!selected) return null;
+    setError('');
+    setDetailMessage('');
+    setDetailLoading(true);
+    setBusy(true);
+    try {
+      const result = await api(`/api/pos/${encodeURIComponent(selected)}/order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type,
+          'X-File-Name': encodeURIComponent(file.name || 'proof'),
+        },
+        body: file,
+      });
+      setDetail(result.po);
+      setDetailMessage(`Ordered / Incoming ${result.po.poId}. Proof picture saved.`);
+      await refresh();
+      return result.po;
+    } catch (failure) {
+      setError(failure.message);
+      throw failure;
+    } finally {
+      setDetailLoading(false);
+      setBusy(false);
+    }
+  }
+
+  async function updateProof(file) {
+    if (!selected) return null;
+    setError('');
+    setDetailMessage('');
+    setDetailLoading(true);
+    setBusy(true);
+    try {
+      const result = await api(`/api/pos/${encodeURIComponent(selected)}/proof`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+          'X-File-Name': encodeURIComponent(file.name || 'proof'),
+        },
+        body: file,
+      });
+      setDetail((current) => (current ? { ...current, proof: result.proof } : current));
+      setDetailMessage('Proof picture updated.');
+      await refresh();
+      return result.proof;
+    } catch (failure) {
+      setError(failure.message);
+      throw failure;
+    } finally {
+      setDetailLoading(false);
+      setBusy(false);
     }
   }
 
@@ -1716,8 +1819,6 @@ export function App() {
       setView('orders');
       setInventory(null);
       setInventoryDraft(null);
-      setItemDefinitions(null);
-      setItemDefinitionDraft(null);
       setProductionItems(null);
       setProductionItemDraft(null);
       setProductionRuns(null);
@@ -1753,8 +1854,6 @@ export function App() {
     setView('orders');
     setInventory(null);
     setInventoryDraft(null);
-    setItemDefinitions(null);
-    setItemDefinitionDraft(null);
     setProductionItems(null);
     setProductionItemDraft(null);
     setProductionRuns(null);
@@ -1773,7 +1872,7 @@ export function App() {
   };
 
   const clearAllData = () => {
-    if (!globalThis.confirm('Clear ALL local data for this account?\n\nThis deletes PO requests and review history, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.')) return;
+    if (!globalThis.confirm('Clear ALL local data for this account?\n\nThis deletes PO requests and review history, incoming proof pictures, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.')) return;
     action(async () => {
       await api('/api/reset', { method: 'POST', body: JSON.stringify({ confirm: true }) });
       setSelected(null);
@@ -1781,8 +1880,6 @@ export function App() {
       setSender('');
       setInventory(null);
       setInventoryDraft(null);
-      setItemDefinitions(null);
-      setItemDefinitionDraft(null);
       setProductionItems(null);
       setProductionItemDraft(null);
       setProductionRuns(null);
@@ -1790,7 +1887,6 @@ export function App() {
       setDeliveries(null);
       setDeliveryDraft(null);
       setInventoryRevision((revision) => revision + 1);
-      setItemDefinitionRevision((revision) => revision + 1);
       setProductionItemRevision((revision) => revision + 1);
       setProductionRevision((revision) => revision + 1);
       setDeliveryRevision((revision) => revision + 1);
@@ -1838,42 +1934,6 @@ export function App() {
     }
   }
 
-  function openNewItemDefinition() {
-    setItemDefinitionDraft({ id: null, sku: '', item: '', unit: 'units' });
-  }
-
-  function openItemDefinition(definition) {
-    setItemDefinitionDraft({ ...definition });
-  }
-
-  async function saveItemDefinition(values) {
-    setItemDefinitionBusy(true);
-    try {
-      const editing = Boolean(itemDefinitionDraft?.id);
-      const url = editing ? `/api/item-definitions/${encodeURIComponent(itemDefinitionDraft.id)}` : '/api/item-definitions';
-      await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
-      setItemDefinitionDraft(null);
-      setNotice(editing ? 'Item definition saved.' : 'Item definition added.');
-      setItemDefinitionRevision((revision) => revision + 1);
-      setInventoryRevision((revision) => revision + 1);
-    } finally {
-      setItemDefinitionBusy(false);
-    }
-  }
-
-  async function removeItemDefinition() {
-    if (!itemDefinitionDraft?.id) return;
-    setItemDefinitionBusy(true);
-    try {
-      await api(`/api/item-definitions/${encodeURIComponent(itemDefinitionDraft.id)}`, { method: 'DELETE' });
-      setItemDefinitionDraft(null);
-      setNotice('Item definition deleted.');
-      setItemDefinitionRevision((revision) => revision + 1);
-    } finally {
-      setItemDefinitionBusy(false);
-    }
-  }
-
   function openNewProductionItem() {
     setProductionItemDraft({ id: null, name: '', unit: 'units', notes: '', requirements: [] });
   }
@@ -1889,7 +1949,7 @@ export function App() {
       const url = editing ? `/api/production-items/${encodeURIComponent(productionItemDraft.id)}` : '/api/production-items';
       await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
       setProductionItemDraft(null);
-      setNotice(editing ? 'Production item saved.' : 'Production item added.');
+      setNotice(editing ? 'Assembly saved.' : 'Assembly added.');
       setProductionItemRevision((revision) => revision + 1);
     } finally {
       setProductionItemBusy(false);
@@ -1902,7 +1962,7 @@ export function App() {
     try {
       await api(`/api/production-items/${encodeURIComponent(productionItemDraft.id)}`, { method: 'DELETE' });
       setProductionItemDraft(null);
-      setNotice('Production item deleted.');
+      setNotice('Assembly deleted.');
       setProductionItemRevision((revision) => revision + 1);
     } finally {
       setProductionItemBusy(false);
@@ -1956,14 +2016,29 @@ export function App() {
     setDeliveryDraft({ ...delivery });
   }
 
-  async function saveDelivery(values) {
+  async function saveDelivery(values, proofFile) {
     setDeliveryBusy(true);
     try {
       const editing = Boolean(deliveryDraft?.id);
-      const url = editing ? `/api/deliveries/${encodeURIComponent(deliveryDraft.id)}` : '/api/deliveries';
-      await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
+      const received = deliveryDraft?.status === 'received';
+      if (received && !proofFile) throw new Error('Choose a new proof picture to save.');
+      if (!received) {
+        const url = editing ? `/api/deliveries/${encodeURIComponent(deliveryDraft.id)}` : '/api/deliveries';
+        await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(values) });
+      }
+      if (proofFile) {
+        if (!deliveryDraft?.poId) throw new Error('This delivery is not linked to an ordered PO.');
+        await api(`/api/pos/${encodeURIComponent(deliveryDraft.poId)}/proof`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': proofFile.type,
+            'X-File-Name': encodeURIComponent(proofFile.name || 'proof'),
+          },
+          body: proofFile,
+        });
+      }
       setDeliveryDraft(null);
-      setNotice(editing ? 'Delivery saved.' : 'Delivery added.');
+      setNotice(received ? 'Proof picture updated.' : proofFile ? 'Delivery and proof saved.' : editing ? 'Delivery saved.' : 'Delivery added.');
       setDeliveryRevision((revision) => revision + 1);
       setInventoryRevision((revision) => revision + 1);
     } finally {
@@ -2005,8 +2080,8 @@ export function App() {
   return (
     <main className="shell">
       {status.auth.connected ? (
-        <a className="skip-link" href={view === 'settings' ? '#settings' : view === 'orders' ? '#orders' : view === 'deliveries' ? '#deliveries' : view === 'inventory' ? '#inventory' : view === 'item-definition' ? '#item-definition' : '#production'}>
-          Skip to {view === 'settings' ? 'settings' : view === 'orders' ? 'purchase orders' : view === 'deliveries' ? 'deliveries' : view === 'inventory' ? 'inventory' : view === 'item-definition' ? 'item definition' : 'production'}
+        <a className="skip-link" href={view === 'settings' ? '#settings' : view === 'orders' ? '#orders' : view === 'deliveries' ? '#deliveries' : view === 'inventory' ? '#inventory' : view === 'assemblies' ? '#assemblies' : '#production'}>
+          Skip to {view === 'settings' ? 'settings' : view === 'orders' ? 'purchase orders' : view === 'deliveries' ? 'deliveries' : view === 'inventory' ? 'inventory' : view === 'assemblies' ? 'assemblies' : 'production'}
         </a>
       ) : null}
       <header className="app-head">
@@ -2044,7 +2119,7 @@ export function App() {
           <button type="button" className="view-tab" aria-current={view === 'deliveries' ? 'page' : undefined} onClick={() => showView('deliveries')}>Deliveries</button>
           <button type="button" className="view-tab" aria-current={view === 'inventory' ? 'page' : undefined} onClick={() => showView('inventory')}>Inventory</button>
           <button type="button" className="view-tab" aria-current={view === 'production' ? 'page' : undefined} onClick={() => showView('production')}>Production</button>
-          <button type="button" className="view-tab" aria-current={view === 'item-definition' ? 'page' : undefined} onClick={() => showView('item-definition')}>Item definition</button>
+          <button type="button" className="view-tab" aria-current={view === 'assemblies' ? 'page' : undefined} onClick={() => showView('assemblies')}>Assemblies</button>
           {tabIndicator ? (
             <span
               className="view-tab-indicator"
@@ -2137,15 +2212,8 @@ export function App() {
         <DeliveriesView deliveries={deliveries} onAdd={openNewDelivery} onEdit={openDelivery} onReceive={receiveDelivery} busy={deliveryBusy} />
       ) : view === 'inventory' ? (
         <InventoryView items={inventory} onAdd={openNewInventoryItem} onEdit={openInventoryItem} />
-      ) : view === 'item-definition' ? (
-        <ItemDefinitionView
-          definitions={itemDefinitions}
-          productionItems={productionItems}
-          onAddDefinition={openNewItemDefinition}
-          onEditDefinition={openItemDefinition}
-          onAddProductionItem={openNewProductionItem}
-          onEditProductionItem={openProductionItem}
-        />
+      ) : view === 'assemblies' ? (
+        <AssembliesView assemblies={productionItems} onAdd={openNewProductionItem} onEdit={openProductionItem} />
       ) : (
         <ProductionView runs={productionRuns} onAdd={openNewProductionRun} onEdit={openProductionRun} />
       )}
@@ -2163,20 +2231,19 @@ export function App() {
           error={error}
           busy={busy}
           message={detailMessage}
-          skuOptions={definitionOptions}
+          skuOptions={inventoryOptions}
           onClose={() => setSelected(null)}
           onAction={poAction}
+          onOrder={orderPo}
+          onUpdateProof={updateProof}
           onCorrect={correctPo}
         />
       ) : null}
       {inventoryDraft ? (
-        <InventoryDialog draft={inventoryDraft} skuOptions={inventoryDialogOptions} busy={inventoryBusy} onClose={() => { if (!inventoryBusy) setInventoryDraft(null); }} onSave={saveInventory} onDelete={removeInventoryItem} />
-      ) : null}
-      {itemDefinitionDraft ? (
-        <ItemDefinitionDialog draft={itemDefinitionDraft} busy={itemDefinitionBusy} onClose={() => { if (!itemDefinitionBusy) setItemDefinitionDraft(null); }} onSave={saveItemDefinition} onDelete={removeItemDefinition} />
+        <InventoryDialog draft={inventoryDraft} busy={inventoryBusy} onClose={() => { if (!inventoryBusy) setInventoryDraft(null); }} onSave={saveInventory} onDelete={removeInventoryItem} />
       ) : null}
       {productionItemDraft ? (
-        <ProductionItemDialog draft={productionItemDraft} skuOptions={definitionOptions} busy={productionItemBusy} onClose={() => { if (!productionItemBusy) setProductionItemDraft(null); }} onSave={saveProductionItem} onDelete={removeProductionItem} />
+        <ProductionItemDialog draft={productionItemDraft} skuOptions={inventoryOptions} busy={productionItemBusy} onClose={() => { if (!productionItemBusy) setProductionItemDraft(null); }} onSave={saveProductionItem} onDelete={removeProductionItem} />
       ) : null}
       {productionDraft ? (
         <ProductionDialog draft={productionDraft} productionItems={productionItems || []} busy={productionBusy} onClose={() => { if (!productionBusy) setProductionDraft(null); }} onSave={saveProductionRun} onDelete={removeProductionRun} />

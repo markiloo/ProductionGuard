@@ -63,3 +63,20 @@ test('arriving after the run date is a timing conflict with a stockout', () => {
   assert.deepEqual(result.warnings.map((warning) => warning.type), ['timing', 'stockout']);
   assert.equal(result.warnings[0].stockout, true);
 });
+
+test('a mapped SKU without an inventory row reports Missing Inventory', () => {
+  const result = assessPo({
+    po: {
+      id: 'msg-1', poId: 'PO-0001', state: 'pending_review', poStatus: 'valid', poError: null,
+      item: 'Carton Glue', sku: 'SKU-0001', quantity: 50, unit: 'units', etaDays: 5,
+      receivedAt: '2026-11-04T01:00:00.000Z',
+    },
+    inventory: null,
+    deliveries: [],
+    requirements: [{ id: 'req-1', runId: 'run-1', runNumber: 'PR-0001', itemSku: 'SKU-0001', quantity: 4, unit: 'units', status: 'outstanding', scheduledDate: '2026-11-10', runStatus: 'scheduled' }],
+    earlierPos: [],
+    today,
+  });
+  assert.equal(result.decision, 'Manual Review Required — Missing Inventory');
+  assert.match(result.note, /no inventory record/);
+});

@@ -99,7 +99,7 @@ function resolveProductionItem(db, accountId, input, previousRequirements = []) 
   if (!input.productionItemId) return { ...input, effectiveRequirements: input.effectiveRequirements || [], productionItemId: null };
   const productionItem = getProductionItem(db, accountId, input.productionItemId);
   if (!productionItem) {
-    throw invalid('Choose a defined production item from Item definition.');
+    throw invalid('Choose a defined assembly from Assemblies.');
   }
   const previous = new Map(previousRequirements.map((requirement) => [requirement.itemSku.toLowerCase(), requirement]));
   const requirements = productionItem.requirements.map((requirement) => {
@@ -120,18 +120,10 @@ function resolveProductionItem(db, accountId, input, previousRequirements = []) 
 
 function validateRequirements(db, accountId, requirements) {
   if (!requirements.length) return;
-  if (hasTable(db, 'item_definitions')) {
-    for (const requirement of requirements) {
-      const defined = db.prepare('SELECT sku, unit FROM item_definitions WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, requirement.itemSku);
-      if (!defined) throw invalid(`Define the SKU ${requirement.itemSku} in Item definition first.`);
-      if (String(defined.unit).toLowerCase() !== String(requirement.unit).toLowerCase()) throw invalid(`Unit must match the definition for ${defined.sku} (${defined.unit}).`);
-    }
-    return;
-  }
   if (!hasTable(db, 'inventory')) return;
   for (const requirement of requirements) {
     const inventory = db.prepare('SELECT sku, unit FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, requirement.itemSku);
-    if (!inventory) throw invalid(`Choose an existing inventory SKU (${requirement.itemSku}).`);
+    if (!inventory) throw invalid(`Add the SKU ${requirement.itemSku} to Inventory first.`);
     if (String(inventory.unit).toLowerCase() !== String(requirement.unit).toLowerCase()) throw invalid(`Unit must match inventory for ${inventory.sku} (${inventory.unit}).`);
   }
 }

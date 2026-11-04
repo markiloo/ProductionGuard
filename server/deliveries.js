@@ -5,8 +5,21 @@ const MAX_QUANTITY = 1_000_000_000;
 const MAX_SUPPLIER = 120;
 const MAX_NOTES = 500;
 
-const columns = `id, item_sku AS itemSku, quantity, unit, expected_arrival AS expectedArrival, supplier,
-  status, received_at AS receivedAt, po_id AS poId, notes, created_at AS createdAt, updated_at AS updatedAt`;
+const columns = `d.id, d.item_sku AS itemSku, d.quantity, d.unit, d.expected_arrival AS expectedArrival, d.supplier,
+  d.status, d.received_at AS receivedAt, d.po_id AS poId, d.notes, d.created_at AS createdAt, d.updated_at AS updatedAt,
+  p.mime_type AS proofMimeType, p.file_name AS proofFileName, p.created_at AS proofCreatedAt`;
+
+const from = `FROM incoming_deliveries d
+  LEFT JOIN po_proofs p ON p.account_id = d.account_id AND p.po_id = d.po_id`;
+
+function mapDelivery(row) {
+  if (!row) return null;
+  const { proofMimeType, proofFileName, proofCreatedAt, ...delivery } = row;
+  return {
+    ...delivery,
+    proof: proofMimeType ? { mimeType: proofMimeType, fileName: proofFileName, createdAt: proofCreatedAt } : null,
+  };
+}
 
 function text(value) { return String(value ?? '').trim(); }
 
@@ -43,12 +56,12 @@ export function parseDeliveryInput(db, accountId, body) {
 
 /** List the connected account's incoming deliveries, unreceived first. */
 export function listDeliveries(db, accountId) {
-  return db.prepare(`SELECT ${columns} FROM incoming_deliveries WHERE account_id=?
-    ORDER BY CASE status WHEN 'incoming' THEN 0 ELSE 1 END, expected_arrival, id`).all(accountId);
+  return db.prepare(`SELECT ${columns} ${from} WHERE d.account_id=?
+    ORDER BY CASE d.status WHEN 'incoming' THEN 0 ELSE 1 END, d.expected_arrival, d.id`).all(accountId).map(mapDelivery);
 }
 
 function getDelivery(db, accountId, id) {
-  return db.prepare(`SELECT ${columns} FROM incoming_deliveries WHERE account_id=? AND id=?`).get(accountId, id) || null;
+  return mapDelivery(db.prepare(`SELECT ${columns} ${from} WHERE d.account_id=? AND d.id=?`).get(accountId, id));
 }
 
 /** Create one account-scoped incoming delivery. */

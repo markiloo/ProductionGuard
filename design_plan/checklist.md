@@ -138,21 +138,18 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Update `parseProductionInput`, the production form, and `tests/production.test.js` to cover requirement rows.
 - [x] Block assessment for an item whose requirement unit mismatches inventory and show *Manual Review Required — Unit Mismatch* naming the run.
 
-## Item definition update
+## Assemblies update
 
-- [x] Add an account-scoped SKU/item master with a required unique SKU, display name, and unit.
-- [x] Seed item definitions from existing inventory, deliveries, production demand, and mapped POs during migration.
-- [x] Limit inventory create and edit to defined SKUs and derive the item name and unit from the definition; reject undefined SKUs.
-- [x] Keep the SKU fixed on existing definitions and inventory rows, and block deleting a definition that is still referenced.
-- [x] Add production item definitions with material requirement templates validated against defined SKUs and units.
-- [x] Add an Item definition view next to Production with sections for SKUs and for items to make.
-- [x] Select a defined production item when creating a production run; take its name, unit, and default requirements from the definition.
-- [x] Treat production item requirement templates as per-unit quantities, scale each run by its planned quantity, and lock the derived requirement rows against per-run edits.
-- [x] Keep per-run requirement rows derived from the definition instead of accepting client-supplied quantities.
-- [x] Block deleting a production item that is used by a production run.
-- [x] Allow a PO to map to a defined SKU even before that SKU has an inventory record, showing *Manual Review Required — Missing Inventory* until stock is added.
+- [x] Make Inventory the item master: adding an inventory row defines the SKU, name, and unit, with a required unique SKU per account.
+- [x] Keep the SKU fixed on existing inventory rows and block deleting an inventory item while assemblies, production demand, deliveries, or POs use it.
+- [x] Migrate existing item definitions into zero-quantity inventory rows and drop the `item_definitions` table.
+- [x] Rename the user-facing Item definition view to Assemblies and remove its SKU section.
+- [x] Define assemblies with per-unit materials selected from existing inventory items.
+- [x] Select a defined assembly when creating a production run and scale and lock its per-unit materials by the planned quantity.
+- [x] Block deleting an assembly that is used by a production run.
+- [x] Map PO corrections against inventory SKUs only, keeping the Missing Inventory manual branch for dangling data.
 - [x] Return correction validation errors to the correction form instead of reporting a successful save.
-- [x] Add a regression test for mapping a PO to a defined SKU before inventory exists, the Missing Inventory assessment, the quantity decision after adding stock, and the unit-mismatch rejection.
+- [x] Add regression tests for the definitions-to-inventory migration, inventory-backed PO mapping, unit mismatch, and assembly deletion guards.
 
 ## Purchase order intake update
 
@@ -190,6 +187,17 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Fix expected arrival as ordered date + ETA duration and create the single linked delivery on ordering.
 - [x] Allow Pending Review field corrections with revalidation and reassessment, and require Approved revisions to be rejected and resubmitted.
 - [x] Prevent Ordered/Incoming POs from being rejected or moved backward, tracking receipt separately.
+
+## Incoming proof update
+
+- [x] Require an uploaded JPEG, PNG, or WebP picture (max 5 MB) as proof before an Approved PO can become Ordered / Incoming.
+- [x] Validate the proof MIME type and image signature on the server, not only in the browser.
+- [x] Store one proof picture per PO in SQLite and expose its metadata in the PO detail response.
+- [x] Serve the proof image through an account-scoped endpoint and show it in the PO detail sheet.
+- [x] Delete proof pictures when clearing saved orders or clearing all data.
+- [x] Add a regression test that ordering without proof fails and ordering with proof stores the picture and linked delivery.
+- [x] Show the linked incoming proof in the delivery edit view and allow replacing it, including for received linked deliveries.
+- [x] Add a Replace proof action in the Orders detail for ordered POs, with the same validation and storage as the delivery edit view.
 
 ## ETA and daily refresh update
 
@@ -250,6 +258,6 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Replace the Orders status dropdown with a side queue nav listing Pending Review, Unverified, Approved, Ordered / Incoming, Rejected, and All orders with counts.
 - [x] Keep edit sheets open when clicking the backdrop; close them only through Cancel, the close button, or Escape.
 - [x] Align the Orders queue nav and PO list panel on their top and bottom edges, with the nav footer and list pagination pinned to the shared bottom.
-- [x] Animate the active-view underline so it slides between Orders, Deliveries, Inventory, Production, and Item definition.
+- [x] Animate the active-view underline so it slides between Orders, Deliveries, Inventory, Production, and Assemblies.
 - [x] Replace the Run started metric with a live countdown to the next Gmail inbox check, showing seconds until the collector's 15-second poll.
 - [x] Move the sender allowlist and plant time zone into a Settings view opened from a header button next to Sign out.

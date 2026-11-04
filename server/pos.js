@@ -40,14 +40,9 @@ function requirementRows(db, accountId) {
     WHERE r.account_id=? ORDER BY p.scheduled_date, p.run_number`).all(accountId);
 }
 
-function hasTable(db, name) {
-  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
-}
-
-function effectiveSku(po, inventoryBySku, definedBySku) {
+function effectiveSku(po, inventoryBySku) {
   if (po.mappedSku) return po.mappedSku;
-  const key = String(po.item || '').toLowerCase();
-  return inventoryBySku.get(key)?.sku || definedBySku.get(key)?.sku || null;
+  return inventoryBySku.get(String(po.item || '').toLowerCase())?.sku || null;
 }
 
 /** Build the assessment input shared by every PO for one account. */
@@ -57,17 +52,11 @@ export function buildContext(db, accountId, today) {
   for (const item of inventory) {
     if (item.sku && !inventoryBySku.has(item.sku.toLowerCase())) inventoryBySku.set(item.sku.toLowerCase(), item);
   }
-  const definedBySku = new Map();
-  if (hasTable(db, 'item_definitions')) {
-    for (const definition of db.prepare('SELECT sku FROM item_definitions WHERE account_id=?').all(accountId)) {
-      if (!definedBySku.has(definition.sku.toLowerCase())) definedBySku.set(definition.sku.toLowerCase(), definition);
-    }
-  }
   const deliveries = deliveryRows(db, accountId);
   const requirements = requirementRows(db, accountId);
   const pos = db.prepare(`SELECT ${PO_COLUMNS} FROM emails WHERE account_id=? AND po_state IS NOT NULL ORDER BY received_at, po_id`).all(accountId);
   const enriched = pos.map((po) => {
-    const sku = effectiveSku(po, inventoryBySku, definedBySku);
+    const sku = effectiveSku(po, inventoryBySku);
     return { ...po, sku, arrival: po.state === 'ordered' ? po.expectedArrival : addDays(today, po.etaDays) };
   });
   return { inventory, inventoryBySku, deliveries, requirements, pos: enriched };
@@ -165,7 +154,8 @@ export function getPo(db, accountId, poId, today) {
   const events = db.prepare('SELECT id, type, reason, created_at AS createdAt FROM po_events WHERE account_id=? AND po_id=? ORDER BY created_at, id').all(accountId, po.poId);
   const delivery = db.prepare(`SELECT id, item_sku AS itemSku, quantity, unit, expected_arrival AS expectedArrival, supplier, status, received_at AS receivedAt
     FROM incoming_deliveries WHERE account_id=? AND po_id=?`).get(accountId, po.poId) || null;
-  return { ...po, assessment, events, delivery };
+  const proof = db.prepare('SELECT mime_type AS mimeType, file_name AS fileName, created_at AS createdAt FROM po_proofs WHERE account_id=? AND po_id=?').get(accountId, po.poId) || null;
+  return { ...po, assessment, events, delivery, proof };
 }
 
 function getStateRow(db, accountId, poId) {
@@ -176,8 +166,24 @@ function recordEvent(db, accountId, poId, type, reason, now) {
   db.prepare('INSERT INTO po_events(account_id,id,po_id,type,reason,created_at) VALUES(?,?,?,?,?,?)').run(accountId, randomUUID(), poId, type, reason, now);
 }
 
+/** Replace the incoming proof picture for an ordered PO. */
+export function setPoProof(db, accountId, poId, proof, now) {
+  if (!proof?.data?.length) throw fail('Upload a picture of proof that this order is incoming.', 400);
+  const po = db.prepare('SELECT po_state FROM emails WHERE account_id=? AND po_id=?').get(accountId, poId);
+  if (po) {
+    if (po.po_state !== 'ordered') throw fail('Proof can only be changed for an Ordered/Incoming PO.', 409);
+  } else {
+    const linked = db.prepare('SELECT 1 FROM incoming_deliveries WHERE account_id=? AND po_id=?').get(accountId, poId);
+    if (!linked) return null;
+  }
+  db.prepare(`INSERT INTO po_proofs(account_id,po_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)
+    ON CONFLICT(account_id,po_id) DO UPDATE SET mime_type=excluded.mime_type, file_name=excluded.file_name, data=excluded.data, created_at=excluded.created_at`)
+    .run(accountId, poId, proof.mimeType || 'image/jpeg', proof.fileName || '', proof.data, now);
+  return db.prepare('SELECT mime_type AS mimeType, file_name AS fileName, created_at AS createdAt FROM po_proofs WHERE account_id=? AND po_id=?').get(accountId, poId);
+}
+
 /** Apply one allowed PO lifecycle transition. */
-export function transitionPo(db, accountId, poId, action, { reason = '', today, now }) {
+export function transitionPo(db, accountId, poId, action, { reason = '', today, now, proof = null }) {
   const po = getStateRow(db, accountId, poId);
   if (!po) return null;
   const context = buildContext(db, accountId, today);
@@ -193,6 +199,7 @@ export function transitionPo(db, accountId, poId, action, { reason = '', today, 
     recordEvent(db, accountId, po.poId, 'rejected', String(reason).trim(), now);
   } else if (action === 'order') {
     if (po.state !== 'approved') throw fail('Only Approved POs can be set to Ordered/Incoming.');
+    if (!proof?.data?.length) throw fail('Upload a picture of proof that this order is incoming.', 400);
     if (!enriched.sku) throw fail('Map this item to an inventory SKU before ordering.');
     const inventory = context.inventoryBySku.get(enriched.sku.toLowerCase());
     if (!inventory) throw fail('The mapped inventory item no longer exists.');
@@ -209,6 +216,9 @@ export function transitionPo(db, accountId, poId, action, { reason = '', today, 
         db.prepare(`INSERT INTO incoming_deliveries(account_id,id,item_sku,quantity,unit,expected_arrival,supplier,status,received_at,po_id,notes,created_at,updated_at)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(accountId, randomUUID(), enriched.sku, po.quantity, po.unit, expectedArrival, po.supplier || '', 'incoming', null, po.poId, '', now, now);
       }
+      db.prepare(`INSERT INTO po_proofs(account_id,po_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)
+        ON CONFLICT(account_id,po_id) DO UPDATE SET mime_type=excluded.mime_type, file_name=excluded.file_name, data=excluded.data, created_at=excluded.created_at`)
+        .run(accountId, po.poId, proof.mimeType || 'image/jpeg', proof.fileName || '', proof.data, now);
       recordEvent(db, accountId, po.poId, 'ordered', '', now);
     })();
   } else if (action === 'resubmit') {
@@ -252,15 +262,11 @@ export function correctPo(db, accountId, poId, input, { today, now }) {
   if (!Number.isInteger(etaDays) || etaDays <= 0) errors.push('ETA must be a whole number of days or weeks');
   let mappedSku = null;
   if (mappedInput) {
-    const hasDefinitions = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='item_definitions'").get());
-    const definition = hasDefinitions
-      ? db.prepare('SELECT sku, unit FROM item_definitions WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, mappedInput)
-      : null;
-    const matched = definition || inventory.find((row) => row.sku.toLowerCase() === mappedInput.toLowerCase());
-    if (!matched) errors.push(hasDefinitions ? 'Choose a defined SKU from Item definition' : 'Choose an existing inventory SKU');
+    const matched = inventory.find((row) => row.sku.toLowerCase() === mappedInput.toLowerCase());
+    if (!matched) errors.push('Choose an existing inventory SKU');
     else {
       mappedSku = matched.sku;
-      if (unit && String(matched.unit).toLowerCase() !== unit.toLowerCase()) errors.push(`Unit must match ${definition ? 'the definition' : 'inventory'} for ${matched.sku} (${matched.unit})`);
+      if (unit && String(matched.unit).toLowerCase() !== unit.toLowerCase()) errors.push(`Unit must match inventory for ${matched.sku} (${matched.unit})`);
     }
   }
   const authorized = Boolean(db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(po.senderAddress)));

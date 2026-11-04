@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-test('PO correction maps a defined SKU without inventory and reruns assessment', async () => {
+test('PO correction maps an inventory SKU and reruns assessment', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'po-checker-pos-'));
   const prior = process.env.DATA_DIR;
   process.env.DATA_DIR = directory;
@@ -13,7 +13,6 @@ test('PO correction maps a defined SKU without inventory and reruns assessment',
     loaded = await import('../server/db.js?pos-test');
     const { db, isoNow, releaseInstanceLock } = loaded;
     const { getPo, correctPo } = await import('../server/pos.js');
-    const { createItemDefinition, parseItemDefinitionInput } = await import('../server/item-definitions.js');
     const { createProductionItem, parseProductionItemInput } = await import('../server/production-items.js');
     const { createProductionRun, parseProductionInput } = await import('../server/production.js');
     const { createInventoryItem, parseInventoryInput } = await import('../server/inventory.js');
@@ -25,7 +24,7 @@ test('PO correction maps a defined SKU without inventory and reruns assessment',
     db.prepare('INSERT INTO runs(id,account_id,cutoff,started_at,last_success_at,error,status) VALUES(?,?,?,?,?,?,?)').run('run-1', account, today, now, now, null, 'running');
     db.prepare('INSERT INTO senders(account_id,address,normalized_address,created_at) VALUES(?,?,?,?)').run(account, 'orders@example.com', 'orders@example.com', now);
 
-    createItemDefinition(db, account, parseItemDefinitionInput({ sku: 'SKU-0001', item: 'Carton Glue', unit: 'units' }), now);
+    createInventoryItem(db, account, parseInventoryInput({ item: 'Carton Glue', sku: 'SKU-0001', quantity: 0, unit: 'units' }), now);
     const productionItem = createProductionItem(db, account, parseProductionItemInput({
       name: 'Carton Packaging', unit: 'units',
       requirements: [{ itemSku: 'SKU-0001', quantity: 2, unit: 'units' }],
@@ -49,25 +48,20 @@ test('PO correction maps a defined SKU without inventory and reruns assessment',
     assert.equal(unmapped.assessment.decision, 'Manual Review Required — Unmapped Item');
 
     const unknown = correctPo(db, account, 'PO-0001', { mappedSku: 'MISSING-SKU' }, { today, now });
-    assert.match(unknown.poError, /Choose a defined SKU/);
+    assert.match(unknown.poError, /Choose an existing inventory SKU/);
     assert.equal(unknown.assessment.decision, 'Manual Review Required — Invalid PO');
 
     const mapped = correctPo(db, account, 'PO-0001', { mappedSku: 'SKU-0001' }, { today, now });
     assert.equal(mapped.poError, null);
     assert.equal(mapped.sku, 'SKU-0001');
     assert.equal(mapped.mappedSku, 'SKU-0001');
-    assert.equal(mapped.assessment.decision, 'Manual Review Required — Missing Inventory');
-    assert.match(mapped.assessment.note, /no inventory record/);
-
-    createInventoryItem(db, account, parseInventoryInput({ item: 'Carton Glue', sku: 'SKU-0001', quantity: 0, unit: 'units' }), now);
-    const assessed = getPo(db, account, 'PO-0001', today);
-    assert.equal(assessed.assessment.decision, 'Adjust Quantity');
-    assert.equal(assessed.assessment.requirement, 4);
-    assert.equal(assessed.assessment.difference, 46);
-    assert.equal(assessed.assessment.inventory.quantity, 0);
+    assert.equal(mapped.assessment.decision, 'Adjust Quantity');
+    assert.equal(mapped.assessment.requirement, 4);
+    assert.equal(mapped.assessment.difference, 46);
+    assert.equal(mapped.assessment.inventory.quantity, 0);
 
     const mismatch = correctPo(db, account, 'PO-0001', { unit: 'kg' }, { today, now });
-    assert.match(mismatch.poError, /Unit must match the definition for SKU-0001 \(units\)/);
+    assert.match(mismatch.poError, /Unit must match inventory for SKU-0001 \(units\)/);
     assert.equal(mismatch.assessment.decision, 'Manual Review Required — Invalid PO');
 
     const fixed = correctPo(db, account, 'PO-0001', { unit: 'units' }, { today, now });

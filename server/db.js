@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isPoSubject, parseEtaDays, parsePo } from './po.js';
+import { copyItemDefinitionsToInventory } from './item-migration.js';
 
 const dataDir = process.env.DATA_DIR || path.resolve('data');
 fs.mkdirSync(dataDir, { recursive: true });
@@ -165,6 +166,16 @@ export function migrate() {
      );
      CREATE INDEX production_item_requirements_item ON production_item_requirements(account_id, production_item_id);
      ALTER TABLE production_runs ADD COLUMN production_item_id TEXT;`,
+    `SELECT 1;`,
+    `CREATE TABLE po_proofs (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       po_id TEXT NOT NULL,
+       mime_type TEXT NOT NULL,
+       file_name TEXT NOT NULL DEFAULT '',
+       data BLOB NOT NULL,
+       created_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, po_id)
+     );`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;
@@ -217,6 +228,10 @@ export function migrate() {
         for (const row of db.prepare('SELECT account_id,item_sku,unit FROM production_requirements').all()) add(row.account_id, row.item_sku, row.item_sku, row.unit);
         for (const row of db.prepare('SELECT account_id,item_sku,unit FROM incoming_deliveries').all()) add(row.account_id, row.item_sku, row.item_sku, row.unit);
         for (const row of db.prepare('SELECT account_id,mapped_sku,unit FROM emails WHERE mapped_sku IS NOT NULL').all()) add(row.account_id, row.mapped_sku, row.mapped_sku, row.unit);
+      }
+      if (version === 13) {
+        copyItemDefinitionsToInventory(db);
+        db.exec('DROP TABLE item_definitions');
       }
       db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)').run(version, new Date().toISOString());
     })();

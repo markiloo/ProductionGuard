@@ -68,29 +68,16 @@ function skuConflict() {
   return error;
 }
 
-function definitionsTable(db) {
-  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='item_definitions'").get());
+function hasTable(db, name) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
 }
 
-function definedItem(db, accountId, sku) {
-  if (!definitionsTable(db) || !sku) return null;
-  return db.prepare('SELECT sku, item, unit FROM item_definitions WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, sku) || null;
-}
-
-/** Create an inventory item for one account. */
+/** Create an inventory item for one account. Adding it defines the SKU, name, and unit. */
 export function createInventoryItem(db, accountId, input, now) {
-  const definition = definedItem(db, accountId, input.sku);
-  if (definitionsTable(db) && !definition) {
-    const error = new Error('Choose a defined SKU from Item definition first.');
-    error.status = 400;
-    throw error;
-  }
-  const item = definition ? definition.item : input.item;
-  const unit = definition ? definition.unit : input.unit;
   if (skuTaken(db, accountId, input.sku)) throw skuConflict();
   const id = randomUUID();
   db.prepare('INSERT INTO inventory(account_id,id,item,sku,quantity,unit,supplier,reorder_level,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(
-    accountId, id, item, definition ? definition.sku : input.sku, input.quantity, unit, input.supplier, input.reorderLevel, input.notes, now, now,
+    accountId, id, input.item, input.sku, input.quantity, input.unit, input.supplier, input.reorderLevel, input.notes, now, now,
   );
   return getInventoryItem(db, accountId, id);
 }
@@ -99,27 +86,32 @@ export function createInventoryItem(db, accountId, input, now) {
 export function updateInventoryItem(db, accountId, id, input, now) {
   const existing = getInventoryItem(db, accountId, id);
   if (!existing) return null;
-  const definition = definedItem(db, accountId, input.sku);
-  if (definitionsTable(db) && !definition) {
-    const error = new Error('Choose a defined SKU from Item definition first.');
-    error.status = 400;
-    throw error;
-  }
-  if (existing.sku && definition && existing.sku.toLowerCase() !== definition.sku.toLowerCase()) {
+  if (existing.sku && existing.sku.toLowerCase() !== input.sku.toLowerCase()) {
     const error = new Error('The SKU cannot be changed on an existing inventory item.');
     error.status = 409;
     throw error;
   }
-  const item = definition ? definition.item : input.item;
-  const unit = definition ? definition.unit : input.unit;
   if (skuTaken(db, accountId, input.sku, id)) throw skuConflict();
   const result = db.prepare('UPDATE inventory SET item=?, sku=?, quantity=?, unit=?, supplier=?, reorder_level=?, notes=?, updated_at=? WHERE account_id=? AND id=?').run(
-    item, definition ? definition.sku : input.sku, input.quantity, unit, input.supplier, input.reorderLevel, input.notes, now, accountId, id,
+    input.item, input.sku, input.quantity, input.unit, input.supplier, input.reorderLevel, input.notes, now, accountId, id,
   );
   return result.changes ? getInventoryItem(db, accountId, id) : null;
 }
 
-/** Delete an account-owned inventory item. */
+/** Delete an account-owned inventory item only when nothing still references its SKU. */
 export function deleteInventoryItem(db, accountId, id) {
+  const existing = getInventoryItem(db, accountId, id);
+  if (!existing) return false;
+  const sku = existing.sku;
+  const references = [];
+  if (hasTable(db, 'production_item_requirements') && db.prepare('SELECT 1 FROM production_item_requirements WHERE account_id=? AND item_sku=? COLLATE NOCASE').get(accountId, sku)) references.push('assemblies');
+  if (hasTable(db, 'production_requirements') && db.prepare('SELECT 1 FROM production_requirements WHERE account_id=? AND item_sku=? COLLATE NOCASE').get(accountId, sku)) references.push('production demand');
+  if (hasTable(db, 'incoming_deliveries') && db.prepare('SELECT 1 FROM incoming_deliveries WHERE account_id=? AND item_sku=? COLLATE NOCASE').get(accountId, sku)) references.push('deliveries');
+  if (hasTable(db, 'emails') && db.prepare('SELECT 1 FROM emails WHERE account_id=? AND (mapped_sku=? COLLATE NOCASE OR item=? COLLATE NOCASE) AND po_state IS NOT NULL').get(accountId, sku, sku)) references.push('purchase orders');
+  if (references.length) {
+    const error = new Error(`This inventory item is still used by ${references.join(', ')}. Remove those references first.`);
+    error.status = 409;
+    throw error;
+  }
   return db.prepare('DELETE FROM inventory WHERE account_id = ? AND id = ?').run(accountId, id).changes > 0;
 }

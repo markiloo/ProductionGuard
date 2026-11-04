@@ -8,9 +8,8 @@ import { normalizeSender, isValidSender } from './rules.js';
 import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email-queries.js';
 import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
 import { listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
-import { listItemDefinitions, createItemDefinition, updateItemDefinition, deleteItemDefinition, parseItemDefinitionInput } from './item-definitions.js';
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
-import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail } from './pos.js';
+import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail, setPoProof } from './pos.js';
 import { listDeliveries, createDelivery, updateDelivery, receiveDelivery, parseDeliveryInput } from './deliveries.js';
 import { resetAccountData } from './reset.js';
 import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
@@ -140,41 +139,11 @@ app.put('/api/inventory/:id', (req, res) => {
 });
 app.delete('/api/inventory/:id', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
-  if (!deleteInventoryItem(db, aid, req.params.id)) return res.status(404).json({ error: 'Inventory item not found.' });
-  res.json({ ok: true });
-});
-
-app.get('/api/item-definitions', (_req, res) => {
-  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
-  res.json({ items: listItemDefinitions(db, aid) });
-});
-app.post('/api/item-definitions', (req, res) => {
-  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   try {
-    const input = parseItemDefinitionInput(req.body);
-    res.status(201).json({ ok: true, item: createItemDefinition(db, aid, input, isoNow()) });
-  } catch (failure) {
-    sendActionError(res, failure, 'Could not save the item definition.');
-  }
-});
-app.put('/api/item-definitions/:id', (req, res) => {
-  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
-  try {
-    const input = parseItemDefinitionInput(req.body);
-    const item = updateItemDefinition(db, aid, req.params.id, input, isoNow());
-    if (!item) return res.status(404).json({ error: 'Item definition not found.' });
-    res.json({ ok: true, item });
-  } catch (failure) {
-    sendActionError(res, failure, 'Could not save the item definition.');
-  }
-});
-app.delete('/api/item-definitions/:id', (req, res) => {
-  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
-  try {
-    if (!deleteItemDefinition(db, aid, req.params.id)) return res.status(404).json({ error: 'Item definition not found.' });
+    if (!deleteInventoryItem(db, aid, req.params.id)) return res.status(404).json({ error: 'Inventory item not found.' });
     res.json({ ok: true });
   } catch (failure) {
-    sendActionError(res, failure, 'Could not delete the item definition.');
+    sendActionError(res, failure, 'Could not delete the inventory item.');
   }
 });
 
@@ -188,7 +157,7 @@ app.post('/api/production-items', (req, res) => {
     const input = parseProductionItemInput(req.body);
     res.status(201).json({ ok: true, item: createProductionItem(db, aid, input, isoNow()) });
   } catch (failure) {
-    sendActionError(res, failure, 'Could not save the production item.');
+    sendActionError(res, failure, 'Could not save the assembly.');
   }
 });
 app.put('/api/production-items/:id', (req, res) => {
@@ -196,19 +165,19 @@ app.put('/api/production-items/:id', (req, res) => {
   try {
     const input = parseProductionItemInput(req.body);
     const item = updateProductionItem(db, aid, req.params.id, input, isoNow());
-    if (!item) return res.status(404).json({ error: 'Production item not found.' });
+    if (!item) return res.status(404).json({ error: 'Assembly not found.' });
     res.json({ ok: true, item });
   } catch (failure) {
-    sendActionError(res, failure, 'Could not save the production item.');
+    sendActionError(res, failure, 'Could not save the assembly.');
   }
 });
 app.delete('/api/production-items/:id', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   try {
-    if (!deleteProductionItem(db, aid, req.params.id)) return res.status(404).json({ error: 'Production item not found.' });
+    if (!deleteProductionItem(db, aid, req.params.id)) return res.status(404).json({ error: 'Assembly not found.' });
     res.json({ ok: true });
   } catch (failure) {
-    sendActionError(res, failure, 'Could not delete the production item.');
+    sendActionError(res, failure, 'Could not delete the assembly.');
   }
 });
 
@@ -256,6 +225,37 @@ function sendActionError(res, failure, fallback) {
   res.status(failure.status || 500).json({ error: failure.status && failure.status < 500 ? failure.message : fallback });
 }
 
+const PROOF_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+function isProofImage(buffer, mime) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false;
+  if (mime === 'image/jpeg') return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (mime === 'image/png') return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (mime === 'image/webp') return buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP';
+  return false;
+}
+
+function proofFileName(req) {
+  try { return decodeURIComponent(String(req.get('x-file-name') || '')).slice(0, 200); } catch { return ''; }
+}
+
+function readProof(req, res) {
+  const mime = String(req.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!PROOF_TYPES.has(mime)) {
+    res.status(400).json({ error: 'Upload a JPEG, PNG, or WebP picture as proof.' });
+    return null;
+  }
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    res.status(400).json({ error: 'Upload a picture of proof that this order is incoming.' });
+    return null;
+  }
+  if (!isProofImage(req.body, mime)) {
+    res.status(400).json({ error: 'The uploaded file is not a valid image.' });
+    return null;
+  }
+  return { mimeType: mime, fileName: proofFileName(req), data: req.body };
+}
+
 app.get('/api/pos', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   const { limit, offset } = parsePagination(req.query.limit, req.query.offset);
@@ -287,10 +287,45 @@ app.patch('/api/pos/:poId', (req, res) => {
   }
 });
 
+app.post('/api/pos/:poId/order', express.raw({ type: [...PROOF_TYPES], limit: '5mb' }), (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const proof = readProof(req, res); if (!proof) return;
+  const { today, now } = nowAndToday();
+  try {
+    const po = transitionPo(db, aid, req.params.poId, 'order', { today, now, proof });
+    if (!po) return res.status(404).json({ error: 'Purchase order not found.' });
+    res.json({ ok: true, po });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not update the purchase order.');
+  }
+});
+
+app.put('/api/pos/:poId/proof', express.raw({ type: [...PROOF_TYPES], limit: '5mb' }), (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const proof = readProof(req, res); if (!proof) return;
+  const { now } = nowAndToday();
+  try {
+    const saved = setPoProof(db, aid, req.params.poId, proof, now);
+    if (!saved) return res.status(404).json({ error: 'Purchase order not found.' });
+    res.json({ ok: true, proof: saved });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not update the proof picture.');
+  }
+});
+
+app.get('/api/pos/:poId/proof', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const row = db.prepare('SELECT mime_type, data FROM po_proofs WHERE account_id=? AND po_id=?').get(aid, req.params.poId);
+  if (!row) return res.status(404).json({ error: 'Proof picture not found.' });
+  res.set('Content-Type', row.mime_type);
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.send(row.data);
+});
+
 app.post('/api/pos/:poId/:action', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   const action = String(req.params.action || '');
-  if (!['approve', 'reject', 'order', 'resubmit'].includes(action)) return res.status(400).json({ error: 'Unknown purchase order action.' });
+  if (!['approve', 'reject', 'resubmit'].includes(action)) return res.status(400).json({ error: 'Unknown purchase order action.' });
   const { today, now } = nowAndToday();
   try {
     const po = transitionPo(db, aid, req.params.poId, action, { reason: req.body?.reason, today, now });

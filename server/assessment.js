@@ -40,7 +40,7 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
       ...base,
       note: po.sku
         ? `SKU ${po.sku} is mapped but has no inventory record. Add it in Inventory before assessment.`
-        : 'Map this item to a defined SKU before assessment.',
+        : 'Map this item to an inventory SKU before assessment.',
     });
   }
   if (!sameUnit(po.unit, inventory.unit)) {

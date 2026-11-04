@@ -37,14 +37,14 @@ function parseRequirement(value, index) {
   return { itemSku, quantity, unit };
 }
 
-/** Validate a production item definition request and its material requirements. */
+/** Validate an assembly definition request and its material requirements. */
 export function parseProductionItemInput(body) {
   const value = body && typeof body === 'object' ? body : {};
   const name = text(value.name);
   const unit = text(value.unit);
   const notes = text(value.notes);
-  if (!name) throw fail('Enter the item to produce.');
-  if (name.length > MAX_NAME) throw fail(`Item names must be ${MAX_NAME} characters or fewer.`);
+  if (!name) throw fail('Enter the assembly name.');
+  if (name.length > MAX_NAME) throw fail(`Assembly names must be ${MAX_NAME} characters or fewer.`);
   if (!unit) throw fail('Enter a unit.');
   if (unit.length > MAX_UNIT) throw fail(`Units must be ${MAX_UNIT} characters or fewer.`);
   if (notes.length > MAX_NOTES) throw fail(`Notes must be ${MAX_NOTES} characters or fewer.`);
@@ -60,16 +60,15 @@ function requirementsFor(db, accountId) {
 
 function validateMaterials(db, accountId, requirements) {
   if (!requirements.length) return;
-  if (hasTable(db, 'item_definitions')) {
-    for (const requirement of requirements) {
-      const defined = db.prepare('SELECT sku, unit FROM item_definitions WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, requirement.itemSku);
-      if (!defined) throw fail(`Define the SKU ${requirement.itemSku} in Item definition first.`);
-      if (String(defined.unit).toLowerCase() !== String(requirement.unit).toLowerCase()) throw fail(`Unit must match the definition for ${defined.sku} (${defined.unit}).`);
-    }
+  if (!hasTable(db, 'inventory')) return;
+  for (const requirement of requirements) {
+    const inventory = db.prepare('SELECT sku, unit FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, requirement.itemSku);
+    if (!inventory) throw fail(`Add the SKU ${requirement.itemSku} to Inventory first.`);
+    if (String(inventory.unit).toLowerCase() !== String(requirement.unit).toLowerCase()) throw fail(`Unit must match inventory for ${inventory.sku} (${inventory.unit}).`);
   }
 }
 
-/** List production items and their material requirements. */
+/** List assemblies and their material requirements. */
 export function listProductionItems(db, accountId) {
   const items = db.prepare(`SELECT ${columns} FROM production_items WHERE account_id=? ORDER BY name COLLATE NOCASE`).all(accountId);
   const byItem = new Map();
@@ -80,7 +79,7 @@ export function listProductionItems(db, accountId) {
   return items.map((item) => ({ ...item, requirements: byItem.get(item.id) || [] }));
 }
 
-/** Fetch one production item definition by ID. */
+/** Fetch one assembly definition by ID. */
 export function getProductionItem(db, accountId, id) {
   if (!hasTable(db, 'production_items')) return null;
   const item = db.prepare(`SELECT ${columns} FROM production_items WHERE account_id=? AND id=?`).get(accountId, id);
@@ -95,10 +94,10 @@ function saveRequirements(db, accountId, productionItemId, requirements, now) {
   for (const requirement of requirements) insert.run(accountId, randomUUID(), productionItemId, requirement.itemSku, requirement.quantity, requirement.unit, now, now);
 }
 
-/** Create a production item and its material requirements. */
+/** Create an assembly and its material requirements. */
 export function createProductionItem(db, accountId, input, now) {
   const taken = db.prepare('SELECT 1 FROM production_items WHERE account_id=? AND name=? COLLATE NOCASE').get(accountId, input.name);
-  if (taken) throw fail('That production item is already defined.', 409);
+  if (taken) throw fail('That assembly is already defined.', 409);
   validateMaterials(db, accountId, input.requirements);
   const id = randomUUID();
   return db.transaction(() => {
@@ -108,11 +107,11 @@ export function createProductionItem(db, accountId, input, now) {
   })();
 }
 
-/** Update a production item and replace its material requirements. */
+/** Update an assembly and replace its material requirements. */
 export function updateProductionItem(db, accountId, id, input, now) {
   if (!getProductionItem(db, accountId, id)) return null;
   const taken = db.prepare('SELECT 1 FROM production_items WHERE account_id=? AND name=? COLLATE NOCASE AND id<>?').get(accountId, input.name, id);
-  if (taken) throw fail('That production item is already defined.', 409);
+  if (taken) throw fail('That assembly is already defined.', 409);
   validateMaterials(db, accountId, input.requirements);
   return db.transaction(() => {
     db.prepare('UPDATE production_items SET name=?, unit=?, notes=?, updated_at=? WHERE account_id=? AND id=?').run(input.name, input.unit, input.notes, now, accountId, id);
@@ -121,11 +120,11 @@ export function updateProductionItem(db, accountId, id, input, now) {
   })();
 }
 
-/** Delete a production item when no production run references it. */
+/** Delete an assembly when no production run references it. */
 export function deleteProductionItem(db, accountId, id) {
   if (!getProductionItem(db, accountId, id)) return false;
   if (hasColumn(db, 'production_runs', 'production_item_id') && db.prepare('SELECT 1 FROM production_runs WHERE account_id=? AND production_item_id=?').get(accountId, id)) {
-    throw fail('This production item is used by a production run. Remove or reassign those runs first.', 409);
+    throw fail('This assembly is used by a production run. Remove or reassign those runs first.', 409);
   }
   db.prepare('DELETE FROM production_items WHERE account_id=? AND id=?').run(accountId, id);
   return true;

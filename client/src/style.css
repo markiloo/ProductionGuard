@@ -999,12 +999,14 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
 
 .definitions { overflow: hidden; }
 .definitions:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-.definition-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.definition-section { display: grid; align-content: start; min-width: 0; border-top: 1px solid var(--line); }
-.definition-section + .definition-section { border-left: 1px solid var(--line); }
-.definition-section .record-head { padding: 16px 20px 8px; }
-.definition-section .settings-copy { padding: 0 20px 10px; }
-.definition-section .record-list { min-height: 180px; }
+.definition-intro {
+  margin: 0;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
 .definition-row {
   display: flex;
   align-items: center;
@@ -1029,11 +1031,6 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
   text-transform: uppercase;
 }
 .definition-meta { color: var(--ink-3); font-size: 11.5px; line-height: 1.5; }
-
-@media (max-width: 900px) {
-  .definition-grid { grid-template-columns: 1fr; }
-  .definition-section + .definition-section { border-left: 0; }
-}
 
 /* Review and assessment --------------------------------------------------- */
 
@@ -1142,6 +1139,17 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
 
 .correction-form { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
 .correction-form h4 { font-size: 13px; font-weight: 650; }
+.proof-preview,
+.proof-image {
+  display: block;
+  max-width: 100%;
+  max-height: 340px;
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  object-fit: contain;
+}
 .form-success {
   padding: 8px 10px;
   border: 1px solid color-mix(in oklab, var(--valid-ink) 24%, var(--line));
