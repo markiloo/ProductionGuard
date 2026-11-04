@@ -176,6 +176,17 @@ export function migrate() {
        created_at TEXT NOT NULL,
        PRIMARY KEY(account_id, po_id)
      );`,
+    `ALTER TABLE incoming_deliveries ADD COLUMN received_quantity INTEGER;
+     UPDATE incoming_deliveries SET received_quantity = quantity WHERE status = 'received';
+     CREATE TABLE delivery_receipts (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       delivery_id TEXT NOT NULL,
+       mime_type TEXT NOT NULL,
+       file_name TEXT NOT NULL DEFAULT '',
+       data BLOB NOT NULL,
+       created_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, delivery_id)
+     );`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;

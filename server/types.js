@@ -86,18 +86,27 @@
  */
 
 /**
+ * @typedef {Object} DeliveryReceipt
+ * @property {string} mimeType Stored receipt image MIME type.
+ * @property {string} fileName Original file name, or an empty string.
+ * @property {string} createdAt UTC upload time.
+ */
+
+/**
  * @typedef {Object} Delivery
  * @property {string} id Stable delivery ID.
  * @property {string} itemSku Item code matching an inventory SKU.
- * @property {number} quantity Whole-number delivery quantity.
+ * @property {number} quantity Whole-number planned delivery quantity.
+ * @property {number|null} receivedQuantity Confirmed received quantity, or null while incoming.
  * @property {string} unit Unit matching the item's inventory unit.
  * @property {string} expectedArrival YYYY-MM-DD expected arrival date.
  * @property {string} supplier Optional supplier name.
  * @property {'incoming'|'received'} status Delivery status.
  * @property {string|null} receivedAt UTC receipt time, or null while incoming.
  * @property {string|null} poId Linked PO ID for an ordered PO, or null for a manual delivery.
- * @property {PoProof|null} proof Incoming proof metadata for a linked PO, or null.
  * @property {string} notes Optional local notes.
+ * @property {PoProof|null} proof Incoming proof metadata for a linked PO, or null.
+ * @property {DeliveryReceipt|null} receipt Receipt picture metadata after receiving, or null.
  * @property {string} createdAt UTC creation timestamp.
  * @property {string} updatedAt UTC last-edit timestamp.
  */

@@ -375,15 +375,27 @@ app.put('/api/deliveries/:id', (req, res) => {
   }
 });
 
-app.post('/api/deliveries/:id/receive', (req, res) => {
+app.post('/api/deliveries/:id/receive', express.raw({ type: [...PROOF_TYPES], limit: '5mb' }), (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const proof = readProof(req, res); if (!proof) return;
+  const quantity = Number(req.get('x-received-quantity'));
+  if (!Number.isInteger(quantity) || quantity <= 0) return res.status(400).json({ error: 'Enter the confirmed received quantity.' });
   try {
-    const result = receiveDelivery(db, aid, req.params.id, isoNow());
+    const result = receiveDelivery(db, aid, req.params.id, isoNow(), { quantity, proof });
     if (!result) return res.status(404).json({ error: 'Delivery not found.' });
     res.json({ ok: true, ...result });
   } catch (failure) {
     sendActionError(res, failure, 'Could not receive the delivery.');
   }
+});
+
+app.get('/api/deliveries/:id/receipt', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const row = db.prepare('SELECT mime_type, data FROM delivery_receipts WHERE account_id=? AND delivery_id=?').get(aid, req.params.id);
+  if (!row) return res.status(404).json({ error: 'Receipt picture not found.' });
+  res.set('Content-Type', row.mime_type);
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.send(row.data);
 });
 
 app.get('/api/settings', (_req, res) => {

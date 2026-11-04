@@ -32,7 +32,11 @@ The **Assemblies** view, next to Production, defines what the plant assembles. E
 
 ## Incoming deliveries
 
-The **Deliveries** view lists incoming and received deliveries with their item SKU, quantity, expected arrival, supplier, and linked PO. Add or edit an unreceived delivery manually; ordering a PO creates one linked delivery automatically. The delivery edit view previews the linked incoming proof and lets you replace it; received linked deliveries keep a **Proof** action for corrections. **Receive** adds the quantity to on-hand stock and removes it from incoming supply in one transaction, exactly once. Received deliveries stay visible and their delivery fields cannot be edited; correct stock through inventory instead.
+The **Deliveries** view lists incoming and received deliveries with their item SKU, quantity, expected arrival, supplier, and linked PO. Add or edit an unreceived delivery manually; ordering a PO creates one linked delivery automatically. The delivery edit view previews the linked incoming proof and lets you replace it; received linked deliveries keep a **Proof** action for corrections. **Receive** asks you to confirm the quantity physically received and requires a receipt picture; stock increases by the confirmed amount, so missing or extra items are recorded correctly. Received deliveries stay visible with their confirmed quantity and receipt, and their delivery fields cannot be edited; correct stock through inventory instead.
+
+## Receiving station
+
+Opening `http://127.0.0.1:4174/deliveries` loads a restricted receiving interface. It lists only incoming and received deliveries. The only actions are **Receive** (confirm the actual quantity and upload a receipt picture) and viewing a stored receipt. It has no access to add or edit deliveries, inventory, production, settings, or order review. Use the link in the Deliveries view to open it.
 
 ## Production schedule
 
@@ -59,11 +63,11 @@ Closing the browser leaves collection running. Stop the server console to end th
 
 ## Local data and privacy
 
-Saved mail, sender settings, inventory, incoming deliveries, production requirements, PO history, proof pictures, and assessments' source data live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
+Saved mail, sender settings, inventory, incoming deliveries, production requirements, PO history, proof and receipt pictures, and assessments' source data live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
 
 The **Clear saved orders** button deletes the connected account's locally saved purchase orders and their proof pictures after confirmation. It does not delete or change anything in Gmail. Mail received before the clear time stays excluded from later polls; newer eligible mail can still appear. Incoming deliveries are separate supply records and are not deleted by this action.
 
-**Settings → Clear all data** is a full test reset for the account's business data. It deletes PO requests and review history, incoming proof pictures, inventory, incoming deliveries, production runs and requirements, and assembly definitions. The Gmail connection, approved senders, and plant time zone are kept, and a fresh clear time prevents older Inbox mail from reappearing. Gmail is never changed. The action asks for confirmation first.
+**Settings → Clear all data** is a full test reset for the account's business data. It deletes PO requests and review history, proof and receipt pictures, inventory, incoming deliveries, production runs and requirements, and assembly definitions. The Gmail connection, approved senders, and plant time zone are kept, and a fresh clear time prevents older Inbox mail from reappearing. Gmail is never changed. The action asks for confirmation first.
 
 Unauthorized PO mail is stored locally in the unverified queue so the manager can see why it was rejected; it never enters Pending Review, assessments, or provisional coverage unless its sender is added to the allowlist. Attachments are never downloaded, and text is displayed as escaped text that cannot load remote content. The collector does not mark mail read, send mail, or modify messages.
 

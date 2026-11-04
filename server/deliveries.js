@@ -5,19 +5,22 @@ const MAX_QUANTITY = 1_000_000_000;
 const MAX_SUPPLIER = 120;
 const MAX_NOTES = 500;
 
-const columns = `d.id, d.item_sku AS itemSku, d.quantity, d.unit, d.expected_arrival AS expectedArrival, d.supplier,
+const columns = `d.id, d.item_sku AS itemSku, d.quantity, d.received_quantity AS receivedQuantity, d.unit, d.expected_arrival AS expectedArrival, d.supplier,
   d.status, d.received_at AS receivedAt, d.po_id AS poId, d.notes, d.created_at AS createdAt, d.updated_at AS updatedAt,
-  p.mime_type AS proofMimeType, p.file_name AS proofFileName, p.created_at AS proofCreatedAt`;
+  p.mime_type AS proofMimeType, p.file_name AS proofFileName, p.created_at AS proofCreatedAt,
+  r.mime_type AS receiptMimeType, r.file_name AS receiptFileName, r.created_at AS receiptCreatedAt`;
 
 const from = `FROM incoming_deliveries d
-  LEFT JOIN po_proofs p ON p.account_id = d.account_id AND p.po_id = d.po_id`;
+  LEFT JOIN po_proofs p ON p.account_id = d.account_id AND p.po_id = d.po_id
+  LEFT JOIN delivery_receipts r ON r.account_id = d.account_id AND r.delivery_id = d.id`;
 
 function mapDelivery(row) {
   if (!row) return null;
-  const { proofMimeType, proofFileName, proofCreatedAt, ...delivery } = row;
+  const { proofMimeType, proofFileName, proofCreatedAt, receiptMimeType, receiptFileName, receiptCreatedAt, ...delivery } = row;
   return {
     ...delivery,
     proof: proofMimeType ? { mimeType: proofMimeType, fileName: proofFileName, createdAt: proofCreatedAt } : null,
+    receipt: receiptMimeType ? { mimeType: receiptMimeType, fileName: receiptFileName, createdAt: receiptCreatedAt } : null,
   };
 }
 
@@ -100,17 +103,23 @@ export function updateDelivery(db, accountId, id, input, now, correctionNote = '
   })();
 }
 
-/** Receive a delivery exactly once, adding its quantity to on-hand stock in the same transaction. */
-export function receiveDelivery(db, accountId, id, now) {
+/** Receive a delivery exactly once with the confirmed quantity and a receipt picture. */
+export function receiveDelivery(db, accountId, id, now, { quantity, proof } = {}) {
   return db.transaction(() => {
     const delivery = getDelivery(db, accountId, id);
     if (!delivery) return null;
     if (delivery.status === 'received') return { delivery, alreadyReceived: true };
+    const receivedQuantity = quantity == null ? delivery.quantity : Number(quantity);
+    if (!Number.isInteger(receivedQuantity) || receivedQuantity <= 0 || receivedQuantity > MAX_QUANTITY) throw fail('Received quantity must be a whole number greater than 0.');
+    if (!proof?.data?.length) throw fail('Upload a picture of proof that the delivery was received.');
     const inventory = db.prepare('SELECT id, quantity, unit FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, delivery.itemSku);
     if (!inventory) throw fail('The mapped inventory item no longer exists.', 409);
     if (String(inventory.unit).toLowerCase() !== String(delivery.unit).toLowerCase()) throw fail(`Unit must match inventory (${inventory.unit}) before receiving.`, 409);
-    db.prepare('UPDATE incoming_deliveries SET status=\'received\', received_at=?, updated_at=? WHERE account_id=? AND id=?').run(now, now, accountId, id);
-    db.prepare('UPDATE inventory SET quantity=quantity+?, updated_at=? WHERE account_id=? AND id=?').run(delivery.quantity, now, accountId, inventory.id);
+    db.prepare('UPDATE incoming_deliveries SET status=\'received\', received_at=?, received_quantity=?, updated_at=? WHERE account_id=? AND id=?').run(now, receivedQuantity, now, accountId, id);
+    db.prepare('UPDATE inventory SET quantity=quantity+?, updated_at=? WHERE account_id=? AND id=?').run(receivedQuantity, now, accountId, inventory.id);
+    db.prepare(`INSERT INTO delivery_receipts(account_id,delivery_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)
+      ON CONFLICT(account_id,delivery_id) DO UPDATE SET mime_type=excluded.mime_type, file_name=excluded.file_name, data=excluded.data, created_at=excluded.created_at`)
+      .run(accountId, id, proof.mimeType || 'image/jpeg', proof.fileName || '', proof.data, now);
     return { delivery: getDelivery(db, accountId, id), alreadyReceived: false };
   })();
 }

@@ -1194,6 +1194,9 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
 .requirement-row select,
 .requirement-row input { min-width: 0; }
 
+.receiving-shell { width: min(1000px, 100%); }
+.receiving-shell .app-head { margin-bottom: 20px; }
+
 .delivery-row {
   display: flex;
   align-items: center;

@@ -34,7 +34,7 @@ test('migration adds suppliers to saved POs and flags older messages missing the
     assert.equal(db.prepare("SELECT po_state FROM emails WHERE message_id='po'").get().po_state, 'pending_review');
     assert.equal(clearSavedEmails(db, 'a', '2026-01-04T00:00:00.000Z'), 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emails').get().count, 1);
-    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 14);
+    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 15);
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inventory'").get());
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_runs'").get());
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_requirements'").get());
@@ -42,6 +42,8 @@ test('migration adds suppliers to saved POs and flags older messages missing the
     assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'item_definitions'").get(), undefined);
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_items'").get());
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'po_proofs'").get());
+    assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'delivery_receipts'").get());
+    assert.ok(db.prepare("SELECT name FROM pragma_table_info('incoming_deliveries') WHERE name = 'received_quantity'").get());
   } finally {
     loaded?.db.close();
     loaded?.releaseInstanceLock();

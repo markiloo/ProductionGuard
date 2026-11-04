@@ -176,6 +176,16 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Block item, quantity, and status edits on received deliveries and direct stock corrections to inventory editing.
 - [x] Validate delivery quantity, unit, and expected arrival date.
 
+## Receiving station update
+
+- [x] Expose a restricted interface at `/deliveries` that lists only incoming and received deliveries.
+- [x] Allow only receiving a delivery and viewing its receipt picture in the restricted interface; no adds, edits, inventory, production, or review actions.
+- [x] Ask for the confirmed received quantity on receipt, prefilled with the planned quantity and allowing missing or extra counts.
+- [x] Require a JPEG, PNG, or WebP receipt picture (max 5 MB) when receiving and store it locally.
+- [x] Increase on-hand stock by the confirmed quantity exactly once and keep the planned quantity for comparison.
+- [x] Show the confirmed quantity and receipt picture on received deliveries in both the main Deliveries view and the restricted interface.
+- [x] Add regression tests for confirmed-quantity receiving, receipt storage, exactly-once stock, and reset cleanup.
+
 ## PO workflow update
 
 - [x] Allow Pending Review → Approved or Rejected.

@@ -305,7 +305,7 @@ function SettingsView({ status, sender, setSender, onAdd, onRemove, busy, timeZo
         <div>
           <p className="eyebrow">Danger zone</p>
           <h3 id="clear-data-title">Clear all data</h3>
-          <p className="settings-copy">Delete all local test data for this account: PO requests and review history, incoming proof pictures, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.</p>
+          <p className="settings-copy">Delete all local test data for this account: PO requests and review history, incoming proof and receipt pictures, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.</p>
         </div>
         <button type="button" className="button button-danger" onClick={onClearAllData} disabled={busy}>Clear all data…</button>
       </section>
@@ -975,11 +975,13 @@ function DeliveryRow({ delivery, onEdit, onReceive, busy }) {
           <span className={`status-chip ${received ? 'completed' : 'scheduled'}`}>{received ? 'Received' : 'Incoming'}</span>
           {delivery.poId ? <span className="delivery-po">{delivery.poId}</span> : <span className="delivery-po">Manual</span>}
           {delivery.proof ? <span className="status-chip valid">Proof</span> : null}
+          {delivery.receipt ? <span className="status-chip valid">Receipt</span> : null}
         </div>
         <span className="delivery-meta">{delivery.supplier || 'No supplier'} · arrives {scheduleDate(delivery.expectedArrival)}</span>
       </div>
       <div className="delivery-side">
-        <span className="inventory-qty">{delivery.quantity}<small>{delivery.unit}</small></span>
+        <span className="inventory-qty">{received ? delivery.receivedQuantity ?? delivery.quantity : delivery.quantity}<small>{delivery.unit}</small></span>
+        {received && delivery.receivedQuantity != null && delivery.receivedQuantity !== delivery.quantity ? <span className="inventory-updated">Planned {delivery.quantity} {delivery.unit}</span> : null}
         {received ? <time className="inventory-updated" dateTime={delivery.receivedAt}>Received {shortDate(delivery.receivedAt)}</time> : null}
       </div>
       <div className="delivery-actions">
@@ -1004,6 +1006,7 @@ function DeliveriesView({ deliveries, onAdd, onEdit, onReceive, busy }) {
         <div><p className="eyebrow">Supply</p><h2 id="deliveries-title">Incoming deliveries</h2></div>
         <div className="record-actions">
           <span className="count">{deliveries ? `${deliveries.length} ${deliveries.length === 1 ? 'delivery' : 'deliveries'}` : '—'}</span>
+          <a className="text-link" href="/deliveries" target="_blank" rel="noreferrer">Receiving view ↗</a>
           <button type="button" className="button button-primary button-small" onClick={onAdd}>Add delivery</button>
         </div>
       </header>
@@ -1162,6 +1165,96 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
           <button type="submit" className="button button-primary" disabled={busy || (received && !proofFile)}>
             {busy ? 'Saving…' : received ? 'Save proof' : editing ? 'Save changes' : 'Add delivery'}
           </button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+function ReceiveDeliveryDialog({ delivery, busy, onClose, onConfirm }) {
+  const dialogRef = useSheetDialog(onClose);
+  const [quantity, setQuantity] = useState(String(delivery.quantity ?? 1));
+  const [proofFile, setProofFile] = useState(null);
+  const [proofPreview, setProofPreview] = useState('');
+  const [formError, setFormError] = useState('');
+
+  useEffect(() => () => { if (proofPreview) globalThis.URL.revokeObjectURL(proofPreview); }, [proofPreview]);
+
+  function chooseProof(event) {
+    const file = event.target.files?.[0] || null;
+    setFormError('');
+    if (!file) {
+      setProofFile(null);
+      setProofPreview('');
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setFormError('Choose a JPEG, PNG, or WebP picture.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setFormError('Receipt pictures must be 5 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+    setProofFile(file);
+    setProofPreview(globalThis.URL.createObjectURL(file));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    setFormError('');
+    const received = Number(quantity);
+    if (!Number.isInteger(received) || received <= 0) {
+      setFormError('Enter the confirmed received quantity.');
+      return;
+    }
+    if (!proofFile) {
+      setFormError('Upload a picture of proof that the delivery was received.');
+      return;
+    }
+    try {
+      await onConfirm(received, proofFile);
+    } catch (failure) {
+      setFormError(failure.message);
+    }
+  }
+
+  return (
+    <dialog ref={dialogRef} className="detail delivery-dialog" aria-labelledby="receive-dialog-title">
+      <header className="detail-head">
+        <div><p className="eyebrow">Incoming supply</p><h2 id="receive-dialog-title">Receive delivery</h2></div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close receive form" disabled={busy}>×</button>
+      </header>
+      <form className="detail-body" onSubmit={submit}>
+        <p className="field-hint">Confirm the quantity physically received. If items are missing or extra, enter the actual count; stock will use this quantity.</p>
+        <dl className="po-grid" aria-label="Delivery being received">
+          <div className="po-field"><dt>Item SKU</dt><dd className="mono">{delivery.itemSku}</dd></div>
+          <div className="po-field"><dt>Planned quantity</dt><dd>{delivery.quantity} {delivery.unit}</dd></div>
+          <div className="po-field"><dt>Supplier</dt><dd>{delivery.supplier || '—'}</dd></div>
+          <div className="po-field"><dt>Expected arrival</dt><dd>{delivery.expectedArrival}</dd></div>
+          {delivery.poId ? <div className="po-field"><dt>PO</dt><dd className="mono">{delivery.poId}</dd></div> : null}
+        </dl>
+        <div className="form-grid">
+          <div className="field field-wide">
+            <label htmlFor="receive-quantity">Confirmed received quantity ({delivery.unit})</label>
+            <input id="receive-quantity" type="number" min="1" step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} required autoFocus />
+            {Number(quantity) !== delivery.quantity && Number(quantity) > 0 ? (
+              <p className="field-hint">Planned {delivery.quantity} {delivery.unit}; stock will increase by the confirmed quantity.</p>
+            ) : null}
+          </div>
+          <div className="field field-wide">
+            <label htmlFor="receive-proof">Receipt picture</label>
+            <input id="receive-proof" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseProof} required />
+            <p className="field-hint">JPEG, PNG, or WebP up to 5 MB. Stored locally as proof of receipt.</p>
+            {proofPreview ? <img className="proof-preview" src={proofPreview} alt="Selected receipt preview" /> : null}
+          </div>
+        </div>
+        {formError ? <p className="form-error" role="alert">{formError}</p> : null}
+        <div className="dialog-actions">
+          <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Receiving…' : 'Confirm receipt'}</button>
         </div>
       </form>
     </dialog>
@@ -1638,6 +1731,8 @@ export function App() {
   const [deliveryRevision, setDeliveryRevision] = useState(0);
   const [deliveryDraft, setDeliveryDraft] = useState(null);
   const [deliveryBusy, setDeliveryBusy] = useState(false);
+  const [receivingDelivery, setReceivingDelivery] = useState(null);
+  const [receiveBusy, setReceiveBusy] = useState(false);
   const refreshSequence = useRef(0);
   const tabsRef = useRef(null);
   const [tabIndicator, setTabIndicator] = useState(null);
@@ -1970,7 +2065,7 @@ export function App() {
   };
 
   const clearAllData = () => {
-    if (!globalThis.confirm('Clear ALL local data for this account?\n\nThis deletes PO requests and review history, incoming proof pictures, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.')) return;
+    if (!globalThis.confirm('Clear ALL local data for this account?\n\nThis deletes PO requests and review history, incoming proof and receipt pictures, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.')) return;
     action(async () => {
       await api('/api/reset', { method: 'POST', body: JSON.stringify({ confirm: true }) });
       setSelected(null);
@@ -2144,18 +2239,34 @@ export function App() {
     }
   }
 
-  async function receiveDelivery(delivery) {
-    if (!globalThis.confirm(`Receive ${delivery.quantity} ${delivery.unit} of ${delivery.itemSku}? This adds the quantity to on-hand stock once.`)) return;
-    setDeliveryBusy(true);
+  function startReceive(delivery) {
+    setReceivingDelivery(delivery);
+  }
+
+  async function confirmReceive(quantity, file) {
+    if (!receivingDelivery) return;
+    setReceiveBusy(true);
+    setError('');
     try {
-      const result = await api(`/api/deliveries/${encodeURIComponent(delivery.id)}/receive`, { method: 'POST', body: '{}' });
-      setNotice(result.alreadyReceived ? 'This delivery was already received; stock was not added again.' : 'Delivery received and stock updated.');
+      const result = await api(`/api/deliveries/${encodeURIComponent(receivingDelivery.id)}/receive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type,
+          'X-File-Name': encodeURIComponent(file.name || 'receipt'),
+          'X-Received-Quantity': String(quantity),
+        },
+        body: file,
+      });
+      const unit = receivingDelivery.unit;
+      setReceivingDelivery(null);
+      setNotice(result.alreadyReceived ? 'This delivery was already received; stock was not added again.' : `Received ${quantity} ${unit}. Stock updated.`);
       setDeliveryRevision((revision) => revision + 1);
       setInventoryRevision((revision) => revision + 1);
     } catch (failure) {
       setError(failure.message);
+      throw failure;
     } finally {
-      setDeliveryBusy(false);
+      setReceiveBusy(false);
     }
   }
 
@@ -2307,7 +2418,7 @@ export function App() {
           </div>
         </>
       ) : view === 'deliveries' ? (
-        <DeliveriesView deliveries={deliveries} onAdd={openNewDelivery} onEdit={openDelivery} onReceive={receiveDelivery} busy={deliveryBusy} />
+        <DeliveriesView deliveries={deliveries} onAdd={openNewDelivery} onEdit={openDelivery} onReceive={startReceive} busy={deliveryBusy} />
       ) : view === 'inventory' ? (
         <InventoryView items={inventory} onAdd={openNewInventoryItem} onEdit={openInventoryItem} />
       ) : view === 'assemblies' ? (
@@ -2350,8 +2461,163 @@ export function App() {
       {deliveryDraft ? (
         <DeliveryDialog draft={deliveryDraft} skuOptions={inventoryOptions} busy={deliveryBusy} onClose={() => { if (!deliveryBusy) setDeliveryDraft(null); }} onSave={saveDelivery} />
       ) : null}
+      {receivingDelivery ? (
+        <ReceiveDeliveryDialog delivery={receivingDelivery} busy={receiveBusy} onClose={() => { if (!receiveBusy) setReceivingDelivery(null); }} onConfirm={confirmReceive} />
+      ) : null}
     </main>
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+function ReceivingApp() {
+  const [status, setStatus] = useState(null);
+  const [deliveries, setDeliveries] = useState(null);
+  const [error, setError] = useState('');
+  const [receiving, setReceiving] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    try {
+      const current = await api('/api/status');
+      setStatus(current);
+      if (current.auth.connected) {
+        const data = await api('/api/deliveries');
+        setDeliveries(data.items);
+      } else {
+        setDeliveries([]);
+      }
+    } catch (failure) {
+      setError(failure.message);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  async function confirmReceive(quantity, file) {
+    if (!receiving) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/api/deliveries/${encodeURIComponent(receiving.id)}/receive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type,
+          'X-File-Name': encodeURIComponent(file.name || 'receipt'),
+          'X-Received-Quantity': String(quantity),
+        },
+        body: file,
+      });
+      setReceiving(null);
+      await load();
+    } catch (failure) {
+      setError(failure.message);
+      throw failure;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const incoming = deliveries ? deliveries.filter((delivery) => delivery.status === 'incoming').length : 0;
+
+  return (
+    <main className="shell receiving-shell">
+      <header className="app-head">
+        <Brand />
+        <span className="eyebrow">Receiving station</span>
+      </header>
+      {error ? (
+        <div className="alert" role="alert">
+          <p className="alert-message">{error}</p>
+          <button type="button" className="icon-button" onClick={() => setError('')} aria-label="Dismiss">×</button>
+        </div>
+      ) : null}
+
+      {!status ? (
+        <section className="panel loading-card" role="status">
+          <span className="spinner" aria-hidden="true" />
+          <div><h2>Loading receiving…</h2><p>Reading local deliveries.</p></div>
+        </section>
+      ) : !status.auth.connected ? (
+        <section className="panel setup">
+          <div className="setup-copy">
+            <p className="eyebrow">Receiving station</p>
+            <h2>Connect PO Checker first</h2>
+            <p className="lede">Open the main dashboard, connect the Gmail account, and set up deliveries before using this receiving interface.</p>
+          </div>
+        </section>
+      ) : (
+        <section className="panel record-panel deliveries" aria-labelledby="receiving-title">
+          <header className="panel-head record-head">
+            <div><p className="eyebrow">Incoming supply</p><h2 id="receiving-title">Deliveries</h2></div>
+            <span className="count">{deliveries ? `${deliveries.length} total` : '—'}</span>
+          </header>
+          {deliveries === null ? (
+            <div className="record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading deliveries…</div>
+          ) : (
+            <>
+              <div className="record-summary">
+                <div><span className="metric-label">Awaiting receipt</span><strong>{incoming}</strong></div>
+                <div><span className="metric-label">Received</span><strong>{deliveries.length - incoming}</strong></div>
+                <div><span className="metric-label">Total</span><strong>{deliveries.length}</strong></div>
+              </div>
+              <div className="record-list">
+                {deliveries.map((delivery) => {
+                  const received = delivery.status === 'received';
+                  const receivedQuantity = delivery.receivedQuantity ?? delivery.quantity;
+                  return (
+                    <div className="delivery-row" key={delivery.id}>
+                      <div className="delivery-main">
+                        <div className="delivery-top">
+                          <strong>{delivery.itemSku}</strong>
+                          <span className={`status-chip ${received ? 'completed' : 'scheduled'}`}>{received ? 'Received' : 'Incoming'}</span>
+                          {delivery.poId ? <span className="delivery-po">{delivery.poId}</span> : <span className="delivery-po">Manual</span>}
+                        </div>
+                        <span className="delivery-meta">{delivery.supplier || 'No supplier'} · arrives {scheduleDate(delivery.expectedArrival)}</span>
+                        {received ? (
+                          <span className="delivery-meta">
+                            Received {receivedQuantity} {delivery.unit}
+                            {delivery.receivedQuantity != null && delivery.receivedQuantity !== delivery.quantity ? ` (planned ${delivery.quantity} ${delivery.unit})` : ''}
+                            {' '}on {fullDate(delivery.receivedAt)}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="delivery-side">
+                        <span className="inventory-qty">{received ? receivedQuantity : delivery.quantity}<small>{delivery.unit}</small></span>
+                      </div>
+                      <div className="delivery-actions">
+                        {received ? (
+                          delivery.receipt
+                            ? <a className="text-link" href={`/api/deliveries/${encodeURIComponent(delivery.id)}/receipt?v=${encodeURIComponent(delivery.receipt.createdAt)}`} target="_blank" rel="noreferrer">Receipt ↗</a>
+                            : <span className="muted">No receipt</span>
+                        ) : (
+                          <button type="button" className="button button-primary button-small" onClick={() => setReceiving(delivery)} disabled={busy}>Receive</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {!deliveries.length ? (
+                  <div className="empty">
+                    <span className="empty-mark" aria-hidden="true">IN</span>
+                    <strong>No deliveries</strong>
+                    <p>Incoming deliveries will appear here for receiving.</p>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {receiving ? (
+        <ReceiveDeliveryDialog delivery={receiving} busy={busy} onClose={() => { if (!busy) setReceiving(null); }} onConfirm={confirmReceive} />
+      ) : null}
+    </main>
+  );
+}
+
+const receivingPath = (globalThis.location?.pathname || '').replace(/\/+$/, '') === '/deliveries';
+createRoot(document.getElementById('root')).render(receivingPath ? <ReceivingApp /> : <App />);
