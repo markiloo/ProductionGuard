@@ -9,6 +9,7 @@ export function resetAccountData(db, accountId, clearedAt) {
       proofs: db.prepare('DELETE FROM po_proofs WHERE account_id=?').run(accountId).changes,
       emails: db.prepare('DELETE FROM emails WHERE account_id=?').run(accountId).changes,
       deliveries: db.prepare('DELETE FROM incoming_deliveries WHERE account_id=?').run(accountId).changes,
+      deliveryProofs: db.prepare('DELETE FROM delivery_proofs WHERE account_id=?').run(accountId).changes,
       receipts: db.prepare('DELETE FROM delivery_receipts WHERE account_id=?').run(accountId).changes,
       inventory: db.prepare('DELETE FROM inventory WHERE account_id=?').run(accountId).changes,
       requirements: db.prepare('DELETE FROM production_requirements WHERE account_id=?').run(accountId).changes,

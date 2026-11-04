@@ -32,7 +32,7 @@ The **Assemblies** view, next to Production, defines what the plant assembles. E
 
 ## Incoming deliveries
 
-The **Deliveries** view lists incoming and received deliveries with their item SKU, quantity, expected arrival, supplier, and linked PO. Add or edit an unreceived delivery manually; ordering a PO creates one linked delivery automatically. The delivery edit view previews the linked incoming proof and lets you replace it; received linked deliveries keep a **Proof** action for corrections. **Receive** asks you to confirm the quantity physically received and requires a receipt picture; stock increases by the confirmed amount, so missing or extra items are recorded correctly. Received deliveries stay visible with their confirmed quantity and receipt, and their delivery fields cannot be edited; correct stock through inventory instead.
+The **Deliveries** view lists incoming and received deliveries with their item SKU, quantity, expected arrival, supplier, and linked PO. Adding a delivery manually asks for an incoming proof picture, which is stored locally and can be replaced from the edit view. Ordering a PO creates one linked delivery automatically. The delivery edit view previews the linked incoming proof and lets you replace it; received linked deliveries keep a **Proof** action for corrections. **Receive** asks you to confirm the quantity physically received and requires a receipt picture; stock increases by the confirmed amount, so missing or extra items are recorded correctly. Received deliveries stay visible with their confirmed quantity and receipt, and their delivery fields cannot be edited; correct stock through inventory instead.
 
 ## Receiving station
 

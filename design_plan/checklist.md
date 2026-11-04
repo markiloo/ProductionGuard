@@ -175,6 +175,8 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Make receiving idempotent so retries, double clicks, and refreshes never add stock twice.
 - [x] Block item, quantity, and status edits on received deliveries and direct stock corrections to inventory editing.
 - [x] Validate delivery quantity, unit, and expected arrival date.
+- [x] Require an incoming proof picture when manually adding a delivery and store it with the delivery.
+- [x] Show and allow replacing a manual delivery's incoming proof from its edit view.
 
 ## Receiving station update
 

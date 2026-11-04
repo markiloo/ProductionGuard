@@ -1089,6 +1089,10 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
       setProofError('Choose a new proof picture to save.');
       return;
     }
+    if (!received && !draft.poId && (!editing || !draft.proof) && !proofFile) {
+      setProofError('Upload a picture of proof that the delivery is incoming.');
+      return;
+    }
     if (!received && editing && expectedArrival !== draft.expectedArrival && !correctionNote.trim()) {
       setFormError('Enter a note for the delivery date change.');
       return;
@@ -1100,7 +1104,11 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
     }
   }
 
-  const proofUrl = draft.proof ? `/api/pos/${encodeURIComponent(draft.poId)}/proof?v=${encodeURIComponent(draft.proof.createdAt)}` : '';
+  const proofUrl = draft.proof
+    ? (draft.poId
+      ? `/api/pos/${encodeURIComponent(draft.poId)}/proof?v=${encodeURIComponent(draft.proof.createdAt)}`
+      : `/api/deliveries/${encodeURIComponent(draft.id)}/proof?v=${encodeURIComponent(draft.proof.createdAt)}`)
+    : '';
 
   return (
     <dialog ref={dialogRef} className="detail delivery-dialog" aria-labelledby="delivery-dialog-title">
@@ -1145,19 +1153,21 @@ function DeliveryDialog({ draft, skuOptions, busy, onClose, onSave }) {
               <p className="field-hint">Saved in the PO review history when the expected arrival changes.</p>
             </div>
           ) : null}
-          {draft.poId ? (
-            <div className="field field-wide">
-              <label htmlFor="delivery-proof">Incoming proof</label>
-              {proofPreview ? (
-                <img className="proof-preview" src={proofPreview} alt="Selected proof preview" />
-              ) : proofUrl ? (
-                <img className="proof-image" src={proofUrl} alt="Proof that the order is incoming" />
-              ) : <p className="muted">No proof picture yet.</p>}
-              <input id="delivery-proof" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseProof} />
-              <p className="field-hint">{received ? 'Choose a new picture to correct the existing proof.' : 'Choose a new picture to replace the current proof.'}</p>
-              {proofError ? <p className="form-error" role="alert">{proofError}</p> : null}
-            </div>
-          ) : null}
+          <div className="field field-wide">
+            <label htmlFor="delivery-proof">Incoming proof{draft.poId ? '' : (!editing || !draft.proof) ? ' (required)' : ''}</label>
+            {proofPreview ? (
+              <img className="proof-preview" src={proofPreview} alt="Selected proof preview" />
+            ) : proofUrl ? (
+              <img className="proof-image" src={proofUrl} alt="Proof that the order is incoming" />
+            ) : <p className="muted">No proof picture yet.</p>}
+            <input id="delivery-proof" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseProof} required={!draft.poId && (!editing || !draft.proof)} />
+            <p className="field-hint">
+              {!draft.poId
+                ? (proofUrl ? 'Choose a new picture to replace the current proof.' : 'Required: upload proof that this manual delivery is incoming.')
+                : (received ? 'Choose a new picture to correct the existing proof.' : 'Choose a new picture to replace the current proof.')}
+            </p>
+            {proofError ? <p className="form-error" role="alert">{proofError}</p> : null}
+          </div>
         </div>
         {formError ? <p className="form-error" role="alert">{formError}</p> : null}
         <div className="dialog-actions">
@@ -2215,12 +2225,41 @@ export function App() {
       const editing = Boolean(deliveryDraft?.id);
       const received = deliveryDraft?.status === 'received';
       if (received && !proofFile) throw new Error('Choose a new proof picture to save.');
-      if (!received) {
-        const url = editing ? `/api/deliveries/${encodeURIComponent(deliveryDraft.id)}` : '/api/deliveries';
-        await api(url, { method: editing ? 'PUT' : 'POST', body: JSON.stringify({ ...values, correctionNote }) });
-      }
-      if (proofFile) {
-        if (!deliveryDraft?.poId) throw new Error('This delivery is not linked to an ordered PO.');
+      if (!editing) {
+        if (!proofFile) throw new Error('Upload a picture of proof that the delivery is incoming.');
+        const query = new globalThis.URLSearchParams({
+          itemSku: values.itemSku,
+          quantity: String(values.quantity),
+          unit: values.unit,
+          expectedArrival: values.expectedArrival,
+          supplier: values.supplier || '',
+          notes: values.notes || '',
+        });
+        await api(`/api/deliveries/manual?${query.toString()}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': proofFile.type,
+            'X-File-Name': encodeURIComponent(proofFile.name || 'proof'),
+          },
+          body: proofFile,
+        });
+      } else if (!received) {
+        await api(`/api/deliveries/${encodeURIComponent(deliveryDraft.id)}`, { method: 'PUT', body: JSON.stringify({ ...values, correctionNote }) });
+        if (proofFile) {
+          const proofUrl = deliveryDraft.poId
+            ? `/api/pos/${encodeURIComponent(deliveryDraft.poId)}/proof`
+            : `/api/deliveries/${encodeURIComponent(deliveryDraft.id)}/proof`;
+          await api(proofUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': proofFile.type,
+              'X-File-Name': encodeURIComponent(proofFile.name || 'proof'),
+            },
+            body: proofFile,
+          });
+        }
+      } else {
+        if (!deliveryDraft.poId) throw new Error('This received delivery is not linked to an ordered PO.');
         await api(`/api/pos/${encodeURIComponent(deliveryDraft.poId)}/proof`, {
           method: 'PUT',
           headers: {
@@ -2231,7 +2270,7 @@ export function App() {
         });
       }
       setDeliveryDraft(null);
-      setNotice(received ? 'Proof picture updated.' : proofFile ? 'Delivery and proof saved.' : editing ? 'Delivery saved.' : 'Delivery added.');
+      setNotice(received ? 'Proof picture updated.' : proofFile ? (editing ? 'Delivery and proof saved.' : 'Delivery added with incoming proof.') : editing ? 'Delivery saved.' : 'Delivery added.');
       setDeliveryRevision((revision) => revision + 1);
       setInventoryRevision((revision) => revision + 1);
     } finally {

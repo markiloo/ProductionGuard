@@ -32,16 +32,17 @@ test('reset clears one account business data, keeps settings, and isolates other
     db.prepare('INSERT INTO po_events(account_id,id,po_id,type,reason,created_at) VALUES(?,?,?,?,?,?)').run('acct-a', 'event-a', 'PO-0001', 'approved', '', now);
     db.prepare('INSERT INTO po_proofs(account_id,po_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)').run('acct-a', 'PO-0001', 'image/png', 'proof.png', Buffer.from([1, 2, 3]), now);
     db.prepare('INSERT INTO delivery_receipts(account_id,delivery_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)').run('acct-a', 'del-a', 'image/png', 'receipt.png', Buffer.from([4, 5, 6]), now);
+    db.prepare('INSERT INTO delivery_proofs(account_id,delivery_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)').run('acct-a', 'del-a', 'image/png', 'incoming.png', Buffer.from([7, 8, 9]), now);
     setPlantTimeZone(db, 'Asia/Manila');
 
     const result = resetAccountData(db, 'acct-a', '2026-11-04T00:00:00.000Z');
     assert.deepEqual(result, {
-      events: 1, proofs: 1, emails: 1, deliveries: 1, receipts: 1, inventory: 1, requirements: 1, runs: 1,
+      events: 1, proofs: 1, emails: 1, deliveries: 1, deliveryProofs: 1, receipts: 1, inventory: 1, requirements: 1, runs: 1,
       productionItemRequirements: 1, productionItems: 1,
       clearedAt: '2026-11-04T00:00:00.000Z',
     });
 
-    for (const table of ['emails', 'po_events', 'po_proofs', 'inventory', 'incoming_deliveries', 'delivery_receipts', 'production_runs', 'production_requirements', 'production_items', 'production_item_requirements']) {
+    for (const table of ['emails', 'po_events', 'po_proofs', 'inventory', 'incoming_deliveries', 'delivery_proofs', 'delivery_receipts', 'production_runs', 'production_requirements', 'production_items', 'production_item_requirements']) {
       assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE account_id=?`).get('acct-a').count, 0, `${table} is cleared for acct-a`);
     }
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM senders WHERE account_id=?').get('acct-a').count, 1, 'approved senders survive the reset');

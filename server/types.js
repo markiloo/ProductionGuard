@@ -105,7 +105,7 @@
  * @property {string|null} receivedAt UTC receipt time, or null while incoming.
  * @property {string|null} poId Linked PO ID for an ordered PO, or null for a manual delivery.
  * @property {string} notes Optional local notes.
- * @property {PoProof|null} proof Incoming proof metadata for a linked PO, or null.
+ * @property {PoProof|null} proof Incoming proof metadata for a manual delivery or its linked PO, or null.
  * @property {DeliveryReceipt|null} receipt Receipt picture metadata after receiving, or null.
  * @property {string} createdAt UTC creation timestamp.
  * @property {string} updatedAt UTC last-edit timestamp.

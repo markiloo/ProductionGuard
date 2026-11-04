@@ -10,7 +10,7 @@ import { listInventory, createInventoryItem, updateInventoryItem, deleteInventor
 import { listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
 import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail, setPoProof, schedulePo } from './pos.js';
-import { listDeliveries, createDelivery, updateDelivery, receiveDelivery, parseDeliveryInput } from './deliveries.js';
+import { listDeliveries, createDelivery, createDeliveryWithProof, updateDelivery, receiveDelivery, setDeliveryProof, getDeliveryProof, parseDeliveryInput } from './deliveries.js';
 import { resetAccountData } from './reset.js';
 import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
 
@@ -351,6 +351,45 @@ app.post('/api/pos/:poId/:action', (req, res) => {
 app.get('/api/deliveries', (_req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   res.json({ items: listDeliveries(db, aid) });
+});
+
+app.post('/api/deliveries/manual', express.raw({ type: [...PROOF_TYPES], limit: '5mb' }), (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const proof = readProof(req, res); if (!proof) return;
+  try {
+    const input = parseDeliveryInput(db, aid, {
+      itemSku: req.query.itemSku,
+      quantity: req.query.quantity,
+      unit: req.query.unit,
+      expectedArrival: req.query.expectedArrival,
+      supplier: req.query.supplier,
+      notes: req.query.notes,
+    });
+    res.status(201).json({ ok: true, item: createDeliveryWithProof(db, aid, input, proof, isoNow()) });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not add the delivery.');
+  }
+});
+
+app.put('/api/deliveries/:id/proof', express.raw({ type: [...PROOF_TYPES], limit: '5mb' }), (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const proof = readProof(req, res); if (!proof) return;
+  try {
+    const item = setDeliveryProof(db, aid, req.params.id, proof, isoNow());
+    if (!item) return res.status(404).json({ error: 'Delivery not found.' });
+    res.json({ ok: true, item });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not update the delivery proof.');
+  }
+});
+
+app.get('/api/deliveries/:id/proof', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const row = getDeliveryProof(db, aid, req.params.id);
+  if (!row) return res.status(404).json({ error: 'Proof picture not found.' });
+  res.set('Content-Type', row.mime_type);
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.send(row.data);
 });
 
 app.post('/api/deliveries', (req, res) => {

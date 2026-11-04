@@ -187,6 +187,15 @@ export function migrate() {
        created_at TEXT NOT NULL,
        PRIMARY KEY(account_id, delivery_id)
      );`,
+    `CREATE TABLE delivery_proofs (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       delivery_id TEXT NOT NULL,
+       mime_type TEXT NOT NULL,
+       file_name TEXT NOT NULL DEFAULT '',
+       data BLOB NOT NULL,
+       created_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, delivery_id)
+     );`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;

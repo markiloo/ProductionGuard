@@ -8,18 +8,30 @@ const MAX_NOTES = 500;
 const columns = `d.id, d.item_sku AS itemSku, d.quantity, d.received_quantity AS receivedQuantity, d.unit, d.expected_arrival AS expectedArrival, d.supplier,
   d.status, d.received_at AS receivedAt, d.po_id AS poId, d.notes, d.created_at AS createdAt, d.updated_at AS updatedAt,
   p.mime_type AS proofMimeType, p.file_name AS proofFileName, p.created_at AS proofCreatedAt,
+  dp.mime_type AS deliveryProofMimeType, dp.file_name AS deliveryProofFileName, dp.created_at AS deliveryProofCreatedAt,
   r.mime_type AS receiptMimeType, r.file_name AS receiptFileName, r.created_at AS receiptCreatedAt`;
 
 const from = `FROM incoming_deliveries d
   LEFT JOIN po_proofs p ON p.account_id = d.account_id AND p.po_id = d.po_id
+  LEFT JOIN delivery_proofs dp ON dp.account_id = d.account_id AND dp.delivery_id = d.id
   LEFT JOIN delivery_receipts r ON r.account_id = d.account_id AND r.delivery_id = d.id`;
 
 function mapDelivery(row) {
   if (!row) return null;
-  const { proofMimeType, proofFileName, proofCreatedAt, receiptMimeType, receiptFileName, receiptCreatedAt, ...delivery } = row;
+  const {
+    proofMimeType, proofFileName, proofCreatedAt,
+    deliveryProofMimeType, deliveryProofFileName, deliveryProofCreatedAt,
+    receiptMimeType, receiptFileName, receiptCreatedAt,
+    ...delivery
+  } = row;
+  const proof = proofMimeType
+    ? { mimeType: proofMimeType, fileName: proofFileName, createdAt: proofCreatedAt }
+    : deliveryProofMimeType
+      ? { mimeType: deliveryProofMimeType, fileName: deliveryProofFileName, createdAt: deliveryProofCreatedAt }
+      : null;
   return {
     ...delivery,
-    proof: proofMimeType ? { mimeType: proofMimeType, fileName: proofFileName, createdAt: proofCreatedAt } : null,
+    proof,
     receipt: receiptMimeType ? { mimeType: receiptMimeType, fileName: receiptFileName, createdAt: receiptCreatedAt } : null,
   };
 }
@@ -101,6 +113,39 @@ export function updateDelivery(db, accountId, id, input, now, correctionNote = '
     }
     return getDelivery(db, accountId, id);
   })();
+}
+
+/** Create one manual delivery together with its incoming proof picture. */
+export function createDeliveryWithProof(db, accountId, input, proof, now) {
+  if (!proof?.data?.length) throw fail('Upload a picture of proof that the delivery is incoming.');
+  return db.transaction(() => {
+    const delivery = createDelivery(db, accountId, input, now);
+    db.prepare('INSERT INTO delivery_proofs(account_id,delivery_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)')
+      .run(accountId, delivery.id, proof.mimeType || 'image/jpeg', proof.fileName || '', proof.data, now);
+    return getDelivery(db, accountId, delivery.id);
+  })();
+}
+
+/** Replace the incoming proof picture for a manual delivery. */
+export function setDeliveryProof(db, accountId, deliveryId, proof, now) {
+  if (!proof?.data?.length) throw fail('Upload a picture of proof that the delivery is incoming.');
+  const delivery = getDelivery(db, accountId, deliveryId);
+  if (!delivery) return null;
+  if (delivery.poId) throw fail('Linked deliveries use the PO incoming proof.', 409);
+  db.prepare(`INSERT INTO delivery_proofs(account_id,delivery_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)
+    ON CONFLICT(account_id,delivery_id) DO UPDATE SET mime_type=excluded.mime_type, file_name=excluded.file_name, data=excluded.data, created_at=excluded.created_at`)
+    .run(accountId, deliveryId, proof.mimeType || 'image/jpeg', proof.fileName || '', proof.data, now);
+  return getDelivery(db, accountId, deliveryId);
+}
+
+/** Read the incoming proof bytes for a delivery, falling back to its linked PO proof. */
+export function getDeliveryProof(db, accountId, deliveryId) {
+  const delivery = getDelivery(db, accountId, deliveryId);
+  if (!delivery) return null;
+  const row = db.prepare('SELECT mime_type, data FROM delivery_proofs WHERE account_id=? AND delivery_id=?').get(accountId, deliveryId);
+  if (row) return row;
+  if (delivery.poId) return db.prepare('SELECT mime_type, data FROM po_proofs WHERE account_id=? AND po_id=?').get(accountId, delivery.poId) || null;
+  return null;
 }
 
 /** Receive a delivery exactly once with the confirmed quantity and a receipt picture. */
