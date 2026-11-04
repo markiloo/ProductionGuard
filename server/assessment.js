@@ -89,7 +89,7 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
       }
     }
     for (const requirement of demand) if (requirement.scheduledDate <= date) total -= requirement.quantity;
-    if (includePo && arrival <= date) total += po.quantity;
+    if (includePo && arrival <= date && !po.quantityInStock) total += po.quantity;
     return total;
   }
 

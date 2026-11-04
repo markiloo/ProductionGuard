@@ -226,6 +226,7 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 - [x] Report *Potential Duplicate / Covered by Pending or Approved PO* with the covered amount and count each PO once.
 - [x] Show balances before and after the evaluated PO, with provisional contributions shown separately.
 - [x] Give unmapped, invalid, or unit-mismatched records *Manual Review Required* and no provisional coverage.
+- [x] Exclude an ordered PO's own linked delivery from its projection so its quantity is counted once, and cover the doubled-balance regression in the order test.
 
 ## Assessment verification update
 

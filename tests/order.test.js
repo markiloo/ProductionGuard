@@ -50,6 +50,17 @@ test('ordering an approved PO requires and stores an incoming proof picture', as
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM po_proofs WHERE account_id=? AND po_id=?').get(account, 'PO-0001').count, 1);
     assert.deepEqual(db.prepare('SELECT data FROM po_proofs WHERE account_id=? AND po_id=?').get(account, 'PO-0001').data, proof);
 
+    db.prepare('INSERT INTO production_runs(account_id,id,run_number,item,quantity,unit,status,scheduled_date,notes,production_item_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(account, 'prod-run-1', 'PR-0001', 'Assembled Unit', 1, 'units', 'scheduled', '2026-11-13', '', null, now, now);
+    db.prepare('INSERT INTO production_requirements(account_id,id,run_id,item_sku,quantity,unit,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)').run(account, 'prod-req-1', 'prod-run-1', 'SKU-0001', 10, 'units', 'outstanding', now, now);
+    const orderedAssessment = getPo(db, account, 'PO-0001', today).assessment;
+    assert.equal(orderedAssessment.decision, 'Recommended', 'the ordered PO own delivery is counted once');
+    assert.equal(orderedAssessment.requirement, 10);
+    assert.equal(orderedAssessment.difference, 0);
+    assert.deepEqual(orderedAssessment.balances.map((entry) => [entry.date, entry.before, entry.after]), [
+      ['2026-11-12', 0, 10],
+      ['2026-11-13', -10, 0],
+    ]);
+
     const deliveries = listDeliveries(db, account);
     assert.equal(deliveries.length, 1);
     assert.equal(deliveries[0].poId, 'PO-0001');

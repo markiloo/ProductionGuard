@@ -68,7 +68,8 @@ export function assessWithContext(context, po, today) {
   const key = sku.toLowerCase();
   const inventory = context.inventoryBySku.get(key) || null;
   const unit = inventory?.unit;
-  const deliveries = context.deliveries.filter((delivery) => delivery.itemSku.toLowerCase() === key);
+  const deliveries = context.deliveries.filter((delivery) => delivery.itemSku.toLowerCase() === key && delivery.poId !== po.poId);
+  const linkedDelivery = context.deliveries.find((delivery) => delivery.itemSku.toLowerCase() === key && delivery.poId === po.poId);
   const requirements = context.requirements.filter((requirement) => requirement.itemSku.toLowerCase() === key);
   const earlierPos = context.pos.filter((candidate) => {
     if (candidate.id === po.id) return false;
@@ -79,7 +80,14 @@ export function assessWithContext(context, po, today) {
     const order = String(candidate.receivedAt).localeCompare(String(po.receivedAt)) || String(candidate.poId).localeCompare(String(po.poId));
     return order < 0;
   }).map((candidate) => ({ poId: candidate.poId, quantity: candidate.quantity, arrival: candidate.arrival, state: candidate.state }));
-  return assessPo({ po, inventory, deliveries, requirements, earlierPos, today });
+  return assessPo({
+    po: { ...po, quantityInStock: linkedDelivery?.status === 'received' },
+    inventory,
+    deliveries,
+    requirements,
+    earlierPos,
+    today,
+  });
 }
 
 function summary(assessment) {
