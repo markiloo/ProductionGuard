@@ -19,7 +19,14 @@ The stack is Node.js ES modules, Express 5, React 19, Vite 6, Tailwind CSS v4 wi
 - `server/po.js` — `PO` subject matching and PO field parsing.
 - `server/rules.js` — Exact sender address normalization and validation.
 - `server/types.js` — JSDoc typedefs for API and data shapes.
-- `client/src/main.jsx` — The whole dashboard UI; `client/src/style.css` holds theme and layout CSS.
+- `client/src/main.jsx` — Entry point and route selection for the dashboard, receiving station, and production floor.
+- `client/src/DashboardApp.jsx` — Main dashboard state, data loading, and orchestration.
+- `client/src/apps/` — `ReceivingApp.jsx` and `ProductionRunsApp.jsx` standalone screens.
+- `client/src/views/` — Orders, Inventory, Production, Assemblies, Deliveries, and Settings panels.
+- `client/src/dialogs/` — Sheet dialogs for orders, inventory, production, deliveries, and floor progress.
+- `client/src/components/` — Shared UI atoms such as Brand, ThemeToggle, chips, ToastStack, ProductionRow, RunStrip, and SearchIcon.
+- `client/src/lib/` — `api.js`, `format.js`, and `constants.js`; `client/src/hooks/useSheetDialog.js` holds shared modal behavior.
+- `client/src/style.css` — Theme and layout CSS.
 - `tests/` — `node:test` suites (`*.test.js`) beside each other, not beside modules.
 - `design_plan/checklist.md` — Implementation checklist; `docs/API.md` — endpoint reference; `README.md` — setup, privacy, troubleshooting.
 - `dist/` is built output, `data/` holds the local database, lock, and encrypted credential, and `node_modules/` holds dependencies. All three are gitignored.
@@ -52,7 +59,7 @@ UI/UX work uses the imported `apple-design` skill at `.agents/skills/apple-desig
 - Keep SQL parameterized and scope every query to `account_id`.
 - Prefix client API calls with `/api`; the Vite dev server proxies them to port 4174.
 - Stored timestamps are UTC ISO strings; convert to local time only for display.
-- The dashboard is intentionally a single file with small local components. New UI work should stay consistent with that file and the existing CSS classes unless a refactor is explicitly requested.
+- Keep view components on the shared `.panel`, `.record-*`, `.button`, and `.field` patterns in `client/src/style.css`. Shared UI belongs in `client/src/components/`, standalone screens in `client/src/apps/`, and page orchestration stays in `client/src/DashboardApp.jsx`.
 - UI styling lives in `client/src/style.css` and uses CSS custom properties for color, type, spacing, and focus. The dashboard has explicit light and dark themes selected from the header (light is the default and the choice persists in `localStorage`), plus `prefers-reduced-motion`, `prefers-reduced-transparency`, and `prefers-contrast: more`. Keep new controls on the shared `.button`, `.field`, and `.panel` patterns and preserve visible keyboard focus.
 - Never log or commit credentials, tokens, or message bodies.
 
