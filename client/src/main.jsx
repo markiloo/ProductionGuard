@@ -656,7 +656,7 @@ function ProductionView({ runs, onAdd, onEdit }) {
         <div><p className="eyebrow">Schedule</p><h2 id="production-title">Production</h2></div>
         <div className="record-actions">
           <span className="count">{runs ? `${runs.length} ${runs.length === 1 ? 'run' : 'runs'}` : '—'}</span>
-          <a className="text-link" href="/production_runs" target="_blank" rel="noreferrer">Production floor view</a><button type="button" className="button button-primary button-small" onClick={onAdd}>Add run</button>
+          <a className="text-link" href="/production_runs" target="_blank" rel="noreferrer">Production floor view ↗</a><button type="button" className="button button-primary button-small" onClick={onAdd}>Add run</button>
         </div>
       </header>
       {runs === null ? (
