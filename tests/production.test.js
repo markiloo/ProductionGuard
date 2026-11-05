@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { parseProductionInput, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber } from '../server/production.js';
+import { listActiveProductionRuns, parseProductionInput, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber } from '../server/production.js';
 
 function store() {
   const db = new Database(':memory:');
@@ -112,4 +112,19 @@ test('production runs are account-scoped, ordered, and editable', () => {
   } finally {
     db.close();
   }
+});
+
+test('production floor includes today scheduled work and all in-progress runs only for this account', () => {
+  const db = store();
+  try {
+    const insert = db.prepare('INSERT INTO production_runs(account_id,id,run_number,item,quantity,unit,status,scheduled_date,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)');
+    for (const [id, status, date, account] of [
+      ['today', 'scheduled', '2026-11-05', 'a'], ['past', 'scheduled', '2026-11-04', 'a'],
+      ['future', 'scheduled', '2026-11-06', 'a'], ['active', 'in_progress', '2026-11-04', 'a'],
+      ['done', 'completed', '2026-11-05', 'a'], ['held', 'on_hold', '2026-11-05', 'a'],
+      ['other', 'in_progress', '2026-11-05', 'b'],
+    ]) insert.run(account, id, id, 'Assembly', 1, 'units', status, date, now, now);
+    assert.deepEqual(listActiveProductionRuns(db, 'a', '2026-11-05').map(run => run.id), ['active', 'today']);
+    assert.deepEqual(listActiveProductionRuns(db, 'a', '2026-11-06').map(run => run.id), ['active', 'future']);
+  } finally { db.close(); }
 });

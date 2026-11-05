@@ -210,3 +210,9 @@ export function nextProductionRunNumber(db, accountId) {
   }
   return `PR-${String(maximum + 1).padStart(4, '0')}`;
 }
+
+/** Today's scheduled work plus every in-progress run, scoped to the account. */
+export function listActiveProductionRuns(db, accountId, today) {
+  return listProductionRuns(db, accountId).filter((run) =>
+    run.status === 'in_progress' || (run.status === 'scheduled' && run.scheduledDate === today));
+}

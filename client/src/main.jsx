@@ -624,7 +624,7 @@ function ProductionRow({ run, onEdit }) {
         <span className="production-qty">{run.quantity}<small>{run.unit}</small></span>
         <time className="production-updated" dateTime={run.updatedAt} title={fullDate(run.updatedAt)}>Updated {shortDate(run.updatedAt)}</time>
       </div>
-      <button type="button" className="button button-ghost button-small production-edit" onClick={() => onEdit(run)} aria-label={`Edit ${run.runNumber}`}>Edit</button>
+      {onEdit ? <button type="button" className="button button-ghost button-small production-edit" onClick={() => onEdit(run)} aria-label={`Edit ${run.runNumber}`}>Edit</button> : null}
     </div>
   );
 }
@@ -640,7 +640,7 @@ function ProductionView({ runs, onAdd, onEdit }) {
         <div><p className="eyebrow">Schedule</p><h2 id="production-title">Production</h2></div>
         <div className="record-actions">
           <span className="count">{runs ? `${runs.length} ${runs.length === 1 ? 'run' : 'runs'}` : '—'}</span>
-          <button type="button" className="button button-primary button-small" onClick={onAdd}>Add run</button>
+          <a className="text-link" href="/production_runs" target="_blank" rel="noreferrer">Production floor view</a><button type="button" className="button button-primary button-small" onClick={onAdd}>Add run</button>
         </div>
       </header>
       {runs === null ? (
@@ -2658,5 +2658,55 @@ function ReceivingApp() {
   );
 }
 
-const receivingPath = (globalThis.location?.pathname || '').replace(/\/+$/, '') === '/deliveries';
-createRoot(document.getElementById('root')).render(receivingPath ? <ReceivingApp /> : <App />);
+function ProductionRunsApp() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let disposed = false;
+    let timer;
+    async function load() {
+      try {
+        const result = await api('/api/production_runs');
+        if (!disposed) { setData(result); setError(''); }
+      } catch (failure) {
+        if (!disposed) { setData(null); setError(failure.message); }
+      } finally {
+        if (!disposed) timer = setTimeout(load, 5000);
+      }
+    }
+    load();
+    return () => { disposed = true; clearTimeout(timer); };
+  }, []);
+  const inProgress = data?.items.filter((run) => run.status === 'in_progress') || [];
+  const scheduled = data?.items.filter((run) => run.status === 'scheduled') || [];
+  return (
+    <main className="shell production-floor">
+      <header className="app-head"><Brand /><span className="eyebrow">Production floor</span></header>
+      <section className="panel floor-overview" aria-labelledby="floor-title">
+        <div>
+          <p className="eyebrow">{data ? scheduleDate(data.today) : 'Daily schedule'}</p>
+          <h1 id="floor-title">Production runs</h1>
+          <p className="floor-description">Scheduled for today and all work in progress.</p>
+        </div>
+        <p className="floor-refresh">Refreshes every 5 seconds</p>
+      </section>
+      {error ? <div className="alert" role="alert">{error} Open the main dashboard to check the connection.</div> : null}
+      {!data ? (!error ? <div className="panel record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading production runs...</div> : null) : (
+        <div className="floor-sections">
+          {[{ title: 'In progress', runs: inProgress, empty: 'No runs are currently in progress.' },
+            { title: 'Scheduled today', runs: scheduled, empty: 'No runs are scheduled for today.' }].map((group) => (
+            <section key={group.title} className="panel record-panel production" aria-label={group.title}>
+              <header className="panel-head record-head"><h2>{group.title}</h2><span className="count">{group.runs.length} {group.runs.length === 1 ? 'run' : 'runs'}</span></header>
+              <div className="record-list">
+                {group.runs.map((run) => <ProductionRow key={run.id} run={run} />)}
+                {!group.runs.length ? <p className="floor-empty">{group.empty}</p> : null}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}
+const pagePath = (globalThis.location?.pathname || '').replace(/\/+$/, '');
+createRoot(document.getElementById('root')).render(pagePath === '/production_runs' ? <ProductionRunsApp /> : pagePath === '/deliveries' ? <ReceivingApp /> : <App />);

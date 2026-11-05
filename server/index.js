@@ -7,7 +7,7 @@ import { beginCollector, stopCollector, collectionState, startupCutoff, collect 
 import { normalizeSender, isValidSender } from './rules.js';
 import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email-queries.js';
 import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
-import { listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
+import { listActiveProductionRuns, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
 import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail, setPoProof, schedulePo } from './pos.js';
 import { listDeliveries, createDelivery, createDeliveryWithProof, updateDelivery, receiveDelivery, setDeliveryProof, getDeliveryProof, parseDeliveryInput } from './deliveries.js';
@@ -184,6 +184,12 @@ app.delete('/api/production-items/:id', (req, res) => {
 app.get('/api/production-runs/next-number', (_req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   res.json({ runNumber: nextProductionRunNumber(db, aid) });
+});
+
+app.get('/api/production_runs', (_req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const today = plantToday(getPlantTimeZone(db));
+  res.json({ items: listActiveProductionRuns(db, aid, today), today });
 });
 
 app.get('/api/production-runs', (_req, res) => {

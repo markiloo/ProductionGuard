@@ -80,3 +80,7 @@ Unauthorized PO mail is stored locally in the unverified queue so the manager ca
 - A transient connection error is retried on later checks; verify network access to `imap.gmail.com:993`.
 
 See [docs/API.md](docs/API.md) for endpoint shapes.
+
+## Production floor
+
+Open `/production_runs` for a read-only view of runs scheduled today and all in-progress runs, using the plant time zone. It refreshes every five seconds and is linked from Production. Completed and on-hold runs are excluded.
