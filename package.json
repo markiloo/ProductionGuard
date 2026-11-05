@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Local Gmail Inbox sender collector",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "concurrently -k \"node --watch server/index.js\" \"vite --host 127.0.0.1\"",
     "lint": "eslint server client/src vite.config.js",
