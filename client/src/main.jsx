@@ -622,6 +622,7 @@ function ProductionRow({ run, onEdit }) {
       </div>
       <div className="production-side">
         <span className="production-qty">{run.quantity}<small>{run.unit}</small></span>
+        <span className="production-meta">{run.completedQuantity ?? 0} completed</span>
         <time className="production-updated" dateTime={run.updatedAt} title={fullDate(run.updatedAt)}>Updated {shortDate(run.updatedAt)}</time>
       </div>
       {onEdit ? <button type="button" className="button button-ghost button-small production-edit" onClick={() => onEdit(run)} aria-label={`Edit ${run.runNumber}`}>Edit</button> : null}
@@ -2658,6 +2659,42 @@ function ReceivingApp() {
   );
 }
 
+function ProductionProgressRow({ run }) {
+  const [status, setStatus] = useState(run.status);
+  const [completed, setCompleted] = useState(String(run.completedQuantity));
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  async function save(event) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      await api(`/api/production_runs/${encodeURIComponent(run.id)}`, {
+        method: 'PATCH', body: JSON.stringify({ status, completedQuantity: Number(completed) }),
+      });
+      setMessage('Progress saved.');
+    } catch (failure) { setMessage(failure.message); }
+    finally { setBusy(false); }
+  }
+  return <div className="floor-run">
+    <ProductionRow run={run} />
+    <form className="floor-progress" onSubmit={save}>
+      <div className="field"><label htmlFor={`state-${run.id}`}>Run status</label>
+        <select id={`state-${run.id}`} value={status} onChange={(event) => setStatus(event.target.value)} disabled={busy}>
+          <option value="scheduled">Scheduled</option><option value="in_progress">In progress</option>
+          <option value="on_hold">On hold</option><option value="completed">Completed</option>
+        </select>
+      </div>
+      <div className="field"><label htmlFor={`done-${run.id}`}>Units completed</label>
+        <input id={`done-${run.id}`} type="number" min="0" max={run.quantity} step="1" required value={completed} onChange={(event) => setCompleted(event.target.value)} disabled={busy} />
+        <span className="field-hint">of {run.quantity} {run.unit} planned</span>
+      </div>
+      <button className="button button-primary button-small" type="submit" disabled={busy}>{busy ? 'Saving...' : 'Save progress'}</button>
+      {message ? <p role="status">{message}</p> : null}
+    </form>
+  </div>;
+}
+
 function ProductionRunsApp() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -2698,7 +2735,7 @@ function ProductionRunsApp() {
             <section key={group.title} className="panel record-panel production" aria-label={group.title}>
               <header className="panel-head record-head"><h2>{group.title}</h2><span className="count">{group.runs.length} {group.runs.length === 1 ? 'run' : 'runs'}</span></header>
               <div className="record-list">
-                {group.runs.map((run) => <ProductionRow key={run.id} run={run} />)}
+                {group.runs.map((run) => <ProductionProgressRow key={run.id} run={run} />)}
                 {!group.runs.length ? <p className="floor-empty">{group.empty}</p> : null}
               </div>
             </section>

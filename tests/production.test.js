@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { listActiveProductionRuns, parseProductionInput, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber } from '../server/production.js';
+import { updateProductionProgress, listActiveProductionRuns, parseProductionInput, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber } from '../server/production.js';
 
 function store() {
   const db = new Database(':memory:');
@@ -11,6 +11,7 @@ function store() {
     run_number TEXT NOT NULL,
     item TEXT NOT NULL,
     quantity INTEGER NOT NULL,
+    completed_quantity INTEGER NOT NULL DEFAULT 0,
     unit TEXT NOT NULL,
     status TEXT NOT NULL,
     scheduled_date TEXT NOT NULL,
@@ -126,5 +127,22 @@ test('production floor includes today scheduled work and all in-progress runs on
     ]) insert.run(account, id, id, 'Assembly', 1, 'units', status, date, now, now);
     assert.deepEqual(listActiveProductionRuns(db, 'a', '2026-11-05').map(run => run.id), ['active', 'today']);
     assert.deepEqual(listActiveProductionRuns(db, 'a', '2026-11-06').map(run => run.id), ['active', 'future']);
+  } finally { db.close(); }
+});
+
+test('floor progress persists status and completed units without changing the plan', () => {
+  const db = store();
+  try {
+    const run = createProductionRun(db, 'a', parseProductionInput({ runNumber: 'PR-1', item: 'A', quantity: 10, unit: 'units', status: 'scheduled', scheduledDate: '2026-11-05' }), now);
+    const updated = updateProductionProgress(db, 'a', run.id, { status: 'in_progress', completedQuantity: 4 }, now);
+    assert.equal(updated.status, 'in_progress');
+    assert.equal(updated.completedQuantity, 4);
+    assert.equal(updated.quantity, 10);
+    assert.equal(updateProductionProgress(db, 'b', run.id, { status: 'completed', completedQuantity: 10 }, now), null);
+    for (const quantity of [-1, 11, 1.5, null, '4']) assert.throws(() => updateProductionProgress(db, 'a', run.id, { status: 'in_progress', completedQuantity: quantity }, now), /Completed units must/);
+    assert.throws(() => updateProductionProgress(db, 'a', run.id, { status: 'bad', completedQuantity: 4 }, now), /valid production status/);
+    const finished = updateProductionProgress(db, 'a', run.id, { status: 'completed', completedQuantity: 10 }, now);
+    assert.equal(finished.completedQuantity, 10);
+    assert.deepEqual(listActiveProductionRuns(db, 'a', '2026-11-05'), []);
   } finally { db.close(); }
 });

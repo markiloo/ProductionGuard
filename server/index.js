@@ -7,7 +7,7 @@ import { beginCollector, stopCollector, collectionState, startupCutoff, collect 
 import { normalizeSender, isValidSender } from './rules.js';
 import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email-queries.js';
 import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
-import { listActiveProductionRuns, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
+import { updateProductionProgress, listActiveProductionRuns, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
 import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail, setPoProof, schedulePo } from './pos.js';
 import { listDeliveries, createDelivery, createDeliveryWithProof, updateDelivery, receiveDelivery, setDeliveryProof, getDeliveryProof, parseDeliveryInput } from './deliveries.js';
@@ -205,6 +205,15 @@ app.post('/api/production-runs', (req, res) => {
     sendProductionError(res, failure);
   }
 });
+app.patch('/api/production_runs/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const item = updateProductionProgress(db, aid, req.params.id, req.body, isoNow());
+    if (!item) return res.status(404).json({ error: 'Production run not found.' });
+    res.json({ ok: true, item });
+  } catch (failure) { sendProductionError(res, failure); }
+});
+
 app.put('/api/production-runs/:id', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   const input = readProductionInput(req.body, res); if (!input) return;

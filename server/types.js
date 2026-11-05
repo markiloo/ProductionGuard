@@ -76,6 +76,7 @@
  * @property {string|null} productionItemId Assembly selected for the run.
  * @property {string} item Assembly name.
  * @property {number} quantity Whole-number planned quantity of the assembly.
+ * @property {number} completedQuantity Recorded completed units, between zero and the planned quantity.
  * @property {string} unit Unit of the assembly.
  * @property {'scheduled'|'in_progress'|'completed'|'on_hold'} status Production status.
  * @property {string} scheduledDate Local calendar date in YYYY-MM-DD form.

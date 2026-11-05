@@ -1376,3 +1376,10 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
   .production-floor .production-row { padding: 20px; }
   .production-floor .production-side { padding-left: 0; }
 }
+
+.floor-run + .floor-run { border-top: 1px solid var(--line); }
+.production-floor .floor-run .production-row { border-bottom: 0; }
+.floor-progress { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; padding: 0 24px 24px; }
+.floor-progress .field { flex: 1 1 180px; margin: 0; }
+.floor-progress > button { margin-top: 24px; }
+.floor-progress > p { flex-basis: 100%; color: var(--ink-2); }

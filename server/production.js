@@ -9,7 +9,7 @@ const MAX_QUANTITY = 1_000_000_000;
 const STATUSES = new Set(['scheduled', 'in_progress', 'completed', 'on_hold']);
 const REQUIREMENT_STATUSES = new Set(['outstanding', 'completed']);
 
-const columns = 'id, run_number AS runNumber, item, quantity, unit, status, scheduled_date AS scheduledDate, notes, production_item_id AS productionItemId, created_at AS createdAt, updated_at AS updatedAt';
+const columns = 'completed_quantity AS completedQuantity, id, run_number AS runNumber, item, quantity, unit, status, scheduled_date AS scheduledDate, notes, production_item_id AS productionItemId, created_at AS createdAt, updated_at AS updatedAt';
 
 function text(value) {
   return String(value ?? '').trim();
@@ -184,6 +184,7 @@ export function updateProductionRun(db, accountId, id, input, now) {
   if (runNumberTaken(db, accountId, input.runNumber, id)) throw conflict('That run number is already in use.');
   const existing = getProductionRun(db, accountId, id);
   if (!existing) return null;
+  if (input.quantity < existing.completedQuantity) throw invalid('Planned quantity cannot be less than completed units.');
   const resolved = resolveProductionItem(db, accountId, input, existing.requirements || []);
   validateRequirements(db, accountId, resolved.effectiveRequirements || []);
   return db.transaction(() => {
@@ -215,4 +216,18 @@ export function nextProductionRunNumber(db, accountId) {
 export function listActiveProductionRuns(db, accountId, today) {
   return listProductionRuns(db, accountId).filter((run) =>
     run.status === 'in_progress' || (run.status === 'scheduled' && run.scheduledDate === today));
+}
+
+/** Update floor progress without changing the locked materials or planned quantity. */
+export function updateProductionProgress(db, accountId, id, input, now) {
+  const existing = getProductionRun(db, accountId, id);
+  if (!existing) return null;
+  if (!STATUSES.has(input?.status)) throw invalid('Choose a valid production status.');
+  const completed = input?.completedQuantity;
+  if (typeof completed !== 'number' || !Number.isInteger(completed) || completed < 0 || completed > existing.quantity) {
+    throw invalid('Completed units must be a whole number between 0 and the planned quantity.');
+  }
+  db.prepare('UPDATE production_runs SET status=?, completed_quantity=?, updated_at=? WHERE account_id=? AND id=?')
+    .run(input.status, completed, now, accountId, id);
+  return getProductionRun(db, accountId, id);
 }
