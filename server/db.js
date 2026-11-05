@@ -198,6 +198,7 @@ export function migrate() {
      );`,
     `ALTER TABLE production_runs ADD COLUMN completed_quantity INTEGER NOT NULL DEFAULT 0 CHECK (completed_quantity >= 0);`,
     `UPDATE production_runs SET status = 'completed' WHERE completed_quantity >= quantity;`,
+    `ALTER TABLE emails ADD COLUMN manual INTEGER NOT NULL DEFAULT 0;`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;

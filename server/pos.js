@@ -7,7 +7,7 @@ import { addDays, isValidDate } from './time.js';
 const PO_COLUMNS = `message_id AS id, po_id AS poId, po_state AS state, po_status AS poStatus, po_error AS poError,
   item, mapped_sku AS mappedSku, quantity, unit, eta, eta_days AS etaDays, supplier,
   expected_arrival AS expectedArrival, ordered_at AS orderedAt, sender_address AS senderAddress,
-  sender_name AS senderName, subject, received_at AS receivedAt, preview, body, has_attachments AS hasAttachments`;
+  sender_name AS senderName, subject, received_at AS receivedAt, preview, body, has_attachments AS hasAttachments, manual`;
 const STATES = new Set(['unverified', 'pending_review', 'approved', 'ordered', 'rejected']);
 
 function fail(message, status = 409) {
@@ -57,7 +57,7 @@ export function buildContext(db, accountId, today) {
   const pos = db.prepare(`SELECT ${PO_COLUMNS} FROM emails WHERE account_id=? AND po_state IS NOT NULL ORDER BY received_at, po_id`).all(accountId);
   const enriched = pos.map((po) => {
     const sku = effectiveSku(po, inventoryBySku);
-    return { ...po, sku, arrival: po.state === 'ordered' ? po.expectedArrival : addDays(today, po.etaDays) };
+    return { ...po, manual: po.manual === 1, sku, arrival: po.state === 'ordered' ? po.expectedArrival : addDays(today, po.etaDays) };
   });
   return { inventory, inventoryBySku, deliveries, requirements, pos: enriched };
 }
@@ -145,6 +145,7 @@ export function listPos(db, { accountId, state = 'pending_review', sort = 'desc'
       senderName: po.senderName,
       receivedAt: po.receivedAt,
       hasAttachments: po.hasAttachments,
+      manual: po.manual,
       assessment: summary(assessment),
     };
   });
@@ -261,7 +262,7 @@ export function transitionPo(db, accountId, poId, action, { reason = '', today, 
   } else if (action === 'resubmit') {
     if (po.state !== 'rejected') throw fail('Only Rejected POs can be resubmitted.');
     if (po.poStatus !== 'valid') throw fail('Correct the PO fields before resubmitting.');
-    const authorized = db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(po.senderAddress));
+    const authorized = Boolean(po.manual) || Boolean(db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(po.senderAddress)));
     if (!authorized) throw fail('This sender is not authorized; resubmission cannot bypass sender authorization.');
     db.prepare("UPDATE emails SET po_state='pending_review' WHERE account_id=? AND po_id=?").run(accountId, po.poId);
     recordEvent(db, accountId, po.poId, 'resubmitted', '', now);
@@ -306,7 +307,7 @@ export function correctPo(db, accountId, poId, input, { today, now }) {
       if (unit && String(matched.unit).toLowerCase() !== unit.toLowerCase()) errors.push(`Unit must match inventory for ${matched.sku} (${matched.unit})`);
     }
   }
-  const authorized = Boolean(db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(po.senderAddress)));
+  const authorized = Boolean(po.manual) || Boolean(db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(po.senderAddress)));
   if (!authorized) errors.push('Sender is not authorized');
   const valid = errors.length === 0;
   const nextState = po.state === 'unverified' ? (valid ? 'pending_review' : 'unverified') : po.state;
@@ -314,6 +315,62 @@ export function correctPo(db, accountId, poId, input, { today, now }) {
     .run(item, Number.isInteger(quantity) && quantity > 0 ? quantity : null, unit || null, etaDays > 0 ? `${etaDays} days` : null, Number.isInteger(etaDays) && etaDays > 0 ? etaDays : null, supplier || null, mappedSku, valid ? 'valid' : 'needs_review', errors.join('; ') || null, nextState, accountId, po.poId);
   recordEvent(db, accountId, po.poId, 'corrected', '', now);
   return getPo(db, accountId, po.poId, today);
+}
+
+/** Create a manager-entered PO that enters Pending Review without a sender check. */
+export function createManualPo(db, accountId, input, { today, now, runId }) {
+  const body = input && typeof input === 'object' ? input : {};
+  const item = text(body.item);
+  const quantity = Number(body.quantity);
+  const unit = text(body.unit);
+  const supplier = text(body.supplier);
+  const etaDays = Number(body.etaDays);
+  const mappedInput = text(body.mappedSku ?? body.sku);
+  const errors = [];
+  if (!item) errors.push('Missing item');
+  if (item.length > 120) errors.push('Item must be 120 characters or fewer');
+  if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 1_000_000_000) errors.push('Quantity must be a positive whole number');
+  if (!unit) errors.push('Missing unit');
+  if (unit.length > 20) errors.push('Unit must be 20 characters or fewer');
+  if (!supplier) errors.push('Missing supplier');
+  if (supplier.length > 120) errors.push('Supplier must be 120 characters or fewer');
+  if (!Number.isInteger(etaDays) || etaDays <= 0 || etaDays > 3650) errors.push('ETA must be a whole number of days greater than 0');
+
+  const matchSku = (value) => db.prepare("SELECT sku, unit FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE AND trim(sku) <> ''").get(accountId, value) || null;
+  let mappedSku = null;
+  if (mappedInput) {
+    const matched = matchSku(mappedInput);
+    if (!matched) errors.push('Choose an existing inventory SKU');
+    else {
+      mappedSku = matched.sku;
+      if (unit && String(matched.unit).toLowerCase() !== unit.toLowerCase()) errors.push(`Unit must match inventory for ${matched.sku} (${matched.unit})`);
+    }
+  } else {
+    const matched = item ? matchSku(item) : null;
+    if (matched) {
+      mappedSku = matched.sku;
+      if (unit && String(matched.unit).toLowerCase() !== unit.toLowerCase()) errors.push(`Unit must match inventory for ${matched.sku} (${matched.unit})`);
+    }
+  }
+  if (errors.length) throw fail(errors.join('; '), 400);
+  if (!runId) throw fail('The collector run is not ready yet.', 409);
+
+  const poId = nextPoId(db, accountId);
+  const bodyText = [
+    'Manually added purchase order',
+    '',
+    `ITEM: ${item}`,
+    `QUANTITY: ${quantity}`,
+    `UNIT: ${unit}`,
+    `ETA: ${etaDays} days`,
+    `SUPPLIER: ${supplier}`,
+  ].join('\n');
+  db.prepare(`INSERT INTO emails(account_id,message_id,run_id,sender_address,sender_name,recipients,subject,received_at,preview,body,has_attachments,item,quantity,unit,eta,supplier,po_status,po_error,po_id,po_state,mapped_sku,eta_days,manual)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    accountId, `manual-${randomUUID()}`, runId, '', 'Manual entry', '[]', 'PO', now, bodyText.slice(0, 200), bodyText, 0,
+    item, quantity, unit, `${etaDays} days`, supplier, 'valid', null, poId, 'pending_review', mappedSku, etaDays, 1,
+  );
+  return getPo(db, accountId, poId, today);
 }
 
 export function isPoState(value) { return STATES.has(value); }

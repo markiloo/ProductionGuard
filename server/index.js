@@ -9,7 +9,7 @@ import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email
 import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
 import { updateProductionProgress, listActiveProductionRuns, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
-import { listPos, getPo, transitionPo, correctPo, authorizeQueuedMail, setPoProof, schedulePo } from './pos.js';
+import { listPos, getPo, transitionPo, correctPo, createManualPo, authorizeQueuedMail, setPoProof, schedulePo } from './pos.js';
 import { listDeliveries, createDelivery, createDeliveryWithProof, updateDelivery, receiveDelivery, setDeliveryProof, getDeliveryProof, parseDeliveryInput } from './deliveries.js';
 import { resetAccountData } from './reset.js';
 import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
@@ -280,6 +280,17 @@ app.get('/api/pos', (req, res) => {
   const sort = req.query.sort === 'asc' ? 'asc' : 'desc';
   const { today } = nowAndToday();
   res.json(listPos(db, { accountId: aid, state: allowed.has(state) ? state : 'pending_review', sort, query, limit, offset, today }));
+});
+
+app.post('/api/pos', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const { today, now } = nowAndToday();
+  try {
+    const po = createManualPo(db, aid, req.body, { today, now, runId: collectionState().runId });
+    res.status(201).json({ ok: true, po });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not add the purchase order.');
+  }
 });
 
 app.get('/api/pos/:poId', (req, res) => {

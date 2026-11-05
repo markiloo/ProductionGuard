@@ -166,7 +166,7 @@
 
 /**
  * @typedef {Object} PurchaseOrder
- * @property {string} id Gmail message ID.
+ * @property {string} id Gmail message ID, or a generated ID for a manual PO.
  * @property {string} poId Sequential per-account PO ID such as `PO-0001`.
  * @property {'pending_review'|'unverified'|'approved'|'ordered'|'rejected'} state Workflow state.
  * @property {'valid'|'needs_review'} poStatus Validation state.
@@ -181,8 +181,9 @@
  * @property {string|null} supplier Supplier name.
  * @property {string|null} expectedArrival Fixed arrival date after ordering.
  * @property {string|null} orderedAt UTC ordering time.
- * @property {string} senderAddress Exact sender address.
- * @property {string} senderName Sender display name.
+ * @property {string} senderAddress Exact sender address, or an empty string for a manual PO.
+ * @property {string} senderName Sender display name, or `Manual entry`.
+ * @property {boolean} manual Whether the manager entered this PO instead of collecting it from Gmail.
  * @property {string} receivedAt UTC received timestamp.
  * @property {string} [body] Full plain-text body on detail responses.
  * @property {PoAssessment} [assessment] Deterministic assessment.

@@ -13,6 +13,7 @@ All routes are served from the same loopback origin as the dashboard. State-chan
 | `DELETE /api/emails` | None | `{ ok: true, deletedCount: number }`; clears the connected account's saved POs and proof pictures and excludes mail received before the clear time from later polls; Gmail and incoming deliveries are unchanged |
 | `GET /api/emails/:id` | Immutable message ID | `CollectedEmail` including `body` and recipients |
 | `GET /api/pos` | `state=pending_review\|unverified\|approved\|ordered\|rejected\|all` (default `pending_review`), `sort=asc\|desc` (received time), `q`, `limit`, `offset` | `{ items: PurchaseOrder[], total, counts: Record<string, number> }`, each with an assessment summary |
+| `POST /api/pos` | `{ item, mappedSku?, quantity, unit, etaDays, supplier }` | `{ ok: true, po }`; creates a manual Pending Review PO with a server-assigned PO ID; manager entries do not require an approved sender |
 | `GET /api/pos/:poId` | PO ID such as `PO-0001` | `PurchaseOrder` with full `assessment`, `events`, linked `delivery`, and `proof` metadata |
 | `PATCH /api/pos/:poId` | `{ item, mappedSku, quantity, unit, etaDays, supplier }` | `{ ok: true, po }`; corrects an Unverified, Pending Review, or Rejected PO, preserving its identity and history |
 | `PATCH /api/pos/:poId/schedule` | `{ etaDays, note }` for Approved, or `{ expectedArrival, note }` for Ordered / Incoming | `{ ok: true, po }`; revises the ETA or delivery date, updates the linked delivery, and records the note in the PO history |
@@ -51,7 +52,7 @@ Errors use `{ error: string }` JSON. Pagination defaults to 25 rows and clamps o
 
 ## Purchase order shape
 
-`PurchaseOrder` includes `id` (message ID), `poId` (`PO-0001`), `state` (`pending_review`, `unverified`, `approved`, `ordered`, or `rejected`), `poStatus` (`valid` or `needs_review`), `poError`, `item`, `sku` (effective mapped SKU), `mappedSku`, `quantity`, `unit`, `eta`, `etaDays`, `supplier`, `expectedArrival` (fixed once ordered), `orderedAt`, `senderAddress`, `senderName`, `receivedAt`, `body`, `events[]`, `delivery`, and `proof` (`{ mimeType, fileName, createdAt }` or null). List responses include an `assessment` summary; detail responses include the full assessment:
+`PurchaseOrder` includes `id` (message ID, or a generated ID for a manual PO), `poId` (`PO-0001`), `state` (`pending_review`, `unverified`, `approved`, `ordered`, or `rejected`), `poStatus` (`valid` or `needs_review`), `poError`, `manual` (true for a manager-entered PO), `item`, `sku` (effective mapped SKU), `mappedSku`, `quantity`, `unit`, `eta`, `etaDays`, `supplier`, `expectedArrival` (fixed once ordered), `orderedAt`, `senderAddress`, `senderName`, `receivedAt`, `body`, `events[]`, `delivery`, and `proof` (`{ mimeType, fileName, createdAt }` or null). List responses include an `assessment` summary; detail responses include the full assessment:
 
 - `flag`: `recommended`, `redundant`, `adjust`, or `manual`
 - `decision`: `Recommended`, `Redundant / Overstock`, `Adjust Quantity`, or a `Manual Review Required — …` reason
