@@ -172,6 +172,20 @@ function ThemeToggle({ theme, onChange }) {
   );
 }
 
+function ToastStack({ toasts, onDismiss }) {
+  if (!toasts.length) return null;
+  return (
+    <div className="toast-stack" role="region" aria-label="Notifications">
+      {toasts.map((toast) => (
+        <div key={toast.id} className={`toast toast-${toast.tone || 'success'}`} role={toast.tone === 'error' ? 'alert' : 'status'}>
+          <p className="toast-message">{toast.message}</p>
+          <button type="button" className="icon-button" onClick={() => onDismiss(toast.id)} aria-label="Dismiss notification">×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StateChip({ state }) {
   return <span className={`state-chip state-${state}`}>{PO_STATES[state] || state}</span>;
 }
@@ -1722,6 +1736,7 @@ export function App() {
   const [timeZone, setTimeZone] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [dismissedStatusErrors, setDismissedStatusErrors] = useState({ auth: '', collection: '' });
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [theme, setTheme] = useState(() => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
@@ -1816,6 +1831,12 @@ export function App() {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', theme === 'dark' ? '#141610' : '#fbf6f6');
   }, [theme]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(''), 5000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   function changeTheme(next) {
     document.documentElement.dataset.theme = next;
@@ -2379,21 +2400,6 @@ export function App() {
         </nav>
       ) : null}
 
-      {error ? (
-        <div className="alert" role="alert">
-          <p className="alert-message">{error}</p>
-          <button type="button" className="icon-button" onClick={() => setError('')} aria-label="Dismiss">×</button>
-        </div>
-      ) : null}
-      {notice ? (
-        <div className="alert alert-success" role="status">
-          <p className="alert-message">{notice}</p>
-          <button type="button" className="icon-button" onClick={() => setNotice('')} aria-label="Dismiss">×</button>
-        </div>
-      ) : null}
-      {status.auth.error ? <div className="alert" role="status"><p className="alert-message">{status.auth.error}</p></div> : null}
-      {status.collection.error ? <div className="alert" role="status"><p className="alert-message">{status.collection.error}</p></div> : null}
-
       {!status.auth.connected ? (
         <section className="panel setup" aria-labelledby="setup-title">
           <div className="setup-copy">
@@ -2504,6 +2510,20 @@ export function App() {
       {receivingDelivery ? (
         <ReceiveDeliveryDialog delivery={receivingDelivery} busy={receiveBusy} onClose={() => { if (!receiveBusy) setReceivingDelivery(null); }} onConfirm={confirmReceive} />
       ) : null}
+      <ToastStack
+        toasts={[
+          ...(error ? [{ id: 'error', tone: 'error', message: error }] : []),
+          ...(status.auth.error && dismissedStatusErrors.auth !== status.auth.error ? [{ id: 'auth-error', tone: 'error', message: status.auth.error }] : []),
+          ...(status.collection.error && dismissedStatusErrors.collection !== status.collection.error ? [{ id: 'collection-error', tone: 'error', message: status.collection.error }] : []),
+          ...(notice ? [{ id: 'notice', tone: 'success', message: notice }] : []),
+        ]}
+        onDismiss={(id) => {
+          if (id === 'error') setError('');
+          else if (id === 'notice') setNotice('');
+          else if (id === 'auth-error') setDismissedStatusErrors((current) => ({ ...current, auth: status.auth.error || '' }));
+          else setDismissedStatusErrors((current) => ({ ...current, collection: status.collection.error || '' }));
+        }}
+      />
     </main>
   );
 }
@@ -2525,6 +2545,7 @@ function ReceivingApp() {
       } else {
         setDeliveries([]);
       }
+      setError('');
     } catch (failure) {
       setError(failure.message);
     }
@@ -2568,13 +2589,6 @@ function ReceivingApp() {
         <Brand />
         <span className="eyebrow">Receiving station</span>
       </header>
-      {error ? (
-        <div className="alert" role="alert">
-          <p className="alert-message">{error}</p>
-          <button type="button" className="icon-button" onClick={() => setError('')} aria-label="Dismiss">×</button>
-        </div>
-      ) : null}
-
       {!status ? (
         <section className="panel loading-card" role="status">
           <span className="spinner" aria-hidden="true" />
@@ -2655,6 +2669,7 @@ function ReceivingApp() {
       {receiving ? (
         <ReceiveDeliveryDialog delivery={receiving} busy={busy} onClose={() => { if (!busy) setReceiving(null); }} onConfirm={confirmReceive} />
       ) : null}
+      <ToastStack toasts={error ? [{ id: 'error', tone: 'error', message: error }] : []} onDismiss={() => setError('')} />
     </main>
   );
 }
@@ -2697,41 +2712,44 @@ function FloorProgressDialog({ run, busy, onClose, onSave }) {
   );
 }
 
-function ProductionProgressRow({ run }) {
+function ProductionProgressRow({ run, onNotify }) {
   const [current, setCurrent] = useState(run);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
 
   useEffect(() => { setCurrent(run); }, [run]);
 
   async function save(completed) {
     setBusy(true);
-    setMessage('');
     try {
       const result = await api(`/api/production_runs/${encodeURIComponent(run.id)}`, {
         method: 'PATCH', body: JSON.stringify({ completedQuantity: completed }),
       });
       setCurrent(result.item);
       setEditing(false);
-      setMessage(result.item.status === 'completed' ? 'Run completed.' : 'Progress saved.');
+      onNotify(result.item.status === 'completed' ? 'Run completed.' : 'Progress saved.');
     } finally {
       setBusy(false);
     }
   }
 
-  return <div className="floor-run">
-    <ProductionRow run={current} onEdit={() => { setMessage(''); setEditing(true); }} />
-    {message ? <p className="floor-run-status" role="status">{message}</p> : null}
+  return <>
+    <ProductionRow run={current} onEdit={() => setEditing(true)} />
     {editing ? (
       <FloorProgressDialog run={current} busy={busy} onClose={() => { if (!busy) setEditing(false); }} onSave={save} />
     ) : null}
-  </div>;
+  </>;
 }
 
 function ProductionRunsApp() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(''), 5000);
+    return () => clearTimeout(timer);
+  }, [notice]);
   useEffect(() => {
     let disposed = false;
     let timer;
@@ -2749,30 +2767,49 @@ function ProductionRunsApp() {
     return () => { disposed = true; clearTimeout(timer); };
   }, []);
   const runs = data?.items || [];
+  const inProgress = runs.filter((run) => run.status === 'in_progress').length;
+  const scheduled = runs.filter((run) => run.status === 'scheduled').length;
   return (
-    <main className="shell production-floor">
+    <main className="shell">
       <header className="app-head"><Brand /><span className="eyebrow">Production floor</span></header>
-      <section className="panel floor-overview" aria-labelledby="floor-title">
-        <div>
-          <p className="eyebrow">{data ? scheduleDate(data.today) : 'Daily schedule'}</p>
-          <h1 id="floor-title">Production runs</h1>
-          <p className="floor-description">Scheduled for today and all work in progress.</p>
-        </div>
-        <p className="floor-refresh">Refreshes every 5 seconds</p>
-      </section>
-      {error ? <div className="alert" role="alert">{error} Open the main dashboard to check the connection.</div> : null}
-      {!data ? (!error ? <div className="panel record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading production runs...</div> : null) : (
-        <section className="panel record-panel production" aria-labelledby="floor-runs-title">
-          <header className="panel-head record-head">
-            <h2 id="floor-runs-title">Runs</h2>
-            <span className="count">{runs.length} {runs.length === 1 ? 'run' : 'runs'}</span>
-          </header>
-          <div className="record-list">
-            {runs.map((run) => <ProductionProgressRow key={run.id} run={run} />)}
-            {!runs.length ? <p className="floor-empty">No runs are scheduled today or currently in progress.</p> : null}
+      <section className="panel record-panel production" aria-labelledby="floor-title">
+        <header className="panel-head record-head">
+          <div>
+            <p className="eyebrow">{data ? scheduleDate(data.today) : 'Daily schedule'}</p>
+            <h2 id="floor-title">Production runs</h2>
           </div>
-        </section>
-      )}
+          <div className="record-actions">
+            <span className="count">{data ? `${runs.length} ${runs.length === 1 ? 'run' : 'runs'}` : '—'}</span>
+            <span className="floor-refresh">Refreshes every 5 seconds</span>
+          </div>
+        </header>
+        {!data ? (!error ? <div className="record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading production runs...</div> : null) : (
+          <>
+            <div className="record-summary">
+              <div><span className="metric-label">In progress</span><strong>{inProgress}</strong></div>
+              <div><span className="metric-label">Scheduled today</span><strong>{scheduled}</strong></div>
+              <div><span className="metric-label">On the floor</span><strong>{runs.length}</strong></div>
+            </div>
+            <div className="record-list">
+              {runs.map((run) => <ProductionProgressRow key={run.id} run={run} onNotify={setNotice} />)}
+              {!runs.length ? (
+                <div className="empty">
+                  <span className="empty-mark" aria-hidden="true">PR</span>
+                  <strong>No runs on the floor</strong>
+                  <p>No runs are scheduled today or currently in progress.</p>
+                </div>
+              ) : null}
+            </div>
+          </>
+        )}
+      </section>
+      <ToastStack
+        toasts={[
+          ...(error ? [{ id: 'error', tone: 'error', message: `${error} Open the main dashboard to check the connection.` }] : []),
+          ...(notice ? [{ id: 'notice', tone: 'success', message: notice }] : []),
+        ]}
+        onDismiss={(id) => { if (id === 'error') setError(''); else setNotice(''); }}
+      />
     </main>
   );
 }
