@@ -85,4 +85,4 @@ See [docs/API.md](docs/API.md) for endpoint shapes.
 
 Open `/production_runs` to view runs scheduled today and all in-progress runs, using the plant time zone. It refreshes every five seconds and is linked from Production. Completed and on-hold runs are excluded.
 
-The production floor allows saving run status and total units completed (0 through planned quantity). Progress is recorded separately from inventory and locked material requirements; marking the run Completed removes its demand. Completed and on-hold runs leave the floor view on the next refresh. Clear all data also removes saved completion counts.
+The production floor lets you save total units completed (0 through planned quantity). Reaching the planned quantity marks the run Completed automatically; otherwise, edit the run from the Production view to change its status. Progress is recorded separately from inventory and locked material requirements, and marking the run Completed removes its demand. Completed and on-hold runs leave the floor view on the next refresh. Clear all data also removes saved completion counts.

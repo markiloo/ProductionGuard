@@ -34,7 +34,7 @@ test('migration adds suppliers to saved POs and flags older messages missing the
     assert.equal(db.prepare("SELECT po_state FROM emails WHERE message_id='po'").get().po_state, 'pending_review');
     assert.equal(clearSavedEmails(db, 'a', '2026-01-04T00:00:00.000Z'), 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emails').get().count, 1);
-    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 17);
+    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 18);
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inventory'").get());
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_runs'").get());
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_requirements'").get());
@@ -48,6 +48,38 @@ test('migration adds suppliers to saved POs and flags older messages missing the
   } finally {
     loaded?.db.close();
     loaded?.releaseInstanceLock();
+    if (prior === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = prior;
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('migration completes production runs whose recorded units reached the planned quantity', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'po-checker-complete-migration-'));
+  const prior = process.env.DATA_DIR;
+  process.env.DATA_DIR = directory;
+  let first;
+  let second;
+  try {
+    first = await import('../server/db.js?complete-migration-seed');
+    const now = '2026-11-05T00:00:00.000Z';
+    first.db.prepare('INSERT INTO accounts(id,display_name,email,created_at) VALUES(?,?,?,?)').run('a', 'A', 'a@example.com', now);
+    const insert = first.db.prepare(`INSERT INTO production_runs(account_id,id,run_number,item,quantity,completed_quantity,unit,status,scheduled_date,notes,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`);
+    insert.run('a', 'full', 'PR-0001', 'A', 5, 5, 'units', 'in_progress', '2026-11-05', '', now, now);
+    insert.run('a', 'partial', 'PR-0002', 'B', 5, 4, 'units', 'scheduled', '2026-11-05', '', now, now);
+    first.db.prepare('DELETE FROM schema_migrations WHERE version = 18').run();
+    first.db.close();
+    first.releaseInstanceLock();
+    first = null;
+
+    second = await import('../server/db.js?complete-migration-apply');
+    assert.equal(second.db.prepare("SELECT status FROM production_runs WHERE id = 'full'").get().status, 'completed');
+    assert.equal(second.db.prepare("SELECT status FROM production_runs WHERE id = 'partial'").get().status, 'scheduled');
+  } finally {
+    try { first?.db.close(); } catch { /* Already closed. */ }
+    try { first?.releaseInstanceLock(); } catch { /* Already released. */ }
+    try { second?.db.close(); } catch { /* Already closed. */ }
+    try { second?.releaseInstanceLock(); } catch { /* Already released. */ }
     if (prior === undefined) delete process.env.DATA_DIR; else process.env.DATA_DIR = prior;
     fs.rmSync(directory, { recursive: true, force: true });
   }

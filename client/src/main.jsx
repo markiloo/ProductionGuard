@@ -2659,39 +2659,73 @@ function ReceivingApp() {
   );
 }
 
-function ProductionProgressRow({ run }) {
-  const [status, setStatus] = useState(run.status);
+function FloorProgressDialog({ run, busy, onClose, onSave }) {
+  const dialogRef = useSheetDialog(onClose);
   const [completed, setCompleted] = useState(String(run.completedQuantity));
+  const [formError, setFormError] = useState('');
+  const titleId = `floor-progress-title-${run.id}`;
+
+  async function submit(event) {
+    event.preventDefault();
+    setFormError('');
+    try {
+      await onSave(Number(completed));
+    } catch (failure) {
+      setFormError(failure.message);
+    }
+  }
+
+  return (
+    <dialog ref={dialogRef} className="detail floor-progress-dialog" aria-labelledby={titleId}>
+      <header className="detail-head">
+        <div><p className="eyebrow">{run.runNumber}</p><h2 id={titleId}>Update completed units</h2></div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close progress form" disabled={busy}>×</button>
+      </header>
+      <form className="detail-body" onSubmit={submit}>
+        <div className="field">
+          <label htmlFor={`floor-done-${run.id}`}>Units completed</label>
+          <input id={`floor-done-${run.id}`} type="number" min="0" max={run.quantity} step="1" required autoFocus value={completed} onChange={(event) => setCompleted(event.target.value)} disabled={busy} />
+          <p className="field-hint">Of {run.quantity} {run.unit} planned. Reaching the planned quantity marks the run Completed.</p>
+        </div>
+        {formError ? <p className="form-error" role="alert">{formError}</p> : null}
+        <div className="dialog-actions">
+          <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : 'Save progress'}</button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+function ProductionProgressRow({ run }) {
+  const [current, setCurrent] = useState(run);
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  async function save(event) {
-    event.preventDefault();
+
+  useEffect(() => { setCurrent(run); }, [run]);
+
+  async function save(completed) {
     setBusy(true);
     setMessage('');
     try {
-      await api(`/api/production_runs/${encodeURIComponent(run.id)}`, {
-        method: 'PATCH', body: JSON.stringify({ status, completedQuantity: Number(completed) }),
+      const result = await api(`/api/production_runs/${encodeURIComponent(run.id)}`, {
+        method: 'PATCH', body: JSON.stringify({ completedQuantity: completed }),
       });
-      setMessage('Progress saved.');
-    } catch (failure) { setMessage(failure.message); }
-    finally { setBusy(false); }
+      setCurrent(result.item);
+      setEditing(false);
+      setMessage(result.item.status === 'completed' ? 'Run completed.' : 'Progress saved.');
+    } finally {
+      setBusy(false);
+    }
   }
+
   return <div className="floor-run">
-    <ProductionRow run={run} />
-    <form className="floor-progress" onSubmit={save}>
-      <div className="field"><label htmlFor={`state-${run.id}`}>Run status</label>
-        <select id={`state-${run.id}`} value={status} onChange={(event) => setStatus(event.target.value)} disabled={busy}>
-          <option value="scheduled">Scheduled</option><option value="in_progress">In progress</option>
-          <option value="on_hold">On hold</option><option value="completed">Completed</option>
-        </select>
-      </div>
-      <div className="field"><label htmlFor={`done-${run.id}`}>Units completed</label>
-        <input id={`done-${run.id}`} type="number" min="0" max={run.quantity} step="1" required value={completed} onChange={(event) => setCompleted(event.target.value)} disabled={busy} />
-        <span className="field-hint">of {run.quantity} {run.unit} planned</span>
-      </div>
-      <button className="button button-primary button-small" type="submit" disabled={busy}>{busy ? 'Saving...' : 'Save progress'}</button>
-      {message ? <p role="status">{message}</p> : null}
-    </form>
+    <ProductionRow run={current} onEdit={() => { setMessage(''); setEditing(true); }} />
+    {message ? <p className="floor-run-status" role="status">{message}</p> : null}
+    {editing ? (
+      <FloorProgressDialog run={current} busy={busy} onClose={() => { if (!busy) setEditing(false); }} onSave={save} />
+    ) : null}
   </div>;
 }
 
@@ -2714,8 +2748,7 @@ function ProductionRunsApp() {
     load();
     return () => { disposed = true; clearTimeout(timer); };
   }, []);
-  const inProgress = data?.items.filter((run) => run.status === 'in_progress') || [];
-  const scheduled = data?.items.filter((run) => run.status === 'scheduled') || [];
+  const runs = data?.items || [];
   return (
     <main className="shell production-floor">
       <header className="app-head"><Brand /><span className="eyebrow">Production floor</span></header>
@@ -2729,18 +2762,16 @@ function ProductionRunsApp() {
       </section>
       {error ? <div className="alert" role="alert">{error} Open the main dashboard to check the connection.</div> : null}
       {!data ? (!error ? <div className="panel record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading production runs...</div> : null) : (
-        <div className="floor-sections">
-          {[{ title: 'In progress', runs: inProgress, empty: 'No runs are currently in progress.' },
-            { title: 'Scheduled today', runs: scheduled, empty: 'No runs are scheduled for today.' }].map((group) => (
-            <section key={group.title} className="panel record-panel production" aria-label={group.title}>
-              <header className="panel-head record-head"><h2>{group.title}</h2><span className="count">{group.runs.length} {group.runs.length === 1 ? 'run' : 'runs'}</span></header>
-              <div className="record-list">
-                {group.runs.map((run) => <ProductionProgressRow key={run.id} run={run} />)}
-                {!group.runs.length ? <p className="floor-empty">{group.empty}</p> : null}
-              </div>
-            </section>
-          ))}
-        </div>
+        <section className="panel record-panel production" aria-labelledby="floor-runs-title">
+          <header className="panel-head record-head">
+            <h2 id="floor-runs-title">Runs</h2>
+            <span className="count">{runs.length} {runs.length === 1 ? 'run' : 'runs'}</span>
+          </header>
+          <div className="record-list">
+            {runs.map((run) => <ProductionProgressRow key={run.id} run={run} />)}
+            {!runs.length ? <p className="floor-empty">No runs are scheduled today or currently in progress.</p> : null}
+          </div>
+        </section>
       )}
     </main>
   );

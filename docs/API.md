@@ -68,4 +68,4 @@ Errors use `{ error: string }` JSON. Pagination defaults to 25 rows and clamps o
 
 `GET /api/production_runs` returns `{ items: ProductionRun[], today }` for the connected account: scheduled runs on the plant-local current day plus all in-progress runs. Requires a connected account.
 
-`PATCH /api/production_runs/:id` accepts `{ status, completedQuantity }` and returns `{ ok: true, item }`. Completed units must be an integer from zero through planned quantity. Updates are account-scoped and require a trusted Origin. Progress does not adjust inventory or scale locked material demand.
+`PATCH /api/production_runs/:id` accepts `{ completedQuantity }` and returns `{ ok: true, item }`. It records floor progress; reaching the planned quantity automatically marks the run `completed`. It does not otherwise change the run status. Completed units must be an integer from zero through planned quantity. Updates are account-scoped and require a trusted Origin. Progress does not adjust inventory or scale locked material demand.

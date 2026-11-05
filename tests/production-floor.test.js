@@ -12,3 +12,27 @@ test('production floor copy has readable schedule and loading messages', () => {
   assert.ok(!page.includes('Today?s'));
   assert.ok(!page.includes('Loading production runs?'));
 });
+
+test('production floor lists in-progress and scheduled-today runs in one section', () => {
+  const source = readFileSync(new URL('../client/src/main.jsx', import.meta.url), 'utf8');
+  const page = source.slice(source.indexOf('function ProductionRunsApp()'));
+  assert.ok(page.includes('No runs are scheduled today or currently in progress.'));
+  assert.ok(!page.includes("title: 'In progress'"));
+  assert.ok(!page.includes("title: 'Scheduled today'"));
+  assert.equal((page.match(/<ProductionProgressRow /g) || []).length, 1);
+});
+
+test('production floor opens a completed-units form from an edit button', () => {
+  const source = readFileSync(new URL('../client/src/main.jsx', import.meta.url), 'utf8');
+  const dialog = source.slice(source.indexOf('function FloorProgressDialog'), source.indexOf('function ProductionProgressRow'));
+  const row = source.slice(source.indexOf('function ProductionProgressRow'), source.indexOf('function ProductionRunsApp'));
+  assert.ok(dialog.includes('Units completed'));
+  assert.ok(dialog.includes('completedQuantity'));
+  assert.ok(dialog.includes('Reaching the planned quantity marks the run Completed'));
+  assert.ok(!dialog.includes('Run status'));
+  assert.ok(!dialog.includes('<select'));
+  assert.ok(row.includes('onEdit'));
+  assert.ok(row.includes('FloorProgressDialog'));
+  assert.ok(!row.includes('<input'));
+  assert.ok(!row.includes('<form'));
+});

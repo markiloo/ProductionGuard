@@ -218,16 +218,16 @@ export function listActiveProductionRuns(db, accountId, today) {
     run.status === 'in_progress' || (run.status === 'scheduled' && run.scheduledDate === today));
 }
 
-/** Update floor progress without changing the locked materials or planned quantity. */
+/** Record floor progress; reaching the planned quantity completes the run automatically. */
 export function updateProductionProgress(db, accountId, id, input, now) {
   const existing = getProductionRun(db, accountId, id);
   if (!existing) return null;
-  if (!STATUSES.has(input?.status)) throw invalid('Choose a valid production status.');
   const completed = input?.completedQuantity;
   if (typeof completed !== 'number' || !Number.isInteger(completed) || completed < 0 || completed > existing.quantity) {
     throw invalid('Completed units must be a whole number between 0 and the planned quantity.');
   }
-  db.prepare('UPDATE production_runs SET status=?, completed_quantity=?, updated_at=? WHERE account_id=? AND id=?')
-    .run(input.status, completed, now, accountId, id);
+  const status = completed === existing.quantity ? 'completed' : existing.status;
+  db.prepare('UPDATE production_runs SET completed_quantity=?, status=?, updated_at=? WHERE account_id=? AND id=?')
+    .run(completed, status, now, accountId, id);
   return getProductionRun(db, accountId, id);
 }

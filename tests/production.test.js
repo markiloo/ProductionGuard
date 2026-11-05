@@ -130,19 +130,36 @@ test('production floor includes today scheduled work and all in-progress runs on
   } finally { db.close(); }
 });
 
-test('floor progress persists status and completed units without changing the plan', () => {
+test('floor progress completes a run automatically when units reach the planned quantity', () => {
   const db = store();
   try {
     const run = createProductionRun(db, 'a', parseProductionInput({ runNumber: 'PR-1', item: 'A', quantity: 10, unit: 'units', status: 'scheduled', scheduledDate: '2026-11-05' }), now);
-    const updated = updateProductionProgress(db, 'a', run.id, { status: 'in_progress', completedQuantity: 4 }, now);
-    assert.equal(updated.status, 'in_progress');
+    const updated = updateProductionProgress(db, 'a', run.id, { completedQuantity: 4 }, '2026-11-04T10:00:00.000Z');
+    assert.equal(updated.status, 'scheduled');
     assert.equal(updated.completedQuantity, 4);
     assert.equal(updated.quantity, 10);
-    assert.equal(updateProductionProgress(db, 'b', run.id, { status: 'completed', completedQuantity: 10 }, now), null);
-    for (const quantity of [-1, 11, 1.5, null, '4']) assert.throws(() => updateProductionProgress(db, 'a', run.id, { status: 'in_progress', completedQuantity: quantity }, now), /Completed units must/);
-    assert.throws(() => updateProductionProgress(db, 'a', run.id, { status: 'bad', completedQuantity: 4 }, now), /valid production status/);
-    const finished = updateProductionProgress(db, 'a', run.id, { status: 'completed', completedQuantity: 10 }, now);
+    assert.equal(updated.updatedAt, '2026-11-04T10:00:00.000Z');
+
+    // Older clients may still send a status; the floor ignores it below the target.
+    const ignored = updateProductionProgress(db, 'a', run.id, { status: 'completed', completedQuantity: 6 }, now);
+    assert.equal(ignored.status, 'scheduled');
+    assert.equal(ignored.completedQuantity, 6);
+    assert.equal(ignored.quantity, 10);
+    assert.equal(listActiveProductionRuns(db, 'a', '2026-11-05').length, 1);
+
+    const active = createProductionRun(db, 'a', parseProductionInput({ runNumber: 'PR-2', item: 'B', quantity: 5, unit: 'units', status: 'in_progress', scheduledDate: '2026-11-05' }), now);
+    const partial = updateProductionProgress(db, 'a', active.id, { completedQuantity: 3 }, now);
+    assert.equal(partial.status, 'in_progress');
+
+    const finished = updateProductionProgress(db, 'a', run.id, { completedQuantity: 10 }, '2026-11-04T11:00:00.000Z');
+    assert.equal(finished.status, 'completed');
     assert.equal(finished.completedQuantity, 10);
+    const finishedActive = updateProductionProgress(db, 'a', active.id, { status: 'in_progress', completedQuantity: 5 }, now);
+    assert.equal(finishedActive.status, 'completed');
+    assert.equal(finishedActive.completedQuantity, 5);
     assert.deepEqual(listActiveProductionRuns(db, 'a', '2026-11-05'), []);
+
+    assert.equal(updateProductionProgress(db, 'b', run.id, { completedQuantity: 10 }, now), null);
+    for (const quantity of [-1, 11, 1.5, null, '4']) assert.throws(() => updateProductionProgress(db, 'a', run.id, { completedQuantity: quantity }, now), /Completed units must/);
   } finally { db.close(); }
 });
