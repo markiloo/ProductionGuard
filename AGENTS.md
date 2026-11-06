@@ -49,7 +49,7 @@ Run everything from the repository root:
 
 ## Design Reviews
 
-UI/UX work uses the imported `apple-design` skill at `.agents/skills/apple-design/SKILL.md`. Load it for design reviews, animation and interaction-motion work, and requests to make the dashboard feel less generic. The skill is deliberately small: it covers Apple's eight design principles and Apple's motion guidance, sourced from `references/hig/design-principles.md` and `references/hig/motion.md`. Treat those pages as read-only. `node .agents/skills/apple-design/scripts/pull-hig.mjs` refreshes only those two; add `--all` only when explicitly asked, because it restores the full 123-page set.
+UI/UX work uses the imported `apple-design` skill at `.agents/skills/apple-design/SKILL.md`. Load it for design reviews and for animation or interaction-motion work, including reduced-motion accessibility. It is deliberately small: Apple's eight design principles plus Apple's motion guidance, sourced from `references/hig/design-principles.md` and `references/hig/motion.md`; it covers no other HIG topics. Treat those pages as read-only. `node .agents/skills/apple-design/scripts/pull-hig.mjs` refreshes only those two; add `--all` only when explicitly asked, because it restores the full 123-page set.
 
 ## Coding Style & Naming Conventions
 
