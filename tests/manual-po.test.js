@@ -73,6 +73,35 @@ test('manual POs enter pending review and stay editable without an approved send
       /Unit must match inventory for SKU-0001 \(units\)/,
     );
 
+    // Exact T-05 scenario: two 100-unit POs due one day before 100 units of demand.
+    db.prepare('DELETE FROM emails WHERE account_id=?').run(account);
+    db.prepare('INSERT INTO production_runs(account_id,id,run_number,item,quantity,unit,status,scheduled_date,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+      .run(account, 'prod-1', 'PR-0001', 'Assembly', 1, 'units', 'scheduled', '2026-11-15', now, now);
+    db.prepare('INSERT INTO production_requirements(account_id,id,run_id,item_sku,quantity,unit,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+      .run(account, 'req-1', 'prod-1', 'SKU-0001', 100, 'units', 'outstanding', now, now);
+    const input = { item: 'SKU-0001', quantity: 100, unit: 'units', etaDays: 9, supplier: 'Acme' };
+    const first = createManualPo(db, account, input, { today, now: '2026-11-05T01:00:00Z', runId: 'run-1' });
+    const second = createManualPo(db, account, input, { today, now: '2026-11-05T02:00:00Z', runId: 'run-1' });
+    assert.equal(first.assessment.decision, 'Recommended');
+    const checkCovered = (provisional) => {
+      const assessment = getPo(db, account, second.poId, today).assessment;
+      assert.equal(assessment.requirement, 0);
+      assert.equal(assessment.difference, 100);
+      assert.equal(assessment.decision, 'Redundant / Overstock');
+      assert.equal(assessment.coveredAmount, provisional ? 100 : 0);
+      assert.equal(assessment.warnings.some(({ type }) => type === 'duplicate'), provisional);
+    };
+    checkCovered(true);
+    transitionPo(db, account, first.poId, 'approve', { today, now });
+    checkCovered(true);
+    transitionPo(db, account, first.poId, 'reject', { today, now, reason: 'Duplicate purchase' });
+    assert.equal(getPo(db, account, second.poId, today).assessment.decision, 'Recommended');
+    transitionPo(db, account, first.poId, 'resubmit', { today, now });
+    transitionPo(db, account, first.poId, 'approve', { today, now });
+    transitionPo(db, account, first.poId, 'order', { today, now, proof: { mimeType: 'image/png', data: Buffer.from('test proof') } });
+    checkCovered(false);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM incoming_deliveries WHERE account_id=? AND po_id=?').get(account, first.poId).count, 1);
+    assert.throws(() => transitionPo(db, account, first.poId, 'order', { today, now }), /Only Approved/);
     db.close();
     releaseInstanceLock();
   } finally {

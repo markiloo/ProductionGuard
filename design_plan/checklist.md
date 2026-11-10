@@ -74,12 +74,12 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 
 ## 8. Automated verification
 
-- [ ] Cover strict cutoff, refresh/reconnect versus restart, and persistence of history and sender settings.
-- [ ] Cover empty and multiple sender lists, case, whitespace, invalid addresses, duplicates, and misleading display names.
-- [ ] Cover adding/removing senders during an active poll and sign-out/account switch during token or IMAP work.
-- [ ] Cover IMAP search, all results, stable IDs, duplicate results, delayed visibility, and text-only MIME retrieval.
-- [ ] Cover connection loss, bad credentials, transient errors, recovery, and no duplicate inserts.
-- [ ] Cover API validation, cross-origin protection, pagination, search, run/history filters, message details, local time, and safe text rendering.
+- [x] Cover strict cutoff, refresh/reconnect versus restart, and persistence of history and sender settings.
+- [x] Cover empty and multiple sender lists, case, whitespace, invalid addresses, duplicates, and misleading display names.
+- [x] Cover adding/removing senders during an active poll and sign-out/account switch during IMAP work.
+- [x] Cover IMAP search, all results, stable IDs, duplicate results, delayed visibility, and text-only MIME retrieval.
+- [x] Cover connection loss, bad credentials, transient errors, recovery, and no duplicate inserts.
+- [x] Cover API validation, cross-origin protection, pagination, search, run/history filters, message details, local time, and safe text rendering.
 - [x] Run lint, automated tests, and production build.
 
 ## 9. Live acceptance
@@ -242,14 +242,14 @@ Build a local Windows application using Node.js, Express, React, JavaScript, Vit
 
 ## Assessment verification update
 
-- [ ] Add unit tests that run each PRD scenario from its exact stated data and assert balances, requirement, difference, decision, and warnings.
-- [ ] Worked shortage: 50 on Day 4 and 30 on Day 10 → requirement 80; an 80-unit PO on Day 3 → balances 30 and 0, *Recommended*, Day 4 need, one-day buffer met with no early warning.
-- [ ] T-02: 100 stock, 50 due Day 3, demand 120 Day 4 and 80 Day 10 → 30 and −50 before; 50-unit PO on Day 5 → 30 and 0, Day 10 need, five days early.
-- [ ] T-03: requirement 100 with 100, 50, and 150-unit POs → *Recommended*, *Adjust −50*, *Adjust +50*; zero requirement → *Redundant*; no runs → *Manual Review — No Scheduled Demand*.
-- [ ] T-03 late supply: zero stock, 100 demand Day 4, 100 delivery Day 5, 100-unit PO Day 6 → requirement 0, difference +100, *Redundant*, Day 4 conflict warning, Day 6 balance +100.
-- [ ] T-04: Day 2 demand of 100 with a five-day PO from Day 0 → *Recommended* + conflict at Day 2, balance −100; Day 9 arrival passes, Day 10 warns, Day 11 conflicts at −100.
-- [ ] T-05: zero stock, Day 10 demand 100, two 100-unit POs due Day 9 → first *Recommended*, second *Redundant* with 100 coverage; approving or ordering keeps that, and rejecting the first makes the second *Recommended*.
-- [ ] Verify unit mismatch blocks classification and coverage, receiving twice adds stock once, and a daily ETA change triggers a new warning while ordered dates stay fixed.
+- [x] Add unit tests that run each PRD scenario from its exact stated data and assert balances, requirement, difference, decision, and warnings.
+- [x] Worked shortage: 50 on Day 4 and 30 on Day 10 → requirement 80; an 80-unit PO on Day 3 → balances 30 and 0, *Recommended*, Day 4 need, one-day buffer met with no early warning.
+- [x] T-02: 100 stock, 50 due Day 3, demand 120 Day 4 and 80 Day 10 → 30 and −50 before; 50-unit PO on Day 5 → 30 and 0, Day 10 need, five days early.
+- [x] T-03: requirement 100 with 100, 50, and 150-unit POs → *Recommended*, *Adjust −50*, *Adjust +50*; zero requirement → *Redundant*; no runs → *Manual Review — No Scheduled Demand*.
+- [x] T-03 late supply: zero stock, 100 demand Day 4, 100 delivery Day 5, 100-unit PO Day 6 → requirement 0, difference +100, *Redundant*, Day 4 conflict warning, Day 6 balance +100.
+- [x] T-04: Day 2 demand of 100 with a five-day PO from Day 0 → *Recommended* + conflict at Day 2, balance −100; Day 9 arrival passes, Day 10 warns, Day 11 conflicts at −100.
+- [x] T-05: zero stock, Day 10 demand 100, two 100-unit POs due Day 9 → first *Recommended*, second *Redundant* with 100 coverage; approving or ordering keeps that, and rejecting the first makes the second *Recommended*.
+- [x] Verify unit mismatch blocks classification and coverage, receiving twice adds stock once, and a daily ETA change triggers a new warning while ordered dates stay fixed.
 
 ## Functional API update
 

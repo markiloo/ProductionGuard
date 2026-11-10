@@ -73,6 +73,7 @@ export function assessWithContext(context, po, today) {
   const requirements = context.requirements.filter((requirement) => requirement.itemSku.toLowerCase() === key);
   const earlierPos = context.pos.filter((candidate) => {
     if (candidate.id === po.id) return false;
+    if (candidate.poStatus !== 'valid') return false;
     if (candidate.state !== 'pending_review' && candidate.state !== 'approved') return false;
     if (!candidate.sku || candidate.sku.toLowerCase() !== key) return false;
     if (!isValidDate(candidate.arrival)) return false;

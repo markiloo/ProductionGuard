@@ -203,7 +203,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                   <div><dt>Net requirement</dt><dd>{assessment?.requirement ?? '—'}</dd></div>
                   <div><dt>Quantity difference</dt><dd>{assessment?.difference == null ? '—' : `${assessment.difference >= 0 ? '+' : ''}${assessment.difference}`}</dd></div>
                   <div><dt>Expected arrival</dt><dd>{assessment?.arrival || '—'} <small>{assessment?.provisional ? 'provisional' : 'fixed'}</small></dd></div>
-                  <div><dt>Need date</dt><dd>{assessment?.needDate || '—'}{assessment?.daysEarly > 1 ? ` (${assessment.daysEarly} days early)` : assessment?.daysEarly === 1 ? ' (one-day buffer met)' : ''}</dd></div>
+                  <div><dt>Need date</dt><dd>{assessment?.needDate || '—'}{assessment?.daysEarly > 1 ? ` (${assessment.daysEarly} days early)` : assessment?.daysEarly === 1 ? ' (arriving one day early)' : ''}</dd></div>
                   <div><dt>Planning end</dt><dd>{assessment?.planningEnd || '—'}</dd></div>
                   <div><dt>Inventory updated</dt><dd>{assessment?.inventory ? metricDate(assessment.inventory.updatedAt) : '—'}</dd></div>
                 </dl>

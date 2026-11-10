@@ -175,7 +175,7 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
   }
 
   const parts = [];
-  if (needDate) parts.push(`Needed by ${needDate}${daysEarly > 1 ? ` (${daysEarly} days early)` : daysEarly === 1 ? ' (one-day buffer met)' : ''}.`);
+  if (needDate) parts.push(`Needed by ${needDate}${daysEarly > 1 ? ` (${daysEarly} days early)` : daysEarly === 1 ? ' (arriving one day early)' : ''}.`);
   parts.push(`Net requirement ${requirement}; this PO requests ${po.quantity} (${difference >= 0 ? '+' : ''}${difference}).`);
   if (timingConflicts.length) parts.push(`Late arrival is flagged for ${timingConflicts.map((conflict) => conflict.runDate).join(', ')}.`);
 

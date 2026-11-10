@@ -41,7 +41,6 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
       if (!senders.length || !credentials) return;
       error = null;
       db.prepare("UPDATE runs SET account_id=?,status='running' WHERE id=?").run(accountId, runId);
-      const authorizedSenders = new Set(senders.map((sender) => sender.normalized_address));
       for (const sender of senders) authorizeQueuedMail(db, accountId, sender.normalized_address);
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
@@ -79,7 +78,7 @@ export function createCollector({ db, cutoff, getAccountId, getCredentials, crea
               if (!allowed(accountId, receivedAt, version)) continue;
               const recipients = ['to', 'cc', 'bcc'].flatMap((type) => (message.envelope?.[type] || []).map((item) => ({ type: type === 'to' ? 'To' : type === 'cc' ? 'Cc' : 'Bcc', name: item.name || '', address: item.address || '' })));
               const po = parsePo(body);
-              const authorized = authorizedSenders.has(normalizeSender(from?.address));
+              const authorized = Boolean(db.prepare('SELECT 1 FROM senders WHERE account_id=? AND normalized_address=?').get(accountId, normalizeSender(from?.address)));
               const reasons = po.poError ? [po.poError] : [];
               if (!authorized) reasons.push('Sender is not authorized');
               const valid = reasons.length === 0;
