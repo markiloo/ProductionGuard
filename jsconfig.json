@@ -1,6 +1,0 @@
-{
-  "compilerOptions": {
-    "paths": { "@/*": ["./client/src/*"] }
-  },
-  "include": ["client/src"]
-}

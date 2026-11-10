@@ -48,6 +48,8 @@ export function parseProductionInput(body) {
   const scheduledDate = text(value.scheduledDate);
   const notes = text(value.notes);
   const requirementInputs = Array.isArray(value.requirements) ? value.requirements.map(parseRequirementRow) : null;
+  // Client-supplied requirements are a legacy path for runs without an assembly.
+  // Runs created with productionItemId derive and lock their materials from the assembly definition.
   const productionItemId = text(value.productionItemId);
   let item = text(value.item);
   let unit = text(value.unit);

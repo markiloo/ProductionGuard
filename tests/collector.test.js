@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import Database from 'better-sqlite3';
 import { createCollector } from '../server/collector-core.js';
-import { clearSavedEmails } from '../server/email-queries.js';
+import { clearSavedEmails } from '../server/email-maintenance.js';
 
 const cutoff = '2026-11-02T09:00:00.000Z';
 const message = (uid, at, address = 'orders@example.com', subject = 'PO') => ({ uid, emailId: `gmail-${uid}`, internalDate: new Date(at), envelope: { from: [{ address, name: 'Orders' }], to: [{ address: 'buyer@example.com' }], subject }, bodyStructure: { type: 'multipart/mixed', childNodes: [{ part: '1', type: 'text/plain' }, { part: '2', type: 'application/pdf', disposition: 'attachment' }] } });

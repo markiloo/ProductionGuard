@@ -192,24 +192,4 @@
  * @property {PoProof|null} [proof] Incoming proof picture metadata on detail responses.
  */
 
-/**
- * @typedef {Object} CollectedEmail
- * @property {string} id Stable Gmail IMAP message ID.
- * @property {string} senderAddress Exact From address.
- * @property {string} senderName Sender display name.
- * @property {{type: 'To'|'Cc'|'Bcc', name: string, address: string}[]} recipients Message recipients.
- * @property {string} subject Subject, possibly empty.
- * @property {string} receivedAt UTC received timestamp.
- * @property {string} preview Plain text preview.
- * @property {string} [body] Full plain-text message body on detail responses.
- * @property {number} hasAttachments Whether MIME structure contains attachments.
- * @property {string|null} item Parsed item code.
- * @property {number|null} quantity Parsed positive whole-number quantity.
- * @property {string|null} unit Parsed unit label.
- * @property {number|null} etaDays Parsed ETA duration in days.
- * @property {string|null} supplier Parsed supplier name.
- * @property {'valid'|'needs_review'} poStatus Parsing result.
- * @property {string|null} poError Parsing problems for review.
- */
-
 /** @template T @typedef {{ items: T[], total: number, limit: number, offset: number }} PaginatedResponse */

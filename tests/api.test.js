@@ -64,9 +64,9 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     assert.equal(missingOrigin.status, 403);
     await missingOrigin.arrayBuffer();
 
-    const unauthenticatedEmails = await fetch(`${base}/api/emails`);
-    assert.equal(unauthenticatedEmails.status, 401);
-    await unauthenticatedEmails.arrayBuffer();
+    const unauthenticatedPos = await fetch(`${base}/api/pos`);
+    assert.equal(unauthenticatedPos.status, 401);
+    await unauthenticatedPos.arrayBuffer();
     const unauthenticatedClear = await fetch(`${base}/api/emails`, { method: 'DELETE', headers: { Origin: base } });
     assert.equal(unauthenticatedClear.status, 401);
     await unauthenticatedClear.arrayBuffer();

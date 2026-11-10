@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { listEmails, getEmail, clearSavedEmails } from '../server/email-queries.js';
+import { clearSavedEmails } from '../server/email-maintenance.js';
 
 test('migration adds suppliers to saved POs and flags older messages missing them', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'po-checker-migration-'));
@@ -26,11 +26,11 @@ test('migration adds suppliers to saved POs and flags older messages missing the
   try {
     loaded = await import('../server/db.js?migration-test');
     const { db } = loaded;
-    const page = listEmails(db, { accountId: 'a', cutoff: '2026-01-01T00:00:00.000Z' });
-    assert.equal(page.total, 2);
-    assert.deepEqual(page.items.map((item) => [item.id, item.supplier, item.poStatus]), [['old-po', null, 'needs_review'], ['po', 'Acme Supply', 'valid']]);
-    assert.match(getEmail(db, 'a', 'old-po').poError, /supplier/i);
-    assert.equal(getEmail(db, 'a', 'other'), null);
+    const rows = db.prepare("SELECT message_id AS id, supplier, po_status AS poStatus FROM emails WHERE account_id='a' AND po_status IS NOT NULL ORDER BY received_at DESC").all();
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows.map((row) => [row.id, row.supplier, row.poStatus]), [['old-po', null, 'needs_review'], ['po', 'Acme Supply', 'valid']]);
+    assert.match(db.prepare("SELECT po_error FROM emails WHERE account_id='a' AND message_id='old-po'").get().po_error, /supplier/i);
+    assert.equal(db.prepare("SELECT po_status FROM emails WHERE account_id='a' AND message_id='other'").get().po_status, null);
     assert.equal(db.prepare("SELECT po_state FROM emails WHERE message_id='po'").get().po_state, 'pending_review');
     assert.equal(clearSavedEmails(db, 'a', '2026-01-04T00:00:00.000Z'), 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emails').get().count, 1);

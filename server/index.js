@@ -5,7 +5,8 @@ import { db, isoNow, releaseInstanceLock } from './db.js';
 import { restoreGmail, connectGmail, authState, signOut } from './auth.js';
 import { beginCollector, stopCollector, collectionState, startupCutoff, collect } from './collector.js';
 import { normalizeSender, isValidSender } from './rules.js';
-import { parsePagination, listEmails, getEmail, clearSavedEmails } from './email-queries.js';
+import { parsePagination } from './pagination.js';
+import { clearSavedEmails } from './email-maintenance.js';
 import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
 import { updateProductionProgress, listActiveProductionRuns, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
@@ -15,6 +16,9 @@ import { resetAccountData } from './reset.js';
 import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.PORT || 4174);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
+
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '32kb' }));
@@ -29,8 +33,6 @@ app.use('/api', (req, res, next) => {
   }
   next();
 });
-const PORT = Number(process.env.PORT || 4174);
-if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT must be an integer between 1 and 65535.');
 const accountId = () => { syncAccount(); return authState().account?.id || ''; };
 
 function readInventoryInput(body, res) {
@@ -95,22 +97,10 @@ app.delete('/api/senders/:address', (req, res) => {
   db.prepare('DELETE FROM senders WHERE account_id = ? AND normalized_address = ?').run(accountId(), req.params.address.toLowerCase());
   res.json({ ok: true });
 });
-app.get('/api/emails', (req, res) => {
-  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
-  const { limit, offset } = parsePagination(req.query.limit, req.query.offset);
-  const query = String(req.query.q || '').trim().slice(0, 200);
-  const scope = req.query.scope === 'all' ? 'all' : 'current';
-  res.json(listEmails(db, { accountId: aid, cutoff: startupCutoff, scope, query, limit, offset }));
-});
 app.delete('/api/emails', (_req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   const deletedCount = clearSavedEmails(db, aid, isoNow());
   res.json({ ok: true, deletedCount });
-});
-app.get('/api/emails/:id', (req, res) => {
-  const row = getEmail(db, accountId(), req.params.id);
-  if (!row) return res.status(404).json({ error: 'Message not found.' });
-  res.json(row);
 });
 
 app.get('/api/inventory', (_req, res) => {
