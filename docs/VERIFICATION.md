@@ -13,3 +13,12 @@ The completed checklist is covered by the offline Node test suites. Tests use in
 One-calendar-day early arrivals show descriptive text without an Arriving Early warning; quantity-matching POs remain Recommended. Arrivals more than one day early retain the existing warning.
 
 Live Gmail connectivity and connected browser workflows were not exercised. Collector and business workflows were verified through injected IMAP clients, API tests, temporary databases, and component rendering.
+
+## Monochrome interface revision — 2026-11-13
+
+- Shared styles now apply the monochrome palette, square geometry, Lato typography, and blueprint shield across dashboard, receiving, production floor, and dialogs. Existing layouts and workflows are retained.
+- Passed `npm run lint`, `npm test` (64 passing), `npm run build`, and `git diff --check`. Sandbox subprocess restrictions initially blocked the build and three tests; the unrestricted reruns passed.
+- Production output includes locally bundled Lato 400, 700, and 900 font files; the app does not request Google Fonts.
+- Calculated contrast for primary, secondary, muted, positive, warning, and primary-button text pairs, including hover: minimum 5.13:1 in light theme and 6.26:1 in dark theme. These are token checks, not a browser accessibility audit.
+- Visible focus rules, responsive layouts, image sizing, and modal behavior are retained. Reduced motion now disables animations and transitions; the loading spinner retains circular geometry.
+- New visual screenshots, connected sample-data browser walkthroughs, keyboard interaction, 200% zoom, and narrow-screen rendering have not been verified for this revision. Earlier browser smoke-check results above predate this restyle.

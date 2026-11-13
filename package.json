@@ -13,9 +13,7 @@
     "start": "node server/index.js"
   },
   "dependencies": {
-    "@fontsource-variable/geist": "^5.3.0",
-    "@fontsource-variable/geist-mono": "^5.3.0",
-    "@fontsource-variable/newsreader": "^5.3.0",
+    "@fontsource/lato": "^5.3.0",
     "better-sqlite3": "^12.2.0",
     "express": "^5.1.0",
     "html-to-text": "^9.0.5",

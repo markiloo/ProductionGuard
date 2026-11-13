@@ -131,7 +131,7 @@ export function DashboardApp() {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem('po-checker-theme', theme); } catch { /* Storage can be unavailable. */ }
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#141610' : '#fbf6f6');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#111111' : '#ffffff');
   }, [theme]);
 
   useEffect(() => {

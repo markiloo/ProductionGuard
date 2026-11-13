@@ -3,15 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#fbf6f6" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=blueprint-2" />
     <title>PO Checker · Inbox collector</title>
     <script>
       try {
         const storedTheme = localStorage.getItem('po-checker-theme');
         const theme = storedTheme === 'dark' ? 'dark' : 'light';
         document.documentElement.dataset.theme = theme;
-        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#141610' : '#fbf6f6');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#111111' : '#ffffff');
       } catch {
         document.documentElement.dataset.theme = 'light';
       }
