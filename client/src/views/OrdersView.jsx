@@ -88,7 +88,7 @@ export function PosPanel({ status, pos, stateFilter, sort, setSort, query, setQu
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
           {status.features?.clearSavedInbox ? (
-            <button type="button" className="button button-danger-ghost button-small" disabled={!status.totalCount || busy} onClick={onClear}>Clear saved</button>
+            <details className="order-more"><summary className="button button-secondary button-small">More actions</summary><div className="order-more-menu"><button type="button" className="button button-danger-ghost button-small" disabled={!status.totalCount || busy} onClick={onClear}>Clear saved</button></div></details>
           ) : null}
         </div>
       </header>
@@ -124,9 +124,9 @@ export function PosPanel({ status, pos, stateFilter, sort, setSort, query, setQu
         ) : null}
       </div>
       <footer className="pagination">
-        <button type="button" className="button button-secondary button-small" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Newer</button>
+        <button type="button" className="button button-secondary button-small" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</button>
         <span>{pos.total ? `${offset + 1}–${Math.min(offset + 25, pos.total)} of ${pos.total}` : '0 orders'}</span>
-        <button type="button" className="button button-secondary button-small" disabled={offset + 25 >= pos.total} onClick={() => setOffset(offset + 25)}>Older</button>
+        <button type="button" className="button button-secondary button-small" disabled={offset + 25 >= pos.total} onClick={() => setOffset(offset + 25)}>Next</button>
       </footer>
     </section>
   );

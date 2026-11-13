@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AssessmentChip, StateChip } from '../components/Chips.jsx';
-import { FLAG_LABEL, PO_STATES } from '../lib/constants.js';
+import { PO_STATES } from '../lib/constants.js';
 import { fullDate, metricDate, scheduleDate, warningText } from '../lib/format.js';
 import { useSheetDialog } from '../hooks/useSheetDialog.js';
 
@@ -36,6 +36,14 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
   }, [po?.poId, po?.item, po?.mappedSku, po?.sku, po?.quantity, po?.unit, po?.etaDays, po?.supplier]);
 
   const assessment = po?.assessment;
+
+  useEffect(() => {
+    if (!(correcting || rejecting || ordering || replacingProof || rescheduling)) return;
+    const form = dialogRef.current?.querySelector('.correction-form');
+    form?.scrollIntoView({ block: 'start' });
+    form?.querySelector('input, select, textarea')?.focus({ preventScroll: true });
+  }, [correcting, rejecting, ordering, replacingProof, rescheduling, dialogRef]);
+
 
   async function submitReject(event) {
     event.preventDefault();
@@ -165,7 +173,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
   }
 
   return (
-    <dialog ref={dialogRef} className="detail" aria-labelledby="po-detail-title">
+    <dialog ref={dialogRef} className="detail po-detail" aria-labelledby="po-detail-title">
       <header className="detail-head">
         <div>
           <p className="eyebrow">{po?.poId || 'Purchase order'}</p>
@@ -174,6 +182,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close details">×</button>
       </header>
       {po ? (
+        <>
         <div className="detail-body">
           <div className="detail-flags">
             <StateChip state={po.state} />
@@ -182,18 +191,9 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
           </div>
           {message ? <p className="form-success" role="status">{message}</p> : null}
 
-          <dl className="po-grid" aria-label="Purchase order">
-            <div className="po-field"><dt>Quantity</dt><dd className="mono">{po.quantity ?? '—'}</dd></div>
-            <div className="po-field"><dt>Unit</dt><dd>{po.unit || '—'}</dd></div>
-            <div className="po-field"><dt>ETA</dt><dd>{po.eta || '—'}{po.etaDays ? ` (${po.etaDays} days)` : ''}</dd></div>
-            <div className="po-field"><dt>SKU</dt><dd className="mono">{po.sku || 'Unmapped'}</dd></div>
-            <div className="po-field po-field-wide"><dt>Supplier</dt><dd>{po.supplier || '—'}</dd></div>
-          </dl>
-
           <section className="assessment" aria-labelledby="assessment-title">
             <div className="panel-head">
               <div><p className="eyebrow">Assessment</p><h3 id="assessment-title">{assessment?.decision}</h3></div>
-              <span className={`assessment-chip flag-${assessment?.flag}`}>{FLAG_LABEL[assessment?.flag] || assessment?.decision}</span>
             </div>
             {assessment?.status === 'manual' ? (
               <p className="review-note">{assessment.note}</p>
@@ -213,7 +213,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                     {assessment.warnings.map((warning, index) => <li key={`${warning.type}-${index}`}>{warningText(warning)}</li>)}
                   </ul>
                 ) : null}
-                <div className="assessment-columns">
+                <details className="assessment-evidence"><summary>Balance, supply and demand</summary><div className="assessment-columns">
                   <div>
                     <h4>Projected balance</h4>
                     <table className="breakdown-table">
@@ -259,18 +259,26 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                       </ul>
                     ) : <p className="muted">None</p>}
                   </div>
-                </div>
+                </div></details>
               </>
             )}
           </section>
 
+          <dl className="po-grid" aria-label="Purchase order">
+            <div className="po-field"><dt>Quantity</dt><dd className="mono">{po.quantity ?? '—'}</dd></div>
+            <div className="po-field"><dt>Unit</dt><dd>{po.unit || '—'}</dd></div>
+            <div className="po-field"><dt>ETA</dt><dd>{po.eta || '—'}{po.etaDays ? ` (${po.etaDays} days)` : ''}</dd></div>
+            <div className="po-field"><dt>SKU</dt><dd className="mono">{po.sku || 'Unmapped'}</dd></div>
+            <div className="po-field po-field-wide"><dt>Supplier</dt><dd>{po.supplier || '—'}</dd></div>
+          </dl>
+
           {po.events?.length ? (
-            <section aria-labelledby="history-title">
-              <h4 id="history-title">Review history</h4>
+            <details className="assessment-evidence">
+              <summary id="history-title">Review history</summary>
               <ul className="history-list">
                 {po.events.map((event) => <li key={event.id}><strong>{event.type}</strong> · {fullDate(event.createdAt)}{event.reason ? ` — ${event.reason}` : ''}</li>)}
               </ul>
-            </section>
+            </details>
           ) : null}
 
           {po.delivery ? (
@@ -278,8 +286,8 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
           ) : null}
 
           {po.proof || po.state === 'ordered' ? (
-            <section aria-labelledby="proof-title">
-              <h4 id="proof-title">Incoming proof</h4>
+            <details className="assessment-evidence">
+              <summary id="proof-title">Incoming proof</summary>
               {po.proof ? (
                 <img
                   className="proof-image"
@@ -287,7 +295,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                   alt="Proof that the order is incoming"
                 />
               ) : <p className="muted">No proof picture on file.</p>}
-            </section>
+            </details>
           ) : null}
 
           {formError ? <p className="form-error" role="alert">{formError}</p> : null}
@@ -397,7 +405,8 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
             <pre>{po.body || po.preview || '(No text body)'}</pre>
           </details>
 
-          <div className="dialog-actions po-actions">
+        </div>
+          <footer className="dialog-actions po-actions">
             {po.state === 'pending_review' ? (
               <>
                 <button type="button" className="button button-secondary button-small" onClick={() => { setCorrecting(true); setRejecting(false); }}>Correct fields</button>
@@ -428,8 +437,8 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                 </button>
               </>
             ) : null}
-          </div>
-        </div>
+          </footer>
+        </>
       ) : (
         <div className="detail-body"><p className="detail-loading" role="status"><span className="spinner" aria-hidden="true" />{error || loading ? 'Loading order details…' : 'Order details unavailable.'}</p></div>
       )}

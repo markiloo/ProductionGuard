@@ -27,3 +27,13 @@ Live Gmail connectivity and connected browser workflows were not exercised. Coll
 - Added starting balances, transactional quantity edits and delivery receipts, and per-item history sheets.
 - Passed lint, all 64 tests, and production build. Receipt tests cover exact stock snapshots, duplicate receiving, manual edits, unchanged quantities, and account isolation.
 - Browser keyboard and responsive checks have not been performed.
+
+## Operational visual refinement ? 2026-11-13
+
+- Preserved monochrome/Lato identity and both themes; revised shared typography, spacing, navigation, records, touch controls and dialog hierarchy. PO decisions now lead the detail sheet, evidence/history/proof use disclosure, and review actions remain outside the scrolling body. Clear saved is under More actions.
+- Isolated browser preview: `node scripts/visual-preview.mjs` on loopback 5180. Fixtures cover dashboard work areas, receiving and production floor without importing database/auth modules. Writes return a read-only error. `?preview=setup|empty|error|loading` exercises presentation states.
+- Inspected populated Orders, Inventory, Deliveries, Production, Assemblies, Settings, receiving and floor surfaces; representative inventory, assembly, manual PO, receipt, progress and PO-detail forms. Checked light and dark presentation, 768px tablet and 375/320px narrow layouts. Measured no document overflow on sampled views. Browser zoom keys reached a 2x pixel ratio; viewport tooling retained the CSS viewport, so the 768px reflow check supplies the equivalent narrowed-layout evidence rather than a formal native zoom audit.
+- Keyboard Tab reaches labeled inputs with a visible solid outline; Escape closes native dialogs. Correct fields scrolls and focuses the first input. At 375px the PO action footer spans x=0..375 and remains at the viewport bottom. Reduced-motion, contrast and transparency preference rules remain present; assistive-technology and OS preference emulation were not performed.
+- Restored the production floor date accidentally hidden by the generic category-label rule. Added a regression test, observed its expected failure before the fix, then passed it after the fix. Floor browser AX and screenshot show Fri, 13 Nov above the title.
+- Passed lint, all 66 tests, and production build after final changes. Source detector and whitespace checks run separately. Screenshots in `docs/screenshots/` document representative fixture screens; they do not imply live Gmail testing. Reliability changes from the critique remain outside this visual pass.
+- Final detector: no findings; git diff --check passed. Temporary fixture server and review tabs were closed after verification.

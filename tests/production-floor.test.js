@@ -53,3 +53,11 @@ test('production floor opens a completed-units form from an edit button', () => 
   assert.ok(!row.includes('<input'));
   assert.ok(!row.includes('<form'));
 });
+
+test('production floor keeps its schedule date visible in the refined header', () => {
+  // Browser reproduction: load /production_runs with a populated schedule;
+  // the shared category-label suppression must not hide the plant date.
+  assert.match(floorApp(), /className="floor-date"/);
+  const css = readFileSync(new URL('../client/src/style.css', import.meta.url), 'utf8');
+  assert.match(css, /\.floor-date\s*\{[^}]*display:\s*block/);
+});

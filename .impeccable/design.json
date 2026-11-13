@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-13T12:00:00Z",
+  "title": "Design System: PO Checker",
+  "extensions": {
+    "breakpoints": [
+      {
+        "name": "mobile",
+        "value": "640px"
+      },
+      {
+        "name": "tablet",
+        "value": "960px"
+      }
+    ],
+    "motion": [
+      {
+        "name": "sheet",
+        "value": "0.2s cubic-bezier(0.2, 0.7, 0.3, 1)",
+        "purpose": "Brief dialog entry; disabled with reduced motion."
+      }
+    ]
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "Clear purchasing decisions",
+    "overview": "Desktop operational precision with focused touch stations.",
+    "keyCharacteristics": [
+      "Monochrome",
+      "Square geometry",
+      "Lato typography"
+    ],
+    "rules": [],
+    "dos": [
+      "Keep assessment actions visible.",
+      "Pair status colors with text."
+    ],
+    "donts": [
+      "Do not hide schedule dates with category labels."
+    ]
+  }
+}

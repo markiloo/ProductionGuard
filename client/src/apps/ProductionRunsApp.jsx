@@ -69,7 +69,7 @@ export function ProductionRunsApp() {
       <section className="panel record-panel production" aria-labelledby="floor-title">
         <header className="panel-head record-head">
           <div>
-            <p className="eyebrow">{data ? scheduleDate(data.today) : 'Daily schedule'}</p>
+            <p className="floor-date">{data ? scheduleDate(data.today) : 'Daily schedule'}</p>
             <h2 id="floor-title">Production runs</h2>
           </div>
           <div className="record-actions">
