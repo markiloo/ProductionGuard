@@ -193,3 +193,17 @@
  */
 
 /** @template T @typedef {{ items: T[], total: number, limit: number, offset: number }} PaginatedResponse */
+
+/**
+ * @typedef {Object} InventoryHistoryEntry
+ * @property {number} id Stable ordered event ID.
+ * @property {string} kind Starting balance, Item added, Quantity edited, or Delivery received.
+ * @property {number} before_quantity Stock before the event.
+ * @property {number} after_quantity Stock after the event.
+ * @property {string} before_unit Previous unit snapshot.
+ * @property {string} unit Resulting unit snapshot.
+ * @property {string|null} delivery_id Source delivery.
+ * @property {string|null} po_id Source PO.
+ * @property {string} supplier Supplier snapshot.
+ * @property {string} created_at UTC timestamp.
+ */

@@ -1,3 +1,4 @@
+import { recordStockHistory } from './inventory.js';
 import { randomUUID } from 'node:crypto';
 import { isValidDate } from './time.js';
 
@@ -161,6 +162,7 @@ export function receiveDelivery(db, accountId, id, now, { quantity, proof } = {}
     if (!inventory) throw fail('The mapped inventory item no longer exists.', 409);
     if (String(inventory.unit).toLowerCase() !== String(delivery.unit).toLowerCase()) throw fail(`Unit must match inventory (${inventory.unit}) before receiving.`, 409);
     db.prepare('UPDATE incoming_deliveries SET status=\'received\', received_at=?, received_quantity=?, updated_at=? WHERE account_id=? AND id=?').run(now, receivedQuantity, now, accountId, id);
+    recordStockHistory(db, accountId, inventory.id, 'Delivery received', inventory, { quantity: inventory.quantity + receivedQuantity, unit: inventory.unit }, now, delivery);
     db.prepare('UPDATE inventory SET quantity=quantity+?, updated_at=? WHERE account_id=? AND id=?').run(receivedQuantity, now, accountId, inventory.id);
     db.prepare(`INSERT INTO delivery_receipts(account_id,delivery_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)
       ON CONFLICT(account_id,delivery_id) DO UPDATE SET mime_type=excluded.mime_type, file_name=excluded.file_name, data=excluded.data, created_at=excluded.created_at`)

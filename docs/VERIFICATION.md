@@ -22,3 +22,8 @@ Live Gmail connectivity and connected browser workflows were not exercised. Coll
 - Calculated contrast for primary, secondary, muted, positive, warning, and primary-button text pairs, including hover: minimum 5.13:1 in light theme and 6.26:1 in dark theme. These are token checks, not a browser accessibility audit.
 - Visible focus rules, responsive layouts, image sizing, and modal behavior are retained. Reduced motion now disables animations and transitions; the loading spinner retains circular geometry.
 - New visual screenshots, connected sample-data browser walkthroughs, keyboard interaction, 200% zoom, and narrow-screen rendering have not been verified for this revision. Earlier browser smoke-check results above predate this restyle.
+
+## Inventory stock history
+- Added starting balances, transactional quantity edits and delivery receipts, and per-item history sheets.
+- Passed lint, all 64 tests, and production build. Receipt tests cover exact stock snapshots, duplicate receiving, manual edits, unchanged quantities, and account isolation.
+- Browser keyboard and responsive checks have not been performed.

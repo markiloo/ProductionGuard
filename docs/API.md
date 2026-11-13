@@ -72,3 +72,6 @@ Two route families exist on purpose. The hyphenated routes manage the full produ
 - `GET /api/production-runs` returns every run for the connected account, each with `requirements[]`.
 - `GET /api/production_runs` returns `{ items: ProductionRun[], today }` for the production floor: scheduled runs on the plant-local current day plus all in-progress runs. Requires a connected account.
 - `PATCH /api/production_runs/:id` accepts `{ completedQuantity }` and returns `{ ok: true, item }`. It records floor progress; reaching the planned quantity automatically marks the run `completed`. It does not otherwise change the run status. Completed units must be an integer from zero through planned quantity. Updates are account-scoped and require a trusted Origin. Progress does not adjust inventory or scale locked material demand.
+
+### Inventory history
+`GET /api/inventory/:id/history?limit=25&offset=0` returns `{ item, items, total, limit, offset }`, newest first. Entries include kind, before_quantity, after_quantity, before_unit, unit, delivery_id, po_id, supplier, and created_at. Requires a connected account; missing or other-account items return 404.

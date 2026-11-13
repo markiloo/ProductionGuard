@@ -28,6 +28,22 @@ test('receiving uses the confirmed quantity, stores a receipt picture, and adds 
 
     const first = receiveDelivery(db, account, 'del-1', now, { quantity: 8, proof: { mimeType: 'image/png', fileName: 'receipt.png', data: proof } });
     assert.equal(first.alreadyReceived, false);
+    const event = db.prepare('SELECT * FROM inventory_history').get();
+    assert.equal(event.before_quantity, 0);
+    assert.equal(event.after_quantity, 8);
+    assert.equal(event.kind, 'Delivery received');
+    receiveDelivery(db, account, 'del-1', now, { quantity: 8, proof: { data: proof } });
+    assert.equal(db.prepare('SELECT count(*) n FROM inventory_history').get().n, 1);
+    const { updateInventoryItem, inventoryHistory } = await import('../server/inventory.js');
+    const input = { item: 'Carton Glue', sku: 'SKU-0001', quantity: 3, unit: 'units', supplier: '', reorderLevel: null, notes: '' };
+    updateInventoryItem(db, account, 'inv-1', input, now);
+    const history = inventoryHistory(db, account, 'inv-1', 25, 0);
+    assert.equal(history.items[0].before_quantity, 8);
+    assert.equal(history.items[0].after_quantity, 3);
+    assert.equal(inventoryHistory(db, 'other', 'inv-1', 25, 0), null);
+    updateInventoryItem(db, account, 'inv-1', input, now);
+    assert.equal(inventoryHistory(db, account, 'inv-1', 25, 0).total, 2);
+    updateInventoryItem(db, account, 'inv-1', { ...input, quantity: 8 }, now);
     assert.equal(first.delivery.status, 'received');
     assert.equal(first.delivery.receivedQuantity, 8);
     assert.equal(first.delivery.receipt.mimeType, 'image/png');

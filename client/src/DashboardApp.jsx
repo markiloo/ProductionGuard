@@ -1,3 +1,4 @@
+import { InventoryHistoryDialog } from './dialogs/InventoryHistoryDialog.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Brand } from './components/Brand.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
@@ -20,6 +21,7 @@ import { ProductionView } from './views/ProductionView.jsx';
 import { SettingsView } from './views/SettingsView.jsx';
 
 export function DashboardApp() {
+  const [historyItem, setHistoryItem] = useState(null);
   const [status, setStatus] = useState(null);
   const [pos, setPos] = useState({ items: [], total: 0, counts: {} });
   const [stateFilter, setStateFilter] = useState('pending_review');
@@ -61,6 +63,7 @@ export function DashboardApp() {
   const [receiveBusy, setReceiveBusy] = useState(false);
   const [addingPo, setAddingPo] = useState(false);
   const [addPoBusy, setAddPoBusy] = useState(false);
+  const historyAccount = useRef(null);
   const refreshSequence = useRef(0);
   const tabsRef = useRef(null);
   const [tabIndicator, setTabIndicator] = useState(null);
@@ -72,6 +75,8 @@ export function DashboardApp() {
       const current = await api('/api/status');
       if (sequence !== refreshSequence.current) return;
       setStatus(current);
+      if (!current.auth.connected || current.auth.account?.id !== historyAccount.current) setHistoryItem(null);
+      historyAccount.current = current.auth.account?.id;
       if (current.auth.connected) {
         const result = await api(`/api/pos?state=${stateFilter}&sort=${sort}&q=${encodeURIComponent(query)}&limit=25&offset=${offset}`);
         if (sequence === refreshSequence.current) setPos(result);
@@ -783,7 +788,7 @@ export function DashboardApp() {
       ) : view === 'deliveries' ? (
         <DeliveriesView deliveries={deliveries} onAdd={openNewDelivery} onEdit={openDelivery} onReceive={startReceive} busy={deliveryBusy} />
       ) : view === 'inventory' ? (
-        <InventoryView items={inventory} onAdd={openNewInventoryItem} onEdit={openInventoryItem} />
+        <InventoryView items={inventory} onAdd={openNewInventoryItem} onEdit={openInventoryItem} onHistory={setHistoryItem} />
       ) : view === 'assemblies' ? (
         <AssembliesView assemblies={productionItems} onAdd={openNewProductionItem} onEdit={openProductionItem} />
       ) : (
@@ -815,6 +820,7 @@ export function DashboardApp() {
       {addingPo ? (
         <ManualPoDialog skuOptions={inventoryOptions} busy={addPoBusy} onClose={() => { if (!addPoBusy) setAddingPo(false); }} onSave={saveManualPo} />
       ) : null}
+      {historyItem && status?.auth.connected ? <InventoryHistoryDialog key={`${status.auth.account?.id}-${historyItem.id}`} item={historyItem} onClose={() => setHistoryItem(null)} /> : null}
       {inventoryDraft ? (
         <InventoryDialog draft={inventoryDraft} busy={inventoryBusy} onClose={() => { if (!inventoryBusy) setInventoryDraft(null); }} onSave={saveInventory} onDelete={removeInventoryItem} />
       ) : null}

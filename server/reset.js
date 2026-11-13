@@ -4,6 +4,7 @@
  */
 export function resetAccountData(db, accountId, clearedAt) {
   return db.transaction(() => {
+    if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='inventory_history'").get()) db.prepare('DELETE FROM inventory_history WHERE account_id=?').run(accountId);
     const counts = {
       events: db.prepare('DELETE FROM po_events WHERE account_id=?').run(accountId).changes,
       proofs: db.prepare('DELETE FROM po_proofs WHERE account_id=?').run(accountId).changes,

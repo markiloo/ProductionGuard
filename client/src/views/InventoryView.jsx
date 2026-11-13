@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { SearchIcon } from '../components/SearchIcon.jsx';
 import { fullDate, metricDate, shortDate } from '../lib/format.js';
 
-function InventoryRow({ item, onEdit }) {
+function InventoryRow({ item, onEdit, onHistory }) {
   const lowStock = item.reorderLevel != null && item.quantity <= item.reorderLevel;
   const meta = [item.supplier, item.reorderLevel != null ? `Reorder at ${item.reorderLevel} ${item.unit}` : null].filter(Boolean).join(' · ');
   return (
@@ -20,12 +20,13 @@ function InventoryRow({ item, onEdit }) {
         <span className="inventory-qty">{item.quantity}<small>{item.unit}</small></span>
         <time className="inventory-updated" dateTime={item.updatedAt} title={fullDate(item.updatedAt)}>Updated {shortDate(item.updatedAt)}</time>
       </div>
+      <button type="button" className="button button-ghost button-small" onClick={() => onHistory(item)}>History</button>
       <button type="button" className="button button-ghost button-small inventory-edit" onClick={() => onEdit(item)} aria-label={`Edit ${item.item}`}>Edit</button>
     </div>
   );
 }
 
-export function InventoryView({ items, onAdd, onEdit }) {
+export function InventoryView({ items, onAdd, onEdit, onHistory }) {
   const [query, setQuery] = useState('');
   const filtered = items ? items.filter((item) => [item.item, item.sku, item.supplier].some((value) => String(value || '').toLowerCase().includes(query.trim().toLowerCase()))) : null;
   const lowStock = filtered ? filtered.filter((item) => item.reorderLevel != null && item.quantity <= item.reorderLevel).length : 0;
@@ -61,7 +62,7 @@ export function InventoryView({ items, onAdd, onEdit }) {
             </label>
           </div>
           <div className="record-list">
-            {(filtered || []).map((item) => <InventoryRow key={item.id} item={item} onEdit={onEdit} />)}
+            {(filtered || []).map((item) => <InventoryRow key={item.id} item={item} onEdit={onEdit} onHistory={onHistory} />)}
             {!filtered?.length ? (
               <div className="empty">
                 <span className="empty-mark" aria-hidden="true">ST</span>

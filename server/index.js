@@ -7,7 +7,7 @@ import { beginCollector, stopCollector, collectionState, startupCutoff, collect 
 import { normalizeSender, isValidSender } from './rules.js';
 import { parsePagination } from './pagination.js';
 import { clearSavedEmails } from './email-maintenance.js';
-import { listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
+import { inventoryHistory, listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
 import { updateProductionProgress, listActiveProductionRuns, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
 import { listPos, getPo, transitionPo, correctPo, createManualPo, authorizeQueuedMail, setPoProof, schedulePo } from './pos.js';
@@ -101,6 +101,14 @@ app.delete('/api/emails', (_req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   const deletedCount = clearSavedEmails(db, aid, isoNow());
   res.json({ ok: true, deletedCount });
+});
+
+app.get('/api/inventory/:id/history', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const { limit, offset } = parsePagination(req.query.limit, req.query.offset);
+  const result = inventoryHistory(db, aid, req.params.id, limit, offset);
+  if (!result) return res.status(404).json({ error: 'Inventory item not found.' });
+  res.json(result);
 });
 
 app.get('/api/inventory', (_req, res) => {

@@ -199,6 +199,9 @@ export function migrate() {
     `ALTER TABLE production_runs ADD COLUMN completed_quantity INTEGER NOT NULL DEFAULT 0 CHECK (completed_quantity >= 0);`,
     `UPDATE production_runs SET status = 'completed' WHERE completed_quantity >= quantity;`,
     `ALTER TABLE emails ADD COLUMN manual INTEGER NOT NULL DEFAULT 0;`,
+    `CREATE TABLE inventory_history (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id TEXT NOT NULL, inventory_id TEXT NOT NULL, kind TEXT NOT NULL, before_quantity INTEGER NOT NULL, after_quantity INTEGER NOT NULL, before_unit TEXT NOT NULL, unit TEXT NOT NULL, delivery_id TEXT, po_id TEXT, supplier TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);
+     CREATE INDEX inventory_history_item ON inventory_history(account_id, inventory_id, id DESC);
+     INSERT INTO inventory_history(account_id,inventory_id,kind,before_quantity,after_quantity,before_unit,unit,created_at) SELECT account_id,id,'Starting balance',quantity,quantity,unit,unit,strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM inventory;`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;

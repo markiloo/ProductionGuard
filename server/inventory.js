@@ -76,14 +76,18 @@ function hasTable(db, name) {
 export function createInventoryItem(db, accountId, input, now) {
   if (skuTaken(db, accountId, input.sku)) throw skuConflict();
   const id = randomUUID();
+  return db.transaction(() => {
   db.prepare('INSERT INTO inventory(account_id,id,item,sku,quantity,unit,supplier,reorder_level,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(
     accountId, id, input.item, input.sku, input.quantity, input.unit, input.supplier, input.reorderLevel, input.notes, now, now,
   );
+  recordStockHistory(db, accountId, id, 'Item added', { quantity: 0, unit: input.unit }, input, now);
   return getInventoryItem(db, accountId, id);
+  })();
 }
 
 /** Update an account-owned inventory item; returns null when the item is missing or owned by another account. */
 export function updateInventoryItem(db, accountId, id, input, now) {
+  return db.transaction(() => {
   const existing = getInventoryItem(db, accountId, id);
   if (!existing) return null;
   if (existing.sku && existing.sku.toLowerCase() !== input.sku.toLowerCase()) {
@@ -95,7 +99,9 @@ export function updateInventoryItem(db, accountId, id, input, now) {
   const result = db.prepare('UPDATE inventory SET item=?, sku=?, quantity=?, unit=?, supplier=?, reorder_level=?, notes=?, updated_at=? WHERE account_id=? AND id=?').run(
     input.item, input.sku, input.quantity, input.unit, input.supplier, input.reorderLevel, input.notes, now, accountId, id,
   );
+  if (existing.quantity !== input.quantity) recordStockHistory(db, accountId, id, 'Quantity edited', existing, input, now);
   return result.changes ? getInventoryItem(db, accountId, id) : null;
+  })();
 }
 
 /** Delete an account-owned inventory item only when nothing still references its SKU. */
@@ -113,5 +119,20 @@ export function deleteInventoryItem(db, accountId, id) {
     error.status = 409;
     throw error;
   }
+  return db.transaction(() => {
+  if (hasTable(db, 'inventory_history')) db.prepare('DELETE FROM inventory_history WHERE account_id=? AND inventory_id=?').run(accountId,id);
   return db.prepare('DELETE FROM inventory WHERE account_id = ? AND id = ?').run(accountId, id).changes > 0;
+  })();
+}
+
+export function recordStockHistory(db, accountId, id, kind, before, after, now, delivery = {}) {
+  if (!hasTable(db, 'inventory_history')) return;
+  db.prepare(`INSERT INTO inventory_history(account_id,inventory_id,kind,before_quantity,after_quantity,before_unit,unit,delivery_id,po_id,supplier,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(accountId,id,kind,before.quantity,after.quantity,before.unit,after.unit,delivery.id || null,delivery.poId || null,delivery.supplier || '',now);
+}
+export function inventoryHistory(db, accountId, id, limit, offset) {
+  const item = getInventoryItem(db, accountId, id);
+  if (!item) return null;
+  const total = db.prepare('SELECT count(*) total FROM inventory_history WHERE account_id=? AND inventory_id=?').get(accountId,id).total;
+  const items = db.prepare('SELECT * FROM inventory_history WHERE account_id=? AND inventory_id=? ORDER BY id DESC LIMIT ? OFFSET ?').all(accountId,id,limit,offset);
+  return { item, items, total, limit, offset };
 }

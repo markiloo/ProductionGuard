@@ -94,3 +94,5 @@ The production floor lets you save total units completed (0 through planned quan
 Released under the [Apache License 2.0](LICENSE).
 
 You may use, modify, and distribute this software, including for commercial purposes, provided you preserve the copyright and license notices. Apache-2.0 is permissive: it does not require modified versions to be published or shared under the same license.
+
+Inventory items have a History action showing their starting balance, manual quantity edits, and received deliveries. Tracking starts at upgrade; earlier changes are unavailable. Deleting an item deletes its history.

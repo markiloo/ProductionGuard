@@ -1395,3 +1395,20 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
 /* Production floor -------------------------------------------------------- */
 
 .floor-refresh { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+
+.inventory-history-dialog { width: min(960px, 100%); }
+.history-sku, .history-note { color: var(--ink-3); font-size: 13px; line-height: 1.6; }
+.history-table-scroll { overflow-x: auto; min-width: 0; }
+.history-table-scroll:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.history-table { width: 100%; min-width: 700px; border-collapse: collapse; font-size: 13px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.history-table th { padding: 12px; text-align: left; background: var(--surface); color: var(--ink-3); font-size: 12px; border-bottom: 2px solid var(--line); }
+.history-table td { padding: 16px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.history-table th:nth-child(n+3), .history-table td:nth-child(n+3) { text-align: right; }
+.history-table td:first-child { width: 145px; }
+.history-table td:nth-child(2) { max-width: 250px; overflow-wrap: anywhere; }
+.history-secondary, .history-reference { display: block; color: var(--ink-3); font-size: 12px; }
+.history-reference { margin-top: 4px; }
+.history-change { white-space: nowrap; }
+.history-balance { font-weight: 700; }
+.history-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.history-pagination > span { margin-right: auto; color: var(--ink-3); font-size: 13px; }
