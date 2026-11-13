@@ -72,6 +72,10 @@ function hasTable(db, name) {
   return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
 }
 
+function hasColumn(db, table, column) {
+  return hasTable(db, table) && db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column);
+}
+
 /** Create an inventory item for one account. Adding it defines the SKU, name, and unit. */
 export function createInventoryItem(db, accountId, input, now) {
   if (skuTaken(db, accountId, input.sku)) throw skuConflict();
@@ -111,9 +115,11 @@ export function deleteInventoryItem(db, accountId, id) {
   const sku = existing.sku;
   const references = [];
   if (hasTable(db, 'production_item_requirements') && db.prepare('SELECT 1 FROM production_item_requirements WHERE account_id=? AND item_sku=? COLLATE NOCASE').get(accountId, sku)) references.push('assemblies');
+  if (hasColumn(db, 'production_items', 'inventory_id') && db.prepare('SELECT 1 FROM production_items WHERE account_id=? AND inventory_id=?').get(accountId, id)) references.push('assemblies');
   if (hasTable(db, 'production_requirements') && db.prepare('SELECT 1 FROM production_requirements WHERE account_id=? AND item_sku=? COLLATE NOCASE').get(accountId, sku)) references.push('production demand');
   if (hasTable(db, 'incoming_deliveries') && db.prepare('SELECT 1 FROM incoming_deliveries WHERE account_id=? AND item_sku=? COLLATE NOCASE').get(accountId, sku)) references.push('deliveries');
   if (hasTable(db, 'emails') && db.prepare('SELECT 1 FROM emails WHERE account_id=? AND (mapped_sku=? COLLATE NOCASE OR item=? COLLATE NOCASE) AND po_state IS NOT NULL').get(accountId, sku, sku)) references.push('purchase orders');
+  if (hasTable(db, 'dashboard_widgets') && db.prepare('SELECT 1 FROM dashboard_widgets WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, sku)) references.push('dashboard widgets');
   if (references.length) {
     const error = new Error(`This inventory item is still used by ${references.join(', ')}. Remove those references first.`);
     error.status = 409;

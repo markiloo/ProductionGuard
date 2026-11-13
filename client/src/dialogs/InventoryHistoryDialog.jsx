@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
-import { fullDate } from '../lib/format.js';
+import { metricDate } from '../lib/format.js';
 import { useSheetDialog } from '../hooks/useSheetDialog.js';
 
 export function InventoryHistoryDialog({ item, onClose }) {
@@ -38,7 +38,7 @@ export function InventoryHistoryDialog({ item, onClose }) {
 }
 
 export function InventoryHistoryTable({ entries }) {
-  return <div className="history-table-scroll" role="region" aria-label="Stock history table, scroll horizontally for more columns" tabIndex={0}>
+  return <div className="history-table-scroll" role="region" aria-label="Stock history table" tabIndex={0}>
     <table className="history-table">
       <caption className="sr-only">Stock changes, newest first</caption>
       <thead><tr>{['Date & time', 'Activity', 'Before', 'Change', 'After'].map((label) => <th scope="col" key={label}>{label}</th>)}</tr></thead>
@@ -48,7 +48,7 @@ export function InventoryHistoryTable({ entries }) {
         const difference = entry.after_quantity - entry.before_quantity;
         const change = baseline ? '\u2014' : unitChanged ? 'Unit changed' : `${difference >= 0 ? '+' : '\u2212'}${Math.abs(difference).toLocaleString()} ${entry.unit}`;
         return <tr key={entry.id}>
-          <td><time dateTime={entry.created_at}>{fullDate(entry.created_at)}</time></td>
+          <td><time dateTime={entry.created_at} title={new Date(entry.created_at).toLocaleString()}>{metricDate(entry.created_at)}</time></td>
           <td><strong>{entry.kind}</strong>{entry.delivery_id ? <><span className="history-secondary">{[entry.supplier, entry.po_id].filter(Boolean).join(' \u00b7 ')}</span><span className="history-reference">Delivery {entry.delivery_id}</span></> : null}</td>
           <td>{baseline ? '\u2014' : `${entry.before_quantity.toLocaleString()} ${entry.before_unit}`}</td>
           <td className="history-change">{change}</td>

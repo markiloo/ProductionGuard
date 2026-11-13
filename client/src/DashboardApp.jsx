@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Brand } from './components/Brand.jsx';
 import { ThemeToggle } from './components/ThemeToggle.jsx';
 import { ToastStack } from './components/ToastStack.jsx';
-import { RunStrip } from './components/RunStrip.jsx';
+import { OrdersTopbar } from './components/OrdersTopbar.jsx';
 import { InventoryDialog } from './dialogs/InventoryDialog.jsx';
 import { ProductionDialog } from './dialogs/ProductionDialog.jsx';
 import { ProductionItemDialog } from './dialogs/ProductionItemDialog.jsx';
@@ -12,11 +12,13 @@ import { ReceiveDeliveryDialog } from './dialogs/ReceiveDeliveryDialog.jsx';
 import { ManualPoDialog } from './dialogs/ManualPoDialog.jsx';
 import { PoDetailDialog } from './dialogs/PoDetailDialog.jsx';
 import { api } from './lib/api.js';
+import { DEFAULT_ORDER_FILTER } from './lib/constants.js';
 import { todayDate } from './lib/format.js';
 import { AssembliesView } from './views/AssembliesView.jsx';
 import { DeliveriesView } from './views/DeliveriesView.jsx';
+import { HomeView } from './views/HomeView.jsx';
 import { InventoryView } from './views/InventoryView.jsx';
-import { OrderNav, PosPanel } from './views/OrdersView.jsx';
+import { PosPanel } from './views/OrdersView.jsx';
 import { ProductionView } from './views/ProductionView.jsx';
 import { SettingsView } from './views/SettingsView.jsx';
 
@@ -24,7 +26,7 @@ export function DashboardApp() {
   const [historyItem, setHistoryItem] = useState(null);
   const [status, setStatus] = useState(null);
   const [pos, setPos] = useState({ items: [], total: 0, counts: {} });
-  const [stateFilter, setStateFilter] = useState('pending_review');
+  const [stateFilter, setStateFilter] = useState(DEFAULT_ORDER_FILTER);
   const [sort, setSort] = useState('desc');
   const [query, setQuery] = useState('');
   const [offset, setOffset] = useState(0);
@@ -42,7 +44,7 @@ export function DashboardApp() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [theme, setTheme] = useState(() => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
-  const [view, setView] = useState('orders');
+  const [view, setView] = useState('home');
   const [inventory, setInventory] = useState(null);
   const [inventoryRevision, setInventoryRevision] = useState(0);
   const [inventoryDraft, setInventoryDraft] = useState(null);
@@ -362,7 +364,7 @@ export function DashboardApp() {
     action(async () => {
       await api('/api/setup', { method: 'POST', body: JSON.stringify({ email, appPassword }) });
       setAppPassword('');
-      setView('orders');
+      setView('home');
       setInventory(null);
       setInventoryDraft(null);
       setProductionItems(null);
@@ -397,7 +399,7 @@ export function DashboardApp() {
     await api('/api/sign-out', { method: 'POST', body: '{}' });
     setSelected(null);
     setOffset(0);
-    setView('orders');
+    setView('home');
     setInventory(null);
     setInventoryDraft(null);
     setProductionItems(null);
@@ -418,7 +420,7 @@ export function DashboardApp() {
   };
 
   const clearAllData = () => {
-    if (!globalThis.confirm('Clear ALL local data for this account?\n\nThis deletes PO requests and review history, incoming proof and receipt pictures, inventory, incoming deliveries, production runs and definitions, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.')) return;
+    if (!globalThis.confirm('Clear ALL local data for this account?\n\nThis deletes PO requests and review history, incoming proof and receipt pictures, inventory, incoming deliveries, production runs and definitions, Home visualizations, and SKUs. Your approved senders and plant time zone are kept, as is the Gmail connection. Gmail is not changed. This cannot be undone.')) return;
     action(async () => {
       await api('/api/reset', { method: 'POST', body: JSON.stringify({ confirm: true }) });
       setSelected(null);
@@ -671,8 +673,8 @@ export function DashboardApp() {
   return (
     <main className="shell">
       {status.auth.connected ? (
-        <a className="skip-link" href={view === 'settings' ? '#settings' : view === 'orders' ? '#orders' : view === 'deliveries' ? '#deliveries' : view === 'inventory' ? '#inventory' : view === 'assemblies' ? '#assemblies' : '#production'}>
-          Skip to {view === 'settings' ? 'settings' : view === 'orders' ? 'purchase orders' : view === 'deliveries' ? 'deliveries' : view === 'inventory' ? 'inventory' : view === 'assemblies' ? 'assemblies' : 'production'}
+        <a className="skip-link" href={view === 'home' ? '#home' : view === 'settings' ? '#settings' : view === 'orders' ? '#orders' : view === 'deliveries' ? '#deliveries' : view === 'inventory' ? '#inventory' : view === 'assemblies' ? '#assemblies' : '#production'}>
+          Skip to {view === 'home' ? 'home' : view === 'settings' ? 'settings' : view === 'orders' ? 'purchase orders' : view === 'deliveries' ? 'deliveries' : view === 'inventory' ? 'inventory' : view === 'assemblies' ? 'assemblies' : 'production'}
         </a>
       ) : null}
       <header className="app-head">
@@ -706,6 +708,7 @@ export function DashboardApp() {
 
       {status.auth.connected ? (
         <nav className="view-tabs" aria-label="Dashboard views" ref={tabsRef}>
+          <button type="button" className="view-tab" aria-current={view === 'home' ? 'page' : undefined} onClick={() => showView('home')}>Home</button>
           <button type="button" className="view-tab" aria-current={view === 'orders' ? 'page' : undefined} onClick={() => showView('orders')}>Orders</button>
           <button type="button" className="view-tab" aria-current={view === 'deliveries' ? 'page' : undefined} onClick={() => showView('deliveries')}>Deliveries</button>
           <button type="button" className="view-tab" aria-current={view === 'inventory' ? 'page' : undefined} onClick={() => showView('inventory')}>Inventory</button>
@@ -760,11 +763,18 @@ export function DashboardApp() {
           onSaveTimeZone={saveTimeZone}
           onClearAllData={clearAllData}
         />
+      ) : view === 'home' ? (
+        <HomeView status={status} inventory={inventory} />
       ) : view === 'orders' ? (
         <>
-          <RunStrip status={status} />
+          <OrdersTopbar
+            status={status}
+            counts={pos.counts || {}}
+            stateFilter={stateFilter}
+            setStateFilter={setStateFilter}
+            setOffset={setOffset}
+          />
           <div className="workspace orders-workspace">
-            <OrderNav counts={pos.counts || {}} stateFilter={stateFilter} setStateFilter={setStateFilter} setOffset={setOffset} />
             <PosPanel
               status={status}
               pos={pos}

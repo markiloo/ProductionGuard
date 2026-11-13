@@ -32,7 +32,7 @@ Setup order matters: **Inventory → Assemblies → Production runs → Delivery
 - All quantities are whole numbers. PO units must match the inventory unit, case-insensitively.
 - All reorder levels are `0`. Enter `0`, not a blank field: blank stores "unset", `0` is a real threshold. With `0`, low stock is only flagged when quantity reaches `0`, so no low-stock badges appear initially.
 
-## 2. Inventory — 6 items
+## 2. Inventory — 6 materials (plus 3 finished goods created by assemblies)
 
 | Item name | SKU | Qty | Unit | Supplier | Reorder |
 | --- | --- | --- | --- | --- | --- |
@@ -47,13 +47,13 @@ Setup order matters: **Inventory → Assemblies → Production runs → Delivery
 
 ## 3. Assemblies — 3 definitions, 7 material lines
 
-| Assembly | Unit | Materials per unit |
-| --- | --- | --- |
-| Packaging Box | units | `CARD` ×2, `GLUE` ×1 |
-| Candle with a Case | units | `WAX` ×2, `CASE` ×1, `WICK` ×1 |
-| Candle with no Case | units | `WAX` ×1, `WICK` ×1 |
+| Assembly | Finished-good SKU | Unit | Materials per unit |
+| --- | --- | --- | --- |
+| Packaging Box | `ASM-PACKAGING-BOX` | units | `CARD` ×2, `GLUE` ×1 |
+| Candle with a Case | `ASM-CANDLE-CASE` | units | `WAX` ×2, `CASE` ×1, `WICK` ×1 |
+| Candle with no Case | `ASM-CANDLE-NO-CASE` | units | `WAX` ×1, `WICK` ×1 |
 
-Material quantities are per unit of the assembly. Choosing a SKU in the assembly dialog fills its inventory unit automatically.
+Material quantities are per unit of the assembly. Choosing a SKU in the assembly dialog fills its inventory unit automatically. Creating an assembly also creates its finished-good Inventory item at zero stock; recording completed units on a run adds to that stock.
 
 ## 4. Production runs — 3 runs, 7 locked requirement rows
 
@@ -219,7 +219,7 @@ While E is Pending or Approved, F shows the duplicate warning. Ordering E first 
 
 ## 8. Initial counts
 
-- Inventory: 6 items
+- Inventory: 6 materials plus 3 finished-good items created by the assemblies (9 total)
 - Assemblies: 3, with 7 per-unit material lines
 - Production: 3 runs, 7 requirement rows
 - Deliveries: 1 incoming, 1 proof, 0 received

@@ -37,29 +37,24 @@ function PoRow({ item, selected, onSelect }) {
 }
 
 export function OrderNav({ counts, stateFilter, setStateFilter, setOffset }) {
+  const renderFilter = (filter) => (
+    <button
+      key={filter.value}
+      type="button"
+      className={`order-nav-item${stateFilter === filter.value ? ' is-current' : ''}${filter.value === 'all' ? ' order-nav-all' : ''}`}
+      aria-current={stateFilter === filter.value ? 'page' : undefined}
+      onClick={() => { setStateFilter(filter.value); setOffset(0); }}
+    >
+      <span>{filter.label}</span>
+      <span className="count">{counts[filter.value] || 0}</span>
+    </button>
+  );
   return (
-    <aside className="panel order-nav" aria-labelledby="order-nav-title">
-      <div className="panel-head">
-        <div>
-          <p className="eyebrow">Queues</p>
-          <h2 id="order-nav-title">Orders</h2>
-        </div>
-      </div>
+    <aside className="panel order-nav" aria-label="Order queues">
       <nav aria-label="Order status">
-        {ORDER_FILTERS.map((filter) => (
-          <button
-            key={filter.value}
-            type="button"
-            className={`order-nav-item${stateFilter === filter.value ? ' is-current' : ''}${filter.value === 'all' ? ' order-nav-all' : ''}`}
-            aria-current={stateFilter === filter.value ? 'page' : undefined}
-            onClick={() => { setStateFilter(filter.value); setOffset(0); }}
-          >
-            <span>{filter.label}</span>
-            <span className="count">{counts[filter.value] || 0}</span>
-          </button>
-        ))}
+        {ORDER_FILTERS.map(renderFilter)}
+        <p className="order-nav-hint">New POs appear after the next inbox check.</p>
       </nav>
-      <p className="order-nav-hint">New POs appear after the next inbox check.</p>
     </aside>
   );
 }

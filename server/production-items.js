@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
+import { deleteInventoryItem, recordStockHistory } from './inventory.js';
 
 const MAX_NAME = 120;
+const MAX_SKU = 60;
 const MAX_UNIT = 20;
 const MAX_NOTES = 500;
 const MAX_QUANTITY = 1_000_000_000;
 
-const columns = 'id, name, unit, notes, created_at AS createdAt, updated_at AS updatedAt';
+const columns = `p.id, p.name, p.unit, p.notes, p.sku, p.inventory_id AS inventoryId,
+  i.quantity AS stock, p.created_at AS createdAt, p.updated_at AS updatedAt`;
+const from = `FROM production_items p
+  LEFT JOIN inventory i ON i.account_id = p.account_id AND i.id = p.inventory_id`;
 
 function text(value) { return String(value ?? '').trim(); }
 
@@ -17,11 +22,6 @@ function fail(message, status = 400) {
 
 function hasTable(db, name) {
   return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
-}
-
-function hasColumn(db, table, column) {
-  if (!hasTable(db, table)) return false;
-  return db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column);
 }
 
 function parseRequirement(value, index) {
@@ -37,19 +37,31 @@ function parseRequirement(value, index) {
   return { itemSku, quantity, unit };
 }
 
-/** Validate an assembly definition request and its material requirements. */
-export function parseProductionItemInput(body) {
+/** Validate an assembly definition request, its finished-good SKU, and its materials. */
+export function parseProductionItemInput(body, { requireSku = true } = {}) {
   const value = body && typeof body === 'object' ? body : {};
   const name = text(value.name);
+  const sku = text(value.sku);
   const unit = text(value.unit);
   const notes = text(value.notes);
   if (!name) throw fail('Enter the assembly name.');
   if (name.length > MAX_NAME) throw fail(`Assembly names must be ${MAX_NAME} characters or fewer.`);
+  if (requireSku && !sku) throw fail('Enter the finished-good item code (SKU) for this assembly.');
+  if (sku.length > MAX_SKU) throw fail(`SKUs must be ${MAX_SKU} characters or fewer.`);
   if (!unit) throw fail('Enter a unit.');
   if (unit.length > MAX_UNIT) throw fail(`Units must be ${MAX_UNIT} characters or fewer.`);
   if (notes.length > MAX_NOTES) throw fail(`Notes must be ${MAX_NOTES} characters or fewer.`);
   const requirements = Array.isArray(value.requirements) ? value.requirements.map(parseRequirement) : [];
-  return { name, unit, notes, requirements };
+  if (sku && requirements.some((requirement) => requirement.itemSku.toLowerCase() === sku.toLowerCase())) {
+    throw fail('An assembly cannot use its own finished-good SKU as a material.');
+  }
+  return { name, sku, unit, notes, requirements };
+}
+
+function skuTaken(db, accountId, sku, excludeId = '') {
+  if (!sku) return false;
+  if (db.prepare('SELECT 1 FROM inventory WHERE account_id=? AND sku=? COLLATE NOCASE').get(accountId, sku)) return true;
+  return Boolean(db.prepare('SELECT 1 FROM production_items WHERE account_id=? AND sku=? COLLATE NOCASE AND id<>?').get(accountId, sku, excludeId));
 }
 
 function requirementsFor(db, accountId) {
@@ -68,23 +80,23 @@ function validateMaterials(db, accountId, requirements) {
   }
 }
 
-/** List assemblies and their material requirements. */
+/** List assemblies with their finished-good stock and material requirements. */
 export function listProductionItems(db, accountId) {
-  const items = db.prepare(`SELECT ${columns} FROM production_items WHERE account_id=? ORDER BY name COLLATE NOCASE`).all(accountId);
+  const items = db.prepare(`SELECT ${columns} ${from} WHERE p.account_id=? ORDER BY p.name COLLATE NOCASE`).all(accountId);
   const byItem = new Map();
   for (const requirement of requirementsFor(db, accountId)) {
     if (!byItem.has(requirement.productionItemId)) byItem.set(requirement.productionItemId, []);
     byItem.get(requirement.productionItemId).push(requirement);
   }
-  return items.map((item) => ({ ...item, requirements: byItem.get(item.id) || [] }));
+  return items.map((item) => ({ ...item, stock: item.stock ?? 0, requirements: byItem.get(item.id) || [] }));
 }
 
 /** Fetch one assembly definition by ID. */
 export function getProductionItem(db, accountId, id) {
   if (!hasTable(db, 'production_items')) return null;
-  const item = db.prepare(`SELECT ${columns} FROM production_items WHERE account_id=? AND id=?`).get(accountId, id);
+  const item = db.prepare(`SELECT ${columns} ${from} WHERE p.account_id=? AND p.id=?`).get(accountId, id);
   if (!item) return null;
-  return { ...item, requirements: requirementsFor(db, accountId).filter((requirement) => requirement.productionItemId === id) };
+  return { ...item, stock: item.stock ?? 0, requirements: requirementsFor(db, accountId).filter((requirement) => requirement.productionItemId === id) };
 }
 
 function saveRequirements(db, accountId, productionItemId, requirements, now) {
@@ -94,38 +106,67 @@ function saveRequirements(db, accountId, productionItemId, requirements, now) {
   for (const requirement of requirements) insert.run(accountId, randomUUID(), productionItemId, requirement.itemSku, requirement.quantity, requirement.unit, now, now);
 }
 
-/** Create an assembly and its material requirements. */
+/** Create an assembly, its finished-good inventory row, and its material requirements. */
 export function createProductionItem(db, accountId, input, now) {
   const taken = db.prepare('SELECT 1 FROM production_items WHERE account_id=? AND name=? COLLATE NOCASE').get(accountId, input.name);
   if (taken) throw fail('That assembly is already defined.', 409);
+  if (skuTaken(db, accountId, input.sku)) throw fail('That SKU is already used by another item.', 409);
   validateMaterials(db, accountId, input.requirements);
   const id = randomUUID();
+  const inventoryId = randomUUID();
   return db.transaction(() => {
-    db.prepare('INSERT INTO production_items(account_id,id,name,unit,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?)').run(accountId, id, input.name, input.unit, input.notes, now, now);
+    db.prepare('INSERT INTO inventory(account_id,id,item,sku,quantity,unit,supplier,reorder_level,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
+      .run(accountId, inventoryId, input.name, input.sku, 0, input.unit, '', null, 'Produced by assembly', now, now);
+    recordStockHistory(db, accountId, inventoryId, 'Starting balance', { quantity: 0, unit: input.unit }, { quantity: 0, unit: input.unit }, now);
+    db.prepare('INSERT INTO production_items(account_id,id,name,unit,notes,sku,inventory_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+      .run(accountId, id, input.name, input.unit, input.notes, input.sku, inventoryId, now, now);
     saveRequirements(db, accountId, id, input.requirements, now);
     return getProductionItem(db, accountId, id);
   })();
 }
 
-/** Update an assembly and replace its material requirements. */
+/** Update an assembly, sync its finished-good inventory row, and replace its materials. */
 export function updateProductionItem(db, accountId, id, input, now) {
-  if (!getProductionItem(db, accountId, id)) return null;
+  const existing = getProductionItem(db, accountId, id);
+  if (!existing) return null;
   const taken = db.prepare('SELECT 1 FROM production_items WHERE account_id=? AND name=? COLLATE NOCASE AND id<>?').get(accountId, input.name, id);
   if (taken) throw fail('That assembly is already defined.', 409);
+  if (existing.sku && input.sku && existing.sku.toLowerCase() !== input.sku.toLowerCase()) {
+    throw fail('The SKU cannot be changed on an existing assembly.', 409);
+  }
+  if (existing.unit.toLowerCase() !== input.unit.toLowerCase() && existing.stock > 0) {
+    throw fail(`Change the unit only while ${existing.name} has zero stock in Inventory.`, 409);
+  }
+  if (existing.sku && input.requirements.some((requirement) => requirement.itemSku.toLowerCase() === existing.sku.toLowerCase())) {
+    throw fail('An assembly cannot use its own finished-good SKU as a material.');
+  }
   validateMaterials(db, accountId, input.requirements);
   return db.transaction(() => {
-    db.prepare('UPDATE production_items SET name=?, unit=?, notes=?, updated_at=? WHERE account_id=? AND id=?').run(input.name, input.unit, input.notes, now, accountId, id);
+    db.prepare('UPDATE production_items SET name=?, unit=?, notes=?, updated_at=? WHERE account_id=? AND id=?')
+      .run(input.name, input.unit, input.notes, now, accountId, id);
+    if (existing.inventoryId) {
+      db.prepare('UPDATE inventory SET item=?, unit=?, updated_at=? WHERE account_id=? AND id=?')
+        .run(input.name, input.unit, now, accountId, existing.inventoryId);
+    }
     saveRequirements(db, accountId, id, input.requirements, now);
     return getProductionItem(db, accountId, id);
   })();
 }
 
-/** Delete an assembly when no production run references it. */
+/** Delete an assembly only when no run references it and its finished-good stock is zero. */
 export function deleteProductionItem(db, accountId, id) {
-  if (!getProductionItem(db, accountId, id)) return false;
-  if (hasColumn(db, 'production_runs', 'production_item_id') && db.prepare('SELECT 1 FROM production_runs WHERE account_id=? AND production_item_id=?').get(accountId, id)) {
+  const existing = getProductionItem(db, accountId, id);
+  if (!existing) return false;
+  if (hasTable(db, 'production_runs') && db.prepare('SELECT 1 FROM production_runs WHERE account_id=? AND production_item_id=?').get(accountId, id)) {
     throw fail('This assembly is used by a production run. Remove or reassign those runs first.', 409);
   }
-  db.prepare('DELETE FROM production_items WHERE account_id=? AND id=?').run(accountId, id);
-  return true;
+  if (existing.inventoryId && existing.stock > 0) {
+    throw fail(`This assembly still has ${existing.stock} ${existing.unit} in Inventory. Reduce that stock to zero before deleting it.`, 409);
+  }
+  return db.transaction(() => {
+    const deleted = db.prepare('DELETE FROM production_items WHERE account_id=? AND id=?').run(accountId, id).changes > 0;
+    if (!deleted) return false;
+    if (existing.inventoryId) deleteInventoryItem(db, accountId, existing.inventoryId);
+    return true;
+  })();
 }

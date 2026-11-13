@@ -23,9 +23,10 @@ The stack is Node.js ES modules, Express 5, React 19, Vite 6, Tailwind CSS v4, b
 - `server/pos.js` — Account context, PO listing, detail, lifecycle transitions, corrections, manual POs, sender re-authorization.
 - `server/po.js` — `PO` subject matching and PO field parsing.
 - `server/inventory.js` — Account-scoped inventory validation, list, create, update, and delete guards.
-- `server/production.js` — Account-scoped production run validation, list, create, update, progress, and delete.
-- `server/production-items.js` — Assembly definitions and their per-unit materials.
+- `server/production.js` — Account-scoped production run validation, list, create, update, progress, delete, and finished-good stock updates.
+- `server/production-items.js` — Assembly definitions, their per-unit materials, and the linked finished-good Inventory item.
 - `server/deliveries.js` — Incoming deliveries, incoming proof, receipt, and exactly-once receiving.
+- `server/dashboard.js` — Home visualization CRUD, confirmed-supply stock projection, next arrivals, and active-run completion.
 - `server/reset.js` — Full local business-data reset for one account.
 - `server/rules.js` — Exact sender address normalization and validation.
 - `server/time.js` — Plant time zone, calendar-date helpers, and day arithmetic.
@@ -33,9 +34,9 @@ The stack is Node.js ES modules, Express 5, React 19, Vite 6, Tailwind CSS v4, b
 - `client/src/main.jsx` — Entry point and route selection for the dashboard, receiving station, and production floor.
 - `client/src/DashboardApp.jsx` — Main dashboard state, data loading, and orchestration.
 - `client/src/apps/` — `ReceivingApp.jsx` and `ProductionRunsApp.jsx` standalone screens.
-- `client/src/views/` — `OrdersView.jsx`, `InventoryView.jsx`, `ProductionView.jsx`, `AssembliesView.jsx`, `DeliveriesView.jsx`, and `SettingsView.jsx`.
-- `client/src/dialogs/` — Sheet dialogs: `PoDetailDialog`, `ManualPoDialog`, `InventoryDialog`, `ProductionItemDialog`, `ProductionDialog`, `DeliveryDialog`, `ReceiveDeliveryDialog`, and `FloorProgressDialog`.
-- `client/src/components/` — Shared UI atoms such as Brand, ThemeToggle, chips, ToastStack, ProductionRow, RunStrip, and SearchIcon.
+- `client/src/views/` — `HomeView.jsx`, `OrdersView.jsx`, `InventoryView.jsx`, `ProductionView.jsx`, `AssembliesView.jsx`, `DeliveriesView.jsx`, and `SettingsView.jsx`.
+- `client/src/dialogs/` — Sheet dialogs: `PoDetailDialog`, `ManualPoDialog`, `InventoryDialog`, `ProductionItemDialog`, `ProductionDialog`, `DeliveryDialog`, `ReceiveDeliveryDialog`, `FloorProgressDialog`, and `ProjectionDialog`.
+- `client/src/components/` — Shared UI atoms such as Brand, ThemeToggle, chips, ToastStack, ProductionRow, RunStrip, SearchIcon, OrdersTopbar, and ProjectionChart.
 - `client/src/lib/` — `api.js`, `format.js`, and `constants.js`; `client/src/hooks/useSheetDialog.js` holds shared modal behavior.
 - `client/src/style.css` — Theme and layout CSS.
 - `tests/` — `node:test` suites (`*.test.js`) beside each other, not beside modules.

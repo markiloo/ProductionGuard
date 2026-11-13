@@ -1,0 +1,261 @@
+import { useEffect, useState } from 'react';
+import { ProductionStatusChip } from '../components/Chips.jsx';
+import { ProjectionChart } from '../components/ProjectionChart.jsx';
+import { ProjectionDialog } from '../dialogs/ProjectionDialog.jsx';
+import { api } from '../lib/api.js';
+import { scheduleDate } from '../lib/format.js';
+
+const DEFAULT_HORIZON = 30;
+
+export function ProjectionTile({ widget, busy, onEdit, onRemove }) {
+  const projection = widget.projection;
+  const firstStockout = projection.stockoutDates[0] || null;
+  const excluded = projection.excluded.deliveries + projection.excluded.requirements;
+  return (
+    <article className="panel projection-tile">
+      <header className="projection-head">
+        <div>
+          <p className="eyebrow">{projection.sku}</p>
+          <h3>{projection.item}</h3>
+        </div>
+        <div className="projection-actions">
+          <button type="button" className="button button-ghost button-small" onClick={onEdit} disabled={busy}>Edit</button>
+          <button type="button" className="button button-danger-ghost button-small" onClick={onRemove} disabled={busy}>Remove</button>
+        </div>
+      </header>
+      <div className="projection-stats">
+        <span><span className="metric-label">Today&apos;s balance</span><strong className={projection.currentBalance < 0 ? 'text-danger' : ''}>{projection.currentBalance.toLocaleString()} {projection.unit}</strong></span>
+        <span><span className="metric-label">Lowest</span><strong className={projection.minBalance < 0 ? 'text-danger' : ''}>{projection.minBalance.toLocaleString()} {projection.unit}</strong></span>
+        <span><span className="metric-label">Horizon</span><strong>{projection.horizonDays} days</strong></span>
+      </div>
+      <ProjectionChart projection={projection} />
+      <footer className="projection-foot">
+        {firstStockout ? (
+          <p className="tile-warning">Projected stockout from {scheduleDate(firstStockout.date)}{projection.stockoutDates.length > 1 ? ` · ${projection.stockoutDates.length} days below zero` : ''}.</p>
+        ) : <p>No projected stockout in this horizon.</p>}
+        {excluded ? <p>{excluded} record{excluded === 1 ? '' : 's'} excluded for a different unit.</p> : null}
+      </footer>
+    </article>
+  );
+}
+
+export function IncomingOrdersTable({ incoming }) {
+  return (
+    <div className="table-scroll">
+      <table className="home-table">
+        <thead>
+          <tr>
+            <th scope="col">Arrival</th>
+            <th scope="col">Order</th>
+            <th scope="col">Item</th>
+            <th scope="col">Quantity</th>
+            <th scope="col">Supplier</th>
+          </tr>
+        </thead>
+        <tbody>
+          {incoming.map((row) => (
+            <tr key={row.id}>
+              <td>
+                <time dateTime={row.expectedArrival}>{scheduleDate(row.expectedArrival)}</time>
+                {row.overdue ? <span className="status-chip review">Overdue</span> : null}
+              </td>
+              <td>{row.poId || 'Manual delivery'}</td>
+              <td><strong>{row.itemName || row.itemSku}</strong><span>{row.itemSku}</span></td>
+              <td>{row.quantity.toLocaleString()} {row.unit}</td>
+              <td>{row.supplier || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function CurrentRunsList({ runs }) {
+  return (
+    <ul className="run-progress-list">
+      {runs.map((run) => (
+        <li key={run.id} className="run-progress-row">
+          <div className="run-progress-head">
+            <span className="production-run">{run.runNumber}</span>
+            <strong>{run.item}</strong>
+            <ProductionStatusChip status={run.status} />
+          </div>
+          <div className="run-progress-meter">
+            <div
+              className="run-progress-track"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={run.quantity}
+              aria-valuenow={run.completedQuantity}
+              aria-label={`${run.runNumber} completion`}
+            >
+              <span style={{ width: `${run.percent}%` }} />
+            </div>
+            <span className="run-progress-copy">{run.completedQuantity.toLocaleString()} / {run.quantity.toLocaleString()} {run.unit} · {run.percent}%</span>
+          </div>
+          <time className="run-progress-date" dateTime={run.scheduledDate}>{scheduleDate(run.scheduledDate)}</time>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function HomeView({ status, inventory }) {
+  const accountId = status.auth.account?.id || '';
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [draft, setDraft] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const skuOptions = (inventory || []).filter((item) => item.sku);
+
+  async function load({ quiet = false } = {}) {
+    if (!quiet) setRefreshing(true);
+    try {
+      setData(await api('/api/dashboard'));
+      setError('');
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      if (!quiet) setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    let active = true;
+    setData(null);
+    setError('');
+    api('/api/dashboard')
+      .then((result) => { if (active) setData(result); })
+      .catch((failure) => { if (active) setError(failure.message); });
+    return () => { active = false; };
+  }, [accountId]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(''), 5000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  function openNew() {
+    setDraft({ id: null, sku: skuOptions[0]?.sku || '', horizonDays: DEFAULT_HORIZON });
+  }
+
+  function openEdit(widget) {
+    setDraft({ id: widget.id, sku: widget.sku, horizonDays: widget.horizonDays, item: widget.projection.item });
+  }
+
+  async function saveWidget(values) {
+    setBusy(true);
+    try {
+      const edited = Boolean(draft?.id);
+      const url = edited ? `/api/dashboard/widgets/${encodeURIComponent(draft.id)}` : '/api/dashboard/widgets';
+      await api(url, { method: edited ? 'PUT' : 'POST', body: JSON.stringify(values) });
+      setDraft(null);
+      setNotice(edited ? 'Visualization saved.' : 'Visualization added.');
+      await load({ quiet: true });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeWidget(widget) {
+    if (!globalThis.confirm(`Remove the ${widget.projection.item} visualization from Home?`)) return false;
+    setBusy(true);
+    try {
+      await api(`/api/dashboard/widgets/${encodeURIComponent(widget.id)}`, { method: 'DELETE' });
+      setDraft(null);
+      setNotice('Visualization removed.');
+      await load({ quiet: true });
+      return true;
+    } catch (failure) {
+      setError(failure.message);
+      throw failure;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="home" id="home" tabIndex={-1} aria-labelledby="home-title">
+      <header className="home-head">
+        <div>
+          <p className="eyebrow">Dashboard</p>
+          <h2 id="home-title">Home</h2>
+        </div>
+        <div className="home-actions">
+          <button type="button" className="button button-primary button-small" onClick={openNew} disabled={busy || !skuOptions.length}>Add visualization</button>
+          <button type="button" className="button button-secondary button-small" onClick={() => load()} disabled={refreshing || !data}>{refreshing ? 'Refreshing…' : 'Refresh'}</button>
+        </div>
+      </header>
+      {error ? <p className="home-error" role="alert">{error}</p> : null}
+      {notice ? <p className="home-notice" role="status">{notice}</p> : null}
+      {!data && !error ? (
+        <div className="panel record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading dashboard…</div>
+      ) : null}
+      {data ? (
+        <>
+          <div className="home-grid">
+            {data.widgets.map((widget) => (
+              <ProjectionTile
+                key={widget.id}
+                widget={widget}
+                busy={busy}
+                onEdit={() => openEdit(widget)}
+                onRemove={() => removeWidget(widget).catch(() => {})}
+              />
+            ))}
+            {!data.widgets.length ? (
+              <div className="panel empty home-empty">
+                <span className="empty-mark" aria-hidden="true">HM</span>
+                <strong>No visualizations yet</strong>
+                <p>{skuOptions.length ? 'Add a visualization to project stock for a selected inventory item.' : 'Add an inventory item first, then project its stock here.'}</p>
+                {skuOptions.length ? <button type="button" className="button button-secondary button-small" onClick={openNew}>Add your first visualization</button> : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="home-sections">
+            <section className="panel home-section" aria-labelledby="home-incoming-title">
+              <header className="panel-head record-head">
+                <div><p className="eyebrow">Deliveries</p><h2 id="home-incoming-title">Next 3 incoming</h2></div>
+                <span className="count">{data.incoming.length}</span>
+              </header>
+              {data.incoming.length ? <IncomingOrdersTable incoming={data.incoming} /> : (
+                <div className="empty">
+                  <span className="empty-mark" aria-hidden="true">IN</span>
+                  <strong>No incoming deliveries</strong>
+                  <p>Ordered POs and manual deliveries appear here.</p>
+                </div>
+              )}
+            </section>
+            <section className="panel home-section" aria-labelledby="home-runs-title">
+              <header className="panel-head record-head">
+                <div><p className="eyebrow">Production</p><h2 id="home-runs-title">Current production runs</h2></div>
+                <span className="count">{data.runs.length}</span>
+              </header>
+              {data.runs.length ? <CurrentRunsList runs={data.runs} /> : (
+                <div className="empty">
+                  <span className="empty-mark" aria-hidden="true">PR</span>
+                  <strong>No runs on the floor</strong>
+                  <p>In-progress runs and runs scheduled today appear here.</p>
+                </div>
+              )}
+            </section>
+          </div>
+        </>
+      ) : null}
+      {draft ? (
+        <ProjectionDialog
+          draft={draft}
+          skuOptions={skuOptions}
+          busy={busy}
+          onClose={() => { if (!busy) setDraft(null); }}
+          onSave={saveWidget}
+          onDelete={() => removeWidget(draft)}
+        />
+      ) : null}
+    </section>
+  );
+}

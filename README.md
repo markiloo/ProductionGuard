@@ -16,6 +16,16 @@ Labels are case-insensitive and extra whitespace is accepted. Quantity must be a
 
 Complete POs from approved senders enter **Pending Review**. Unauthorized, incomplete, malformed, or multi-item PO mail goes to the **Unverified** queue with a reason so the manager can correct it. The item is mapped to the inventory SKU case-insensitively; unmapped items and unit mismatches show **Manual Review Required** and do not affect assessments or coverage.
 
+## Home
+
+The dashboard opens on **Home**. **Add visualization** charts a selected inventory item's projected on-hand balance over a horizon the manager chooses in days or weeks (1–365 days). Projections use confirmed supply only: on-hand stock plus unreceived deliveries, minus outstanding production demand; completed runs and received deliveries are excluded, and records whose unit differs from the inventory unit are skipped and noted. Each chart shows the current and lowest projected balance, a stockout warning, and its reorder level when one is set. Charts can be edited or removed, and the layout is saved per connected account.
+
+Below the charts, Home lists the next three incoming deliveries with arrival, PO or manual source, item, quantity, supplier, and an overdue flag, plus the completion progress of runs currently on the production floor (in progress or scheduled today). Home is a summary view; the Orders assessment remains authoritative. Visualizations survive **Clear saved orders** and are removed by **Settings → Clear all data**.
+
+## Demo data
+
+With the server running and a Gmail account connected, `node scripts/seed-demo.mjs` adds six inventory materials, three assemblies with finished-good inventory items, three production runs, three incoming deliveries, four Home visualizations, and three manual Pending Review POs. Existing records are reused by SKU or name, so running it again fills in only what is missing. The in-progress Packaging Box run is seeded at 12 of 20 units, which puts 12 finished boxes in Inventory.
+
 ## Review and assessment
 
 The **Orders** view uses a side queue navigation for Pending Review, Unverified, Approved, Ordered / Incoming, Rejected, and all saved POs, newest-first or oldest-first, with search. Each Pending Review PO gets a deterministic assessment: **Recommended**, **Redundant / Overstock**, or **Adjust Quantity**, plus any **Timing Conflict / Expedite Needed**, **Arriving Early**, **Potential Duplicate**, or stockout warnings. Arrival exactly one day before the need date is the desired buffer and is not flagged as early; only arrivals more than one day early show **Arriving Early**. The detail sheet shows the current stock and its last update, incoming deliveries, outstanding demand, projected balances before and after the PO, net requirement, quantity difference, need date, planning end date, and provisional coverage from earlier Pending or Approved POs.
@@ -30,7 +40,7 @@ The **Inventory** view is the item master and stock list for the connected Gmail
 
 ## Assemblies
 
-The **Assemblies** view, next to Production, defines what the plant assembles. Each assembly has a name, unit, and a per-unit material list selected from **Inventory**. Production runs scale that list by the planned quantity and lock the result. An assembly cannot be deleted while a production run references it, and an inventory item cannot be deleted while an assembly, run, delivery, or PO uses its SKU. Existing item-definition SKUs are copied into Inventory at zero quantity during the database upgrade, so existing assemblies keep their materials.
+The **Assemblies** view, next to Production, defines what the plant assembles. Each assembly has a name, a required finished-good SKU, a unit, and a per-unit material list selected from **Inventory**. Creating an assembly creates its finished-good Inventory item at zero stock; completed production units add to that item, and corrections remove them. The finished-good SKU stays fixed, a unit change is blocked while stock remains, and an assembly cannot be deleted while a production run references it, its stock is above zero, or its Inventory item is used elsewhere. An inventory item cannot be deleted while an assembly, run, delivery, or PO uses its SKU. Existing item-definition SKUs are copied into Inventory at zero quantity during the database upgrade, so existing assemblies keep their materials.
 
 ## Incoming deliveries
 
@@ -42,7 +52,7 @@ Opening `http://127.0.0.1:4174/deliveries` loads a restricted receiving interfac
 
 ## Production schedule
 
-The **Production** view shows existing production runs for the connected account. Each run selects a defined assembly and takes its name, unit, and per-unit materials from Assemblies. Set the planned quantity, status, scheduled date, and optional notes; materials are multiplied by the planned quantity and locked to the run. Change the planned quantity and save to re-derive them. Completing a run removes its demand. Run numbers are generated automatically as sequential `PR-####` values and are read-only. Only outstanding requirements from non-completed runs count as demand. Active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
+The **Production** view shows existing production runs for the connected account. Each run selects a defined assembly and takes its name, unit, and per-unit materials from Assemblies. Set the planned quantity, status, scheduled date, and optional notes; materials are multiplied by the planned quantity and locked to the run. Change the planned quantity and save to re-derive them. Completing a run removes its demand and adds its completed units to the assembly's finished-good stock; setting the status to Completed stocks the full planned quantity, and lowering recorded units removes the difference. Deleting a run keeps units already produced. Run numbers are generated automatically as sequential `PR-####` values and are read-only. Only outstanding requirements from non-completed runs count as demand. Active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
 
 The header has an explicit **Light / Dark** selector. Light is the default, and the choice is remembered in the browser. The **Settings** view, opened from the header next to **Sign out**, holds the sender allowlist and the plant time zone. The plant time zone defaults to **Asia/Manila** and drives provisional ETAs and calendar-day checks.
 
@@ -65,11 +75,11 @@ Closing the browser leaves collection running. Stop the server console to end th
 
 ## Local data and privacy
 
-Saved mail, sender settings, inventory, incoming deliveries, production requirements, PO history, proof and receipt pictures, and assessments' source data live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
+Saved mail, sender settings, inventory, incoming deliveries, production requirements, Home visualizations, PO history, proof and receipt pictures, and assessments' source data live in `data/po-checker.db` (or `DATA_DIR` if set). The app password is in `data/gmail-credential.dpapi`, encrypted for the current Windows user with DPAPI and kept outside SQLite. Sign-out removes this encrypted credential and hides history until that same Gmail address reconnects. To erase all local data, stop the server and delete the `data` directory. These files are ignored by Git.
 
 The **Clear saved orders** button deletes the connected account's locally saved purchase orders and their proof pictures after confirmation. It does not delete or change anything in Gmail. Mail received before the clear time stays excluded from later polls; newer eligible mail can still appear. Incoming deliveries are separate supply records and are not deleted by this action.
 
-**Settings → Clear all data** is a full test reset for the account's business data. It deletes PO requests and review history, proof and receipt pictures, inventory, incoming deliveries, production runs and requirements, and assembly definitions. The Gmail connection, approved senders, and plant time zone are kept, and a fresh clear time prevents older Inbox mail from reappearing. Gmail is never changed. The action asks for confirmation first.
+**Settings → Clear all data** is a full test reset for the account's business data. It deletes PO requests and review history, proof and receipt pictures, inventory, incoming deliveries, production runs and requirements, assembly definitions, and Home visualizations. The Gmail connection, approved senders, and plant time zone are kept, and a fresh clear time prevents older Inbox mail from reappearing. Gmail is never changed. The action asks for confirmation first.
 
 Unauthorized PO mail is stored locally in the unverified queue so the manager can see why it was rejected; it never enters Pending Review, assessments, or provisional coverage unless its sender is added to the allowlist. Attachments are never downloaded, and text is displayed as escaped text that cannot load remote content. The collector does not mark mail read, send mail, or modify messages.
 
@@ -87,7 +97,7 @@ See [docs/API.md](docs/API.md) for endpoint shapes.
 
 Open `/production_runs` to view runs scheduled today and all in-progress runs, using the plant time zone. It refreshes every five seconds and is linked from Production. Completed and on-hold runs are excluded.
 
-The production floor lets you save total units completed (0 through planned quantity). Reaching the planned quantity marks the run Completed automatically; otherwise, edit the run from the Production view to change its status. Progress is recorded separately from inventory and locked material requirements, and marking the run Completed removes its demand. Completed and on-hold runs leave the floor view on the next refresh. Clear all data also removes saved completion counts.
+The production floor lets you save total units completed (0 through planned quantity). Reaching the planned quantity marks the run Completed automatically; otherwise, edit the run from the Production view to change its status. The difference in completed units is added to or removed from the assembly's finished-good Inventory stock, and marking the run Completed removes its demand. Progress is recorded separately from locked material requirements. Completed and on-hold runs leave the floor view on the next refresh. Clear all data also removes saved completion counts.
 
 ## License
 

@@ -36,6 +36,9 @@
  * @typedef {Object} ProductionItem
  * @property {string} id Stable assembly ID.
  * @property {string} name Assembly name, unique per account.
+ * @property {string} sku Finished-good inventory SKU, unique per account.
+ * @property {string|null} inventoryId Linked Inventory item that receives completed units.
+ * @property {number} stock Current finished-good quantity on hand.
  * @property {string} unit Unit of the assembly.
  * @property {string} notes Optional notes.
  * @property {ProductionItemRequirement[]} requirements Materials required per unit, selected from inventory.
@@ -197,7 +200,7 @@
 /**
  * @typedef {Object} InventoryHistoryEntry
  * @property {number} id Stable ordered event ID.
- * @property {string} kind Starting balance, Item added, Quantity edited, or Delivery received.
+ * @property {string} kind Starting balance, Item added, Quantity edited, Delivery received, Assembly completed, or Completion corrected.
  * @property {number} before_quantity Stock before the event.
  * @property {number} after_quantity Stock after the event.
  * @property {string} before_unit Previous unit snapshot.
@@ -206,4 +209,42 @@
  * @property {string|null} po_id Source PO.
  * @property {string} supplier Supplier snapshot.
  * @property {string} created_at UTC timestamp.
+ */
+
+/**
+ * @typedef {Object} StockProjection
+ * @property {string} sku Inventory SKU.
+ * @property {string} item Inventory display name.
+ * @property {string} unit Inventory unit.
+ * @property {string} startDate Plant-local start date.
+ * @property {string} endDate Plant-local horizon end date.
+ * @property {number} horizonDays Number of days in the projection.
+ * @property {number} currentBalance Balance at the end of the start date.
+ * @property {number} endBalance Balance at the horizon end.
+ * @property {number} minBalance Lowest projected balance.
+ * @property {number|null} reorderLevel Inventory reorder threshold, or null.
+ * @property {string|null} nextArrival Earliest unreceived delivery date, including overdue ones.
+ * @property {{date: string, balance: number}[]} stockoutDates Days with a negative balance.
+ * @property {{deliveries: number, requirements: number}} excluded Records skipped for a unit mismatch.
+ * @property {{date: string, balance: number}[]} points One balance per day, inclusive of start and end.
+ */
+
+/**
+ * @typedef {Object} DashboardWidget
+ * @property {string} id Stable visualization ID.
+ * @property {'inventory_projection'} type Visualization kind.
+ * @property {string} sku Inventory SKU being projected.
+ * @property {number} horizonDays Projection length in days.
+ * @property {number} position Display order.
+ * @property {string} createdAt UTC creation timestamp.
+ * @property {string} updatedAt UTC last-edit timestamp.
+ * @property {StockProjection} projection Computed projection.
+ */
+
+/**
+ * @typedef {Object} HomeDashboard
+ * @property {string} today Plant-local current date.
+ * @property {DashboardWidget[]} widgets Saved inventory visualizations with projections.
+ * @property {{id: string, itemSku: string, itemName: string|null, quantity: number, unit: string, expectedArrival: string, supplier: string, poId: string|null, overdue: boolean}[]} incoming Next three unreceived deliveries.
+ * @property {{id: string, runNumber: string, item: string, quantity: number, unit: string, status: string, scheduledDate: string, completedQuantity: number, percent: number}[]} runs In-progress runs plus runs scheduled today.
  */

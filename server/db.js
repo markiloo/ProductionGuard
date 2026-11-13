@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isPoSubject, parseEtaDays, parsePo } from './po.js';
@@ -202,6 +203,21 @@ export function migrate() {
     `CREATE TABLE inventory_history (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id TEXT NOT NULL, inventory_id TEXT NOT NULL, kind TEXT NOT NULL, before_quantity INTEGER NOT NULL, after_quantity INTEGER NOT NULL, before_unit TEXT NOT NULL, unit TEXT NOT NULL, delivery_id TEXT, po_id TEXT, supplier TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL);
      CREATE INDEX inventory_history_item ON inventory_history(account_id, inventory_id, id DESC);
      INSERT INTO inventory_history(account_id,inventory_id,kind,before_quantity,after_quantity,before_unit,unit,created_at) SELECT account_id,id,'Starting balance',quantity,quantity,unit,unit,strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM inventory;`,
+    `CREATE TABLE dashboard_widgets (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       id TEXT NOT NULL,
+       type TEXT NOT NULL DEFAULT 'inventory_projection' CHECK (type IN ('inventory_projection')),
+       sku TEXT NOT NULL CHECK (length(trim(sku)) > 0),
+       horizon_days INTEGER NOT NULL CHECK (horizon_days BETWEEN 1 AND 365),
+       position INTEGER NOT NULL DEFAULT 0,
+       created_at TEXT NOT NULL,
+       updated_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, id)
+     );
+     CREATE INDEX dashboard_widgets_order ON dashboard_widgets(account_id, position, created_at);`,
+    `ALTER TABLE production_items ADD COLUMN sku TEXT;
+     ALTER TABLE production_items ADD COLUMN inventory_id TEXT;
+     CREATE UNIQUE INDEX production_items_sku ON production_items(account_id, sku COLLATE NOCASE) WHERE trim(sku) <> '';`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;
@@ -258,6 +274,34 @@ export function migrate() {
       if (version === 13) {
         copyItemDefinitionsToInventory(db);
         db.exec('DROP TABLE item_definitions');
+      }
+      if (version === 22) {
+        const now = new Date().toISOString();
+        const usedByAccount = new Map();
+        const insertInventory = db.prepare(`INSERT INTO inventory(account_id,id,item,sku,quantity,unit,supplier,reorder_level,notes,created_at,updated_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
+        const insertHistory = db.prepare(`INSERT INTO inventory_history(account_id,inventory_id,kind,before_quantity,after_quantity,before_unit,unit,created_at)
+          VALUES(?,?,?,?,?,?,?,?)`);
+        const assign = db.prepare('UPDATE production_items SET sku=?, inventory_id=? WHERE account_id=? AND id=?');
+        for (const item of db.prepare('SELECT account_id,id,name,unit FROM production_items ORDER BY account_id, created_at, id').all()) {
+          if (!usedByAccount.has(item.account_id)) {
+            usedByAccount.set(item.account_id, new Set(db.prepare("SELECT sku FROM inventory WHERE account_id=? AND trim(sku) <> ''").all(item.account_id).map((row) => row.sku.toLowerCase())));
+          }
+          const used = usedByAccount.get(item.account_id);
+          const slug = String(item.name).toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'ASSEMBLY';
+          const base = `ASM-${slug}`.slice(0, 60);
+          let sku = base;
+          let suffix = 2;
+          while (used.has(sku.toLowerCase())) {
+            sku = `${base.slice(0, 56)}-${suffix}`;
+            suffix += 1;
+          }
+          used.add(sku.toLowerCase());
+          const inventoryId = randomUUID();
+          insertInventory.run(item.account_id, inventoryId, item.name, sku, 0, item.unit, '', null, 'Produced by assembly', now, now);
+          insertHistory.run(item.account_id, inventoryId, 'Starting balance', 0, 0, item.unit, item.unit, now);
+          assign.run(sku, inventoryId, item.account_id, item.id);
+        }
       }
       db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)').run(version, new Date().toISOString());
     })();

@@ -26,9 +26,10 @@ test('PO correction maps an inventory SKU and reruns assessment', async () => {
 
     createInventoryItem(db, account, parseInventoryInput({ item: 'Carton Glue', sku: 'SKU-0001', quantity: 0, unit: 'units' }), now);
     const productionItem = createProductionItem(db, account, parseProductionItemInput({
-      name: 'Carton Packaging', unit: 'units',
+      name: 'Carton Packaging', sku: 'ASM-CARTON', unit: 'units',
       requirements: [{ itemSku: 'SKU-0001', quantity: 2, unit: 'units' }],
     }), now);
+    assert.equal(productionItem.stock, 0, 'a new assembly starts with zero finished-good stock');
     createProductionRun(db, account, parseProductionInput({
       runNumber: 'PR-0001', productionItemId: productionItem.id, quantity: 2,
       status: 'scheduled', scheduledDate: '2026-11-10',

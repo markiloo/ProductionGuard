@@ -37,3 +37,71 @@ Live Gmail connectivity and connected browser workflows were not exercised. Coll
 - Restored the production floor date accidentally hidden by the generic category-label rule. Added a regression test, observed its expected failure before the fix, then passed it after the fix. Floor browser AX and screenshot show Fri, 13 Nov above the title.
 - Passed lint, all 66 tests, and production build after final changes. Source detector and whitespace checks run separately. Screenshots in `docs/screenshots/` document representative fixture screens; they do not imply live Gmail testing. Reliability changes from the critique remain outside this visual pass.
 - Final detector: no findings; git diff --check passed. Temporary fixture server and review tabs were closed after verification.
+
+## Orders status strip ? 2026-11-13
+
+- Reduced the Orders collector strip from four metrics (Collector, Next inbox check, Last complete check, Saved) to one compact inline line showing the last complete check timestamp. The run-count caption and the live 15-second countdown were removed.
+- A collector failure now shows a red "Check failed — retrying" note in the strip with the full message in its hover title; the existing error toasts are unchanged.
+- Consolidated `.run-strip` and `.metric` into a single flex row and removed the obsolete four-column grid, column borders, and breakpoint overrides.
+- Passed `npm run lint`, `npm test` (67 passing, including the new `tests/run-strip-render.test.js`), and `npm run build`.
+
+## Orders queue bar ? 2026-11-13
+
+- Moved the queue navigation from the left column to a full-width grey bar above the Orders list, keeping the `--surface-2` background for separation.
+- The bar holds the six queue tabs with counts plus the "New POs appear after the next inbox check." hint; the redundant "Queues / Orders" heading block was removed.
+- Tabs wrap instead of using the old 3-column and 2-column responsive grids; the active tab keeps its black fill.
+- Added `tests/order-nav-render.test.js` covering all six labels, counts, the active `aria-current`, the hint, and the removed heading.
+- Passed `npm run lint`, `npm test` (68 passing), and `npm run build`. Browser position and wrap behavior were rendered from SSR markup only; no visual browser pass was performed for this change.
+
+## Orders topbar ? 2026-11-13
+
+- Moved the last complete check marker onto the same row as the queue bar: the marker sits at the left and the grey queue bar fills the remaining width.
+- The hint is right-aligned and hidden below 1200px; below 1100px the row stacks with the marker above the wrapped tabs.
+- Added `OrdersTopbar` and `tests/orders-topbar-render.test.js` covering the shared row, marker-before-tabs order, all six queues, counts, active state, and the hint.
+- Moved **All orders** to the leftmost edge of the queue bar, followed by Pending review, Unverified, Approved, Ordered / Incoming, and Rejected, with the hint right-aligned after the tabs. The hint is hidden below 1200px.
+- Made **All orders** the default Orders selection through `DEFAULT_ORDER_FILTER = 'all'`; the client requests `state=all` on first load, while the API default stays `pending_review`.
+- Updated the order-nav and topbar tests to assert the leftmost, default-selected All orders tab and the default constant.
+- Passed `npm run lint`, `npm test` (69 passing), and `npm run build`. Position and responsive stacking were verified from SSR markup and compiled CSS; no visual browser pass was performed.
+
+## Home view ? 2026-11-13
+
+- Added a blank **Home** dashboard view as the first tab and the landing view after load, connect, and sign-out; the body is an empty heading panel ready for summary content.
+- The skip link now targets `#home`, and the view-tab underline measures the new first tab without extra styling.
+- Added `tests/home-view-render.test.js` covering the accessible heading, `#home` target, and absence of Orders/inventory controls.
+- Updated the `AGENTS.md` view list and the README Home section.
+- Passed `npm run lint`, `npm test` (70 passing), and `npm run build`. No visual browser pass was performed.
+
+## Home dashboard visualizations ? 2026-11-13
+
+- Added per-account `dashboard_widgets` (migration 21) with CRUD endpoints plus `GET /api/dashboard` for the Home payload.
+- Home now loads saved inventory projections, the next three unreceived deliveries, and in-progress or scheduled-today run progress; visualizations are added/edited/removed through a sheet dialog and persisted per account.
+- Projection uses confirmed supply only: on-hand stock plus unreceived deliveries, minus outstanding demand from non-completed runs, with overdrawn balances shown as stockout days. Unit-mismatched records are skipped and counted.
+- Added a dependency-free SVG chart with an accessible summary, reorder-level line, and stockout markers.
+- Reset clears Home visualizations; deleting an inventory SKU is blocked while a visualization uses it.
+- Added `tests/dashboard.test.js`, `tests/dashboard-render.test.js`, API route coverage, reset cleanup coverage, and migration assertions.
+- Passed `npm run lint`, `npm test` (77 passing), and `npm run build`. No visual browser pass was performed.
+
+## Assembly finished-goods stock ? 2026-11-13
+
+- Migration 22 adds `sku` and `inventory_id` to assemblies, links each assembly to one finished-good Inventory item, and backfills existing assemblies with generated `ASM-<NAME>` SKUs and zero-stock history.
+- Creating an assembly creates its Inventory item at zero stock; editing syncs the name/unit while keeping the SKU fixed, and unit changes are blocked while stock remains.
+- Recording completed units adds or removes the delta from assembly stock and writes `Assembly completed` / `Completion corrected` history. Below-zero corrections are rejected with 409, and lowering a completed run reopens it.
+- Status `completed` fills the remaining planned units and stocks them; reopening keeps produced stock, and deleting a run leaves it intact.
+- Assemblies with stock, runs, or other references cannot be deleted; zero-stock unreferenced assemblies remove their Inventory row.
+- Added `tests/assembly-stock.test.js` and a migration backfill/version assertion; updated API, README, and type docs.
+- Passed `npm run lint`, `npm test` (84 passing), and `npm run build`. No visual browser pass was performed.
+
+## Production tag alignment ? 2026-11-14
+
+- Keep the run status tag immediately after the run name, matching the earlier row layout; no auto-margin or main-column inset.
+- Material `Outstanding`/`Consumed` tags now sit in a compact left-packed group after the SKU and quantity. The requirement list uses shared `max-content` SKU and quantity columns with a fixed 104px tag column, and each row uses a subgrid, so tags align without being pushed to the far right.
+- Added `tests/production-render.test.js` covering the rendered tag classes, the subgrid alignment CSS, and the absence of the run-tag auto-margin/inset.
+- Passed `npm run lint`, `npm test` (85 passing), and `npm run build`. No visual browser pass was performed.
+
+## Inventory history table fit ? 2026-11-14
+
+- Fixed the history sheet being narrowed by the generic `.detail` width: `.detail.inventory-history-dialog` now keeps the intended 960px sheet and its grid track is `minmax(0, 1fr)`.
+- Made the history table fluid with `table-layout: fixed`, percentage columns, and wrapping cells instead of a 700px minimum width, so it stays inside the card at any dialog width.
+- History timestamps use the compact `metricDate` format (for example `Nov 14, 10:00 PM`) with the full timestamp in the `title`.
+- Extended `tests/inventory-history-render.test.js` with compact-date markup and CSS fit assertions.
+- Passed `npm run lint`, `npm test` (84 passing), and `npm run build`. No visual browser pass was performed.

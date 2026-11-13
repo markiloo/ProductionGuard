@@ -12,6 +12,7 @@ import { updateProductionProgress, listActiveProductionRuns, listProductionRuns,
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
 import { listPos, getPo, transitionPo, correctPo, createManualPo, authorizeQueuedMail, setPoProof, schedulePo } from './pos.js';
 import { listDeliveries, createDelivery, createDeliveryWithProof, updateDelivery, receiveDelivery, setDeliveryProof, getDeliveryProof, parseDeliveryInput } from './deliveries.js';
+import { buildHome, createDashboardWidget, deleteDashboardWidget, parseWidgetInput, updateDashboardWidget } from './dashboard.js';
 import { resetAccountData } from './reset.js';
 import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
 
@@ -475,6 +476,40 @@ app.put('/api/settings', (req, res) => {
   }
   const timeZone = setPlantTimeZone(db, resolveTimeZone(requested));
   res.json({ ok: true, plantTimeZone: timeZone, today: plantToday(timeZone) });
+});
+
+app.get('/api/dashboard', (_req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const { today } = nowAndToday();
+  res.json(buildHome(db, aid, today));
+});
+
+app.post('/api/dashboard/widgets', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const input = parseWidgetInput(db, aid, req.body);
+    res.status(201).json({ ok: true, widget: createDashboardWidget(db, aid, input, isoNow()) });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not add the visualization.');
+  }
+});
+
+app.put('/api/dashboard/widgets/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  try {
+    const input = parseWidgetInput(db, aid, req.body);
+    const widget = updateDashboardWidget(db, aid, req.params.id, input, isoNow());
+    if (!widget) return res.status(404).json({ error: 'Visualization not found.' });
+    res.json({ ok: true, widget });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not save the visualization.');
+  }
+});
+
+app.delete('/api/dashboard/widgets/:id', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  if (!deleteDashboardWidget(db, aid, req.params.id)) return res.status(404).json({ error: 'Visualization not found.' });
+  res.json({ ok: true });
 });
 
 app.post('/api/reset', (req, res) => {

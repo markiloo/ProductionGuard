@@ -14,13 +14,15 @@ export const PO_STATES = {
 };
 
 export const ORDER_FILTERS = [
+  { value: 'all', label: 'All orders' },
   { value: 'pending_review', label: 'Pending review' },
   { value: 'unverified', label: 'Unverified' },
   { value: 'approved', label: 'Approved' },
   { value: 'ordered', label: 'Ordered / Incoming' },
   { value: 'rejected', label: 'Rejected' },
-  { value: 'all', label: 'All orders' },
 ];
+
+export const DEFAULT_ORDER_FILTER = 'all';
 
 export const FLAG_LABEL = {
   recommended: 'Recommended',

@@ -91,6 +91,7 @@ export function ProductionDialog({ draft, productionItems = [], busy, onClose, o
             <select id="production-status" value={status} onChange={(event) => setStatus(event.target.value)}>
               {Object.entries(PRODUCTION_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
+            {status === 'completed' ? <p className="field-hint">Saving as Completed records all planned units as produced and adds them to the assembly&apos;s Inventory stock.</p> : null}
           </div>
           <div className="field field-wide">
             <label htmlFor="production-item">Assembly</label>

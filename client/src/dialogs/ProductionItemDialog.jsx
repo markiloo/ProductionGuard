@@ -5,6 +5,7 @@ export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, on
   const dialogRef = useSheetDialog(onClose);
   const editing = Boolean(draft.id);
   const [name, setName] = useState(draft.name || '');
+  const [sku, setSku] = useState(draft.sku || '');
   const [unit, setUnit] = useState(draft.unit || 'units');
   const [notes, setNotes] = useState(draft.notes || '');
   const [requirements, setRequirements] = useState(() => (draft.requirements?.length ? draft.requirements : []).map((requirement) => ({
@@ -29,6 +30,7 @@ export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, on
     try {
       await onSave({
         name,
+        sku,
         unit,
         notes,
         requirements: requirements.map((requirement) => ({ itemSku: requirement.itemSku, quantity: Number(requirement.quantity), unit: requirement.unit })),
@@ -55,6 +57,11 @@ export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, on
             <input id="production-item-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="e.g. Carton Packaging" required autoFocus />
           </div>
           <div className="field">
+            <label htmlFor="production-item-sku">Finished-good SKU</label>
+            <input id="production-item-sku" value={sku} onChange={(event) => setSku(event.target.value)} maxLength={60} placeholder="e.g. ASM-CARTON" required readOnly={editing && Boolean(draft.sku)} aria-readonly={editing && Boolean(draft.sku)} />
+            <p className="field-hint">{editing && draft.sku ? 'The SKU is fixed for an existing assembly.' : 'Creates a finished-good item in Inventory so completed runs can add stock.'}{editing && draft.stock != null ? ` Current stock: ${draft.stock} ${draft.unit}.` : ''}</p>
+          </div>
+          <div className="field">
             <label htmlFor="production-item-unit">Unit</label>
             <input id="production-item-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="production-item-units" required />
             <datalist id="production-item-units"><option value="units" /><option value="kg" /><option value="boxes" /><option value="liters" /></datalist>
@@ -71,7 +78,7 @@ export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, on
                   <label className="sr-only" htmlFor={`production-requirement-sku-${index}`}>Item SKU</label>
                   <select id={`production-requirement-sku-${index}`} value={requirement.itemSku} onChange={(event) => chooseSku(index, event.target.value)} required>
                     <option value="">Choose inventory item</option>
-                    {skuOptions.map((option) => <option key={option.id} value={option.sku}>{option.sku} — {option.item}</option>)}
+                    {skuOptions.filter((option) => option.sku.toLowerCase() !== String(draft.sku || '').toLowerCase()).map((option) => <option key={option.id} value={option.sku}>{option.sku} — {option.item}</option>)}
                   </select>
                   <label className="sr-only" htmlFor={`production-requirement-qty-${index}`}>Quantity</label>
                   <input id={`production-requirement-qty-${index}`} type="number" min="1" step="1" value={requirement.quantity} onChange={(event) => updateRequirement(index, { quantity: event.target.value })} required />

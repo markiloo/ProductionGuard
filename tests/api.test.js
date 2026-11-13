@@ -70,6 +70,9 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     const unauthenticatedClear = await fetch(`${base}/api/emails`, { method: 'DELETE', headers: { Origin: base } });
     assert.equal(unauthenticatedClear.status, 401);
     await unauthenticatedClear.arrayBuffer();
+    const unauthenticatedDashboard = await fetch(`${base}/api/dashboard`);
+    assert.equal(unauthenticatedDashboard.status, 401);
+    await unauthenticatedDashboard.arrayBuffer();
 
     const stopped = once(child, 'exit');
     child.kill('SIGTERM');
@@ -81,6 +84,7 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     seeded.prepare('INSERT INTO accounts(id,display_name,email,created_at) VALUES(?,?,?,?)').run('gmail:test@gmail.com', '', 'test@gmail.com', status.collection.cutoff);
     seeded.prepare('INSERT INTO runs(id,account_id,cutoff,started_at,status) VALUES(?,?,?,?,?)').run('seed-run', 'gmail:test@gmail.com', status.collection.cutoff, status.collection.cutoff, 'stopped');
     seeded.prepare('INSERT INTO emails(account_id,message_id,run_id,sender_address,received_at,subject,po_status) VALUES(?,?,?,?,?,?,?)').run('gmail:test@gmail.com', 'seed-message', 'seed-run', 'sender@example.com', status.collection.cutoff, 'PO', 'needs_review');
+    seeded.prepare('INSERT INTO inventory(account_id,id,item,sku,quantity,unit,supplier,reorder_level,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('gmail:test@gmail.com', 'seed-inventory', 'Widget Item', 'SKU-W', 10, 'units', '', null, '', status.collection.cutoff, status.collection.cutoff);
     seeded.close();
     child = launch();
     await waitUntilReady();
@@ -93,6 +97,27 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     assert.equal(restarted.auth.connected, true);
     assert.notEqual(restarted.collection.cutoff, status.collection.cutoff, 'restart must establish a fresh cutoff');
     assert.equal(restarted.totalCount, 1);
+    const dashboard = await (await fetch(`${base}/api/dashboard`)).json();
+    assert.deepEqual(dashboard.widgets, []);
+    assert.deepEqual(dashboard.incoming, []);
+    assert.deepEqual(dashboard.runs, []);
+    const deniedWidget = await fetch(`${base}/api/dashboard/widgets`, { method: 'POST', headers: { Origin: 'https://attacker.invalid', 'Content-Type': 'application/json' }, body: JSON.stringify({ sku: 'SKU-W', horizonDays: 30 }) });
+    assert.equal(deniedWidget.status, 403);
+    await deniedWidget.arrayBuffer();
+    const invalidWidget = await fetch(`${base}/api/dashboard/widgets`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ sku: 'SKU-W', horizonDays: 0 }) });
+    assert.equal(invalidWidget.status, 400);
+    assert.match((await invalidWidget.json()).error, /between 1 and 365/);
+    const createdWidget = await fetch(`${base}/api/dashboard/widgets`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ sku: 'sku-w', horizonDays: 30 }) });
+    assert.equal(createdWidget.status, 201);
+    const { widget } = await createdWidget.json();
+    assert.equal(widget.sku, 'SKU-W');
+    const withWidget = await (await fetch(`${base}/api/dashboard`)).json();
+    assert.equal(withWidget.widgets.length, 1);
+    assert.equal(withWidget.widgets[0].projection.currentBalance, 10);
+    assert.equal(withWidget.widgets[0].projection.points.length, 31);
+    const deletedWidget = await fetch(`${base}/api/dashboard/widgets/${encodeURIComponent(widget.id)}`, { method: 'DELETE', headers: { Origin: base } });
+    assert.equal(deletedWidget.status, 200);
+    assert.deepEqual((await (await fetch(`${base}/api/dashboard`)).json()).widgets, []);
     const clear = await fetch(`${base}/api/emails`, { method: 'DELETE', headers: { Origin: base } });
     assert.equal(clear.status, 200);
     assert.deepEqual(await clear.json(), { ok: true, deletedCount: 1 });

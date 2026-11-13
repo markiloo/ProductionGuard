@@ -17,6 +17,7 @@ export function resetAccountData(db, accountId, clearedAt) {
       runs: db.prepare('DELETE FROM production_runs WHERE account_id=?').run(accountId).changes,
       productionItemRequirements: db.prepare('DELETE FROM production_item_requirements WHERE account_id=?').run(accountId).changes,
       productionItems: db.prepare('DELETE FROM production_items WHERE account_id=?').run(accountId).changes,
+      dashboardWidgets: db.prepare('DELETE FROM dashboard_widgets WHERE account_id=?').run(accountId).changes,
     };
     db.prepare('INSERT INTO account_clears(account_id,cleared_at) VALUES(?,?) ON CONFLICT(account_id) DO UPDATE SET cleared_at=max(account_clears.cleared_at,excluded.cleared_at)').run(accountId, clearedAt);
     return { ...counts, clearedAt };
