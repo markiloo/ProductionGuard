@@ -1,8 +1,6 @@
 import { ViewPane } from './components/ViewPane.jsx';
 import { InventoryHistoryDialog } from './dialogs/InventoryHistoryDialog.jsx';
 import { useEffect, useRef, useState } from 'react';
-import { Brand } from './components/Brand.jsx';
-import { ThemeToggle } from './components/ThemeToggle.jsx';
 import { ToastStack } from './components/ToastStack.jsx';
 import { OrdersTopbar } from './components/OrdersTopbar.jsx';
 import { InventoryDialog } from './dialogs/InventoryDialog.jsx';
@@ -656,7 +654,7 @@ export function DashboardApp() {
   if (!status) {
     return (
       <main className="shell">
-        <header className="app-head"><Brand /><ThemeToggle theme={theme} onChange={changeTheme} /></header>
+        
         <section className="panel loading-card" role="status" aria-live="polite">
           <span className="spinner" aria-hidden="true" />
           <div>
@@ -676,36 +674,11 @@ export function DashboardApp() {
           Skip to {view === 'home' ? 'home' : view === 'settings' ? 'settings' : view === 'orders' ? 'purchase orders' : view === 'deliveries' ? 'deliveries' : view === 'inventory' ? 'inventory' : view === 'assemblies' ? 'assemblies' : 'production'}
         </a>
       ) : null}
-      <header className="app-head">
-        <Brand />
-        <div className="head-actions">
-          <div className={`connection${status.auth.connected ? ' is-online' : ''}`} role="status">
-            <span className="connection-dot" aria-hidden="true" />
-            <span>
-              <strong>{status.auth.connected ? 'Connected' : 'Not connected'}</strong>
-              <small>{status.auth.connected ? status.auth.account.username : 'Gmail setup'}</small>
-            </span>
-          </div>
-          <div className="head-tools">
-            <ThemeToggle theme={theme} onChange={changeTheme} />
-            {status.auth.connected ? (
-              <>
-                <button
-                  type="button"
-                  className={`button button-ghost button-small${view === 'settings' ? ' is-current' : ''}`}
-                  aria-current={view === 'settings' ? 'page' : undefined}
-                  onClick={() => showView('settings')}
-                >
-                  Settings
-                </button>
-                <button type="button" className="button button-ghost button-small" onClick={signOut}>Sign out</button>
-              </>
-            ) : null}
-          </div>
-        </div>
-      </header>
-
       {status.auth.connected ? (
+        <p className="signed-in-label">Signed in as {status.auth.account?.username}</p>
+      ) : null}
+      {status.auth.connected ? (
+        <div className="dashboard-navigation">
         <nav className="view-tabs" aria-label="Dashboard views" ref={tabsRef}>
           <button type="button" className="view-tab" aria-current={view === 'home' ? 'page' : undefined} onClick={() => showView('home')}>Home</button>
           <button type="button" className="view-tab" aria-current={view === 'orders' ? 'page' : undefined} onClick={() => showView('orders')}>Orders</button>
@@ -721,6 +694,8 @@ export function DashboardApp() {
             />
           ) : null}
         </nav>
+        <button type="button" className="view-tab settings-navigation" aria-current={view === 'settings' ? 'page' : undefined} onClick={() => showView('settings')}>Settings</button>
+        </div>
       ) : null}
 
       {!status.auth.connected ? (
@@ -762,6 +737,9 @@ export function DashboardApp() {
           timeZone={timeZone}
           setTimeZone={setTimeZone}
           onSaveTimeZone={saveTimeZone}
+          theme={theme}
+          onThemeChange={changeTheme}
+          onSignOut={signOut}
           onClearAllData={clearAllData}
         />
         </ViewPane>

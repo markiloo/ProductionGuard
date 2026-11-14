@@ -105,3 +105,8 @@ Live Gmail connectivity and connected browser workflows were not exercised. Coll
 - History timestamps use the compact `metricDate` format (for example `Nov 14, 10:00 PM`) with the full timestamp in the `title`.
 - Extended `tests/inventory-history-render.test.js` with compact-date markup and CSS fit assertions.
 - Passed `npm run lint`, `npm test` (84 passing), and `npm run build`. No visual browser pass was performed.
+
+## Compact dashboard navigation - 2026-11-14
+- Removed dashboard branding and the separate header; Settings stays at the right of the view navigation.
+- Moved connected account, theme selection, and sign out into Settings.
+- Passed lint, production build, and all 86 tests. No browser visual pass performed.

@@ -54,7 +54,7 @@ Opening `http://127.0.0.1:4174/deliveries` loads a restricted receiving interfac
 
 The **Production** view shows existing production runs for the connected account. Each run selects a defined assembly and takes its name, unit, and per-unit materials from Assemblies. Set the planned quantity, status, scheduled date, and optional notes; materials are multiplied by the planned quantity and locked to the run. Change the planned quantity and save to re-derive them. Completing a run removes its demand and adds its completed units to the assembly's finished-good stock; setting the status to Completed stocks the full planned quantity, and lowering recorded units removes the difference. Deleting a run keeps units already produced. Run numbers are generated automatically as sequential `PR-####` values and are read-only. Only outstanding requirements from non-completed runs count as demand. Active work is ordered first, followed by scheduled, on-hold, and completed runs. Production runs are local and never sent to Gmail.
 
-The header has an explicit **Light / Dark** selector. Light is the default, and the choice is remembered in the browser. The **Settings** view, opened from the header next to **Sign out**, holds the sender allowlist and the plant time zone. The plant time zone defaults to **Asia/Manila** and drives provisional ETAs and calendar-day checks.
+Settings contains the connected account, Sign out, and an explicit **Light / Dark** selector. Light is the default, and the choice is remembered in the browser. The **Settings** view, opened from the far right of the view navigation, holds the sender allowlist and the plant time zone. The plant time zone defaults to **Asia/Manila** and drives provisional ETAs and calendar-day checks.
 
 ## Gmail setup
 

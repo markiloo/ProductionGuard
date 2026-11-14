@@ -1,6 +1,8 @@
+import { ThemeToggle } from '../components/ThemeToggle.jsx';
 
 
-export function SettingsView({ status, sender, setSender, onAdd, onRemove, busy, timeZone, setTimeZone, onSaveTimeZone, onClearAllData }) {
+
+export function SettingsView({ status, sender, setSender, onAdd, onRemove, busy, timeZone, setTimeZone, onSaveTimeZone, onClearAllData, theme, onThemeChange, onSignOut }) {
   return (
     <section className="panel settings-panel" id="settings" tabIndex={-1} aria-labelledby="settings-title">
       <header className="panel-head record-head">
@@ -8,8 +10,19 @@ export function SettingsView({ status, sender, setSender, onAdd, onRemove, busy,
           <p className="eyebrow">Configuration</p>
           <h2 id="settings-title">Settings</h2>
         </div>
-        <span className="count">{status.auth.account?.username}</span>
+
       </header>
+      <div className="settings-account-row">
+        <section className="settings-section" aria-labelledby="account-title">
+          <h3 id="account-title">Account</h3>
+          <div className="connection is-online" role="status"><span className="connection-dot" aria-hidden="true" /><span><strong>Connected</strong><small>{status.auth.account?.username}</small></span></div>
+          <button type="button" className="button button-secondary" onClick={onSignOut} disabled={busy}>Sign out</button>
+        </section>
+        <section className="settings-section" aria-labelledby="appearance-title">
+          <h3 id="appearance-title">Appearance</h3>
+          <ThemeToggle theme={theme} onChange={onThemeChange} />
+        </section>
+      </div>
       <div className="settings-grid">
         <section className="settings-section" aria-labelledby="senders-title">
           <div className="settings-head">
