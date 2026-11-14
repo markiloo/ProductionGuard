@@ -805,12 +805,6 @@ export function DashboardApp() {
         <ProductionView runs={productionRuns} onAdd={openNewProductionRun} onEdit={openProductionRun} />
       )}
 
-      <footer className="app-foot">
-        <span>Gmail Inbox · subject PO · exact senders</span>
-        <span aria-hidden="true">·</span>
-        <span>Data stays on this PC</span>
-      </footer>
-
       {selected ? (
         <PoDetailDialog
           po={detail}
