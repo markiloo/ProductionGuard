@@ -1,3 +1,4 @@
+import { ViewPane } from './components/ViewPane.jsx';
 import { InventoryHistoryDialog } from './dialogs/InventoryHistoryDialog.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Brand } from './components/Brand.jsx';
@@ -171,24 +172,22 @@ export function DashboardApp() {
   }, [status?.auth.connected, status?.auth.account?.id, productionItemRevision]);
 
   useEffect(() => {
-    if (!status?.auth.connected || view !== 'production') return undefined;
+    if (!status?.auth.connected) return undefined;
     let active = true;
-    setProductionRuns(null);
     api('/api/production-runs')
       .then((data) => { if (active) setProductionRuns(data.items); })
       .catch((failure) => { if (active) { setProductionRuns([]); setError(failure.message); } });
     return () => { active = false; };
-  }, [view, status?.auth.connected, status?.auth.account?.id, productionRevision]);
+  }, [status?.auth.connected, status?.auth.account?.id, productionRevision]);
 
   useEffect(() => {
-    if (!status?.auth.connected || view !== 'deliveries') return undefined;
+    if (!status?.auth.connected) return undefined;
     let active = true;
-    setDeliveries(null);
     api('/api/deliveries')
       .then((data) => { if (active) setDeliveries(data.items); })
       .catch((failure) => { if (active) { setDeliveries([]); setError(failure.message); } });
     return () => { active = false; };
-  }, [view, status?.auth.connected, status?.auth.account?.id, deliveryRevision]);
+  }, [status?.auth.connected, status?.auth.account?.id, deliveryRevision]);
 
   useEffect(() => {
     if (!selected) { setDetail(null); setDetailMessage(''); return undefined; }
@@ -750,7 +749,9 @@ export function DashboardApp() {
             <p className="hint">The app password is encrypted for your Windows user. Never enter your normal Google password.</p>
           </form>
         </section>
-      ) : view === 'settings' ? (
+      ) : (
+        <div className="dashboard-views" key={status.auth.account?.id}>
+        <ViewPane active={view === 'settings'}>
         <SettingsView
           status={status}
           sender={sender}
@@ -763,9 +764,11 @@ export function DashboardApp() {
           onSaveTimeZone={saveTimeZone}
           onClearAllData={clearAllData}
         />
-      ) : view === 'home' ? (
+        </ViewPane>
+        <ViewPane active={view === 'home'}>
         <HomeView status={status} inventory={inventory} />
-      ) : view === 'orders' ? (
+        </ViewPane>
+        <ViewPane active={view === 'orders'}>
         <>
           <OrdersTopbar
             status={status}
@@ -795,14 +798,20 @@ export function DashboardApp() {
             />
           </div>
         </>
-      ) : view === 'deliveries' ? (
+        </ViewPane>
+        <ViewPane active={view === 'deliveries'}>
         <DeliveriesView deliveries={deliveries} onAdd={openNewDelivery} onEdit={openDelivery} onReceive={startReceive} busy={deliveryBusy} />
-      ) : view === 'inventory' ? (
+        </ViewPane>
+        <ViewPane active={view === 'inventory'}>
         <InventoryView items={inventory} onAdd={openNewInventoryItem} onEdit={openInventoryItem} onHistory={setHistoryItem} />
-      ) : view === 'assemblies' ? (
+        </ViewPane>
+        <ViewPane active={view === 'assemblies'}>
         <AssembliesView assemblies={productionItems} onAdd={openNewProductionItem} onEdit={openProductionItem} />
-      ) : (
+        </ViewPane>
+        <ViewPane active={view === 'production'}>
         <ProductionView runs={productionRuns} onAdd={openNewProductionRun} onEdit={openProductionRun} />
+        </ViewPane>
+        </div>
       )}
 
       {selected ? (

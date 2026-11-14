@@ -1641,3 +1641,8 @@ input, select, textarea { font-size: 14px; }
   .home-actions { width: 100%; }
   .run-progress-meter { flex-wrap: wrap; }
 }
+
+/* All dashboard views contribute their natural height to one shared row. */
+.dashboard-views { display: grid; grid-template-columns: minmax(0, 1fr); }
+.dashboard-view { grid-area: 1 / 1; min-width: 0; align-self: start; }
+.dashboard-view[data-active="false"] { visibility: hidden; pointer-events: none; }
