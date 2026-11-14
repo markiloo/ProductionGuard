@@ -130,12 +130,12 @@ test('widgets are ordered, editable, deletable, and account-scoped', () => {
   assert.equal(deleteDashboardWidget(db, 'acct-a', first.id), false);
 });
 
-test('home payload limits incoming deliveries and selects current runs', () => {
+test('home payload includes all incoming deliveries and selects current runs', () => {
   const { db } = loaded;
   const home = buildHome(db, 'acct-a', TODAY);
   assert.equal(home.today, TODAY);
-  assert.equal(home.incoming.length, 3);
-  assert.deepEqual(home.incoming.map((delivery) => delivery.id), ['del-6', 'del-1', 'del-3']);
+  assert.equal(home.incoming.length, 5);
+  assert.deepEqual(home.incoming.map((delivery) => delivery.id), ['del-6', 'del-1', 'del-3', 'del-2', 'del-5']);
   assert.equal(home.incoming[0].overdue, true);
   assert.equal(home.incoming[1].overdue, false);
   assert.equal(home.incoming[0].itemName, 'Carton Glue');

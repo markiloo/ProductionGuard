@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ProductionStatusChip } from '../components/Chips.jsx';
 import { ProjectionChart } from '../components/ProjectionChart.jsx';
+import { IncomingHorizonDialog } from '../dialogs/IncomingHorizonDialog.jsx';
 import { ProjectionDialog } from '../dialogs/ProjectionDialog.jsx';
 import { api } from '../lib/api.js';
 import { scheduleDate } from '../lib/format.js';
@@ -68,6 +69,52 @@ export function IncomingOrdersTable({ incoming }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+export function IncomingDeliveriesPanel({ incoming, today }) {
+  const [windowValue, setWindowValue] = useState(2);
+  const [windowUnit, setWindowUnit] = useState('weeks');
+  const [page, setPage] = useState(0);
+  const [editingHorizon, setEditingHorizon] = useState(false);
+  const days = windowValue * (windowUnit === 'weeks' ? 7 : 1);
+  const end = new Date(`${today}T00:00:00.000Z`);
+  end.setUTCDate(end.getUTCDate() + days);
+  const endDate = end.toISOString().slice(0, 10);
+  const rows = incoming.filter((row) => row.expectedArrival <= endDate);
+  const pages = Math.max(1, Math.ceil(rows.length / 3));
+  const currentPage = Math.min(page, pages - 1);
+  const visible = rows.slice(currentPage * 3, currentPage * 3 + 3);
+
+  return (
+    <section className="panel home-section" aria-labelledby="home-incoming-title">
+      <header className="panel-head record-head">
+        <div>
+          <h2 id="home-incoming-title">Incoming deliveries</h2>
+          <p className="hint incoming-horizon-summary">Next {windowValue} {windowValue === 1 ? windowUnit.slice(0, -1) : windowUnit} ? Includes overdue</p>
+        </div>
+        <div className="projection-actions">
+          <span className="count">{rows.length}</span>
+          <button type="button" className="button button-ghost button-small" onClick={() => setEditingHorizon(true)} aria-label="Edit incoming delivery horizon">Edit</button>
+        </div>
+      </header>
+      {visible.length ? <IncomingOrdersTable incoming={visible} /> : (
+        <div className="empty"><strong>No incoming deliveries in this window</strong><p>Choose a longer window to look further ahead.</p></div>
+      )}
+      {rows.length > 3 ? (
+        <nav className="incoming-pagination" aria-label="Incoming delivery pages">
+          <button type="button" className="button button-secondary button-small" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button>
+          <span role="status">Page {currentPage + 1} of {pages}</span>
+          <button type="button" className="button button-secondary button-small" disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}>Next</button>
+        </nav>
+      ) : null}
+      {editingHorizon ? <IncomingHorizonDialog value={windowValue} unit={windowUnit} onClose={() => setEditingHorizon(false)} onSave={({ value, unit }) => {
+        setWindowValue(value);
+        setWindowUnit(unit);
+        setPage(0);
+        setEditingHorizon(false);
+      }} /> : null}
+    </section>
   );
 }
 
@@ -217,19 +264,7 @@ export function HomeView({ status, inventory }) {
             ) : null}
           </div>
           <div className="home-sections">
-            <section className="panel home-section" aria-labelledby="home-incoming-title">
-              <header className="panel-head record-head">
-                <div><p className="eyebrow">Deliveries</p><h2 id="home-incoming-title">Next 3 incoming</h2></div>
-                <span className="count">{data.incoming.length}</span>
-              </header>
-              {data.incoming.length ? <IncomingOrdersTable incoming={data.incoming} /> : (
-                <div className="empty">
-                  <span className="empty-mark" aria-hidden="true">IN</span>
-                  <strong>No incoming deliveries</strong>
-                  <p>Ordered POs and manual deliveries appear here.</p>
-                </div>
-              )}
-            </section>
+            <IncomingDeliveriesPanel incoming={data.incoming} today={data.today} />
             <section className="panel home-section" aria-labelledby="home-runs-title">
               <header className="panel-head record-head">
                 <div><p className="eyebrow">Production</p><h2 id="home-runs-title">Current production runs</h2></div>

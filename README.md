@@ -20,7 +20,7 @@ Complete POs from approved senders enter **Pending Review**. Unauthorized, incom
 
 The dashboard opens on **Home**. **Add visualization** charts a selected inventory item's projected on-hand balance over a horizon the manager chooses in days or weeks (1–365 days). Projections use confirmed supply only: on-hand stock plus unreceived deliveries, minus outstanding production demand; completed runs and received deliveries are excluded, and records whose unit differs from the inventory unit are skipped and noted. Each chart shows the current and lowest projected balance, a stockout warning, and its reorder level when one is set. Charts can be edited or removed, and the layout is saved per connected account.
 
-Below the charts, Home lists the next three incoming deliveries with arrival, PO or manual source, item, quantity, supplier, and an overdue flag, plus the completion progress of runs currently on the production floor (in progress or scheduled today). Home is a summary view; the Orders assessment remains authoritative. Visualizations survive **Clear saved orders** and are removed by **Settings → Clear all data**.
+Below the charts, Home lists incoming deliveries in a configurable window (two weeks by default), including overdue deliveries, with three per page with arrival, PO or manual source, item, quantity, supplier, and an overdue flag, plus the completion progress of runs currently on the production floor (in progress or scheduled today). Home is a summary view; the Orders assessment remains authoritative. Visualizations survive **Clear saved orders** and are removed by **Settings → Clear all data**.
 
 ## Demo data
 

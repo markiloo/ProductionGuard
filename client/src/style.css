@@ -1669,3 +1669,7 @@ input, select, textarea { font-size: 14px; }
   text-align: left;
   overflow-wrap: anywhere;
 }
+
+.incoming-horizon-summary { margin-top: 6px; }
+.incoming-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--line); }
+.incoming-pagination span { color: var(--ink-3); font-size: 12px; }

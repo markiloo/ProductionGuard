@@ -110,3 +110,8 @@ Live Gmail connectivity and connected browser workflows were not exercised. Coll
 - Removed dashboard branding and the separate header; Settings stays at the right of the view navigation.
 - Moved connected account, theme selection, and sign out into Settings.
 - Passed lint, production build, and all 86 tests. No browser visual pass performed.
+
+## Incoming delivery window - 2026-11-14
+- Added configurable days/weeks window (default two weeks), including overdue arrivals, with three deliveries per page and Previous/Next controls.
+- Dashboard API returns all account-scoped incoming deliveries.
+- Lint, all 87 tests, and build passed. No browser visual pass performed.

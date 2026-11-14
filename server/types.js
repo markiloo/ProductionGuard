@@ -245,6 +245,6 @@
  * @typedef {Object} HomeDashboard
  * @property {string} today Plant-local current date.
  * @property {DashboardWidget[]} widgets Saved inventory visualizations with projections.
- * @property {{id: string, itemSku: string, itemName: string|null, quantity: number, unit: string, expectedArrival: string, supplier: string, poId: string|null, overdue: boolean}[]} incoming Next three unreceived deliveries.
+ * @property {{id: string, itemSku: string, itemName: string|null, quantity: number, unit: string, expectedArrival: string, supplier: string, poId: string|null, overdue: boolean}[]} incoming All unreceived deliveries, ordered by arrival; Home filters and paginates them.
  * @property {{id: string, runNumber: string, item: string, quantity: number, unit: string, status: string, scheduledDate: string, completedQuantity: number, percent: number}[]} runs In-progress runs plus runs scheduled today.
  */

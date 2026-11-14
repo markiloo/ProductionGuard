@@ -3,7 +3,6 @@ import { addDays, isValidDate } from './time.js';
 
 export const DEFAULT_HORIZON_DAYS = 30;
 export const MAX_HORIZON_DAYS = 365;
-const INCOMING_LIMIT = 3;
 
 const widgetColumns = 'id, type, sku, horizon_days AS horizonDays, position, created_at AS createdAt, updated_at AS updatedAt';
 
@@ -155,7 +154,7 @@ export function buildHome(db, accountId, today) {
     FROM incoming_deliveries d
     LEFT JOIN inventory i ON i.account_id = d.account_id AND i.sku = d.item_sku COLLATE NOCASE
     WHERE d.account_id=? AND d.status='incoming'
-    ORDER BY d.expected_arrival, d.id LIMIT ?`).all(accountId, INCOMING_LIMIT)
+    ORDER BY d.expected_arrival, d.id`).all(accountId)
     .map((delivery) => ({ ...delivery, overdue: delivery.expectedArrival < today }));
 
   const runs = db.prepare(`SELECT id, run_number AS runNumber, item, quantity, unit, status,

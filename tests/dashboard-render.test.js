@@ -88,3 +88,28 @@ test('home dashboard renders projection, incoming, and run progress', async () =
     assert.match(home, /Loading dashboard/);
   } finally { await vite.close(); }
 });
+
+
+test('incoming window shows two weeks and only three deliveries per page', async () => {
+  const vite = await createServer({ server: { middlewareMode: true, preTransformRequests: false }, optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom' });
+  try {
+    const { IncomingDeliveriesPanel } = await vite.ssrLoadModule('/client/src/views/HomeView.jsx');
+    const incoming = ['2026-11-12', '2026-11-14', '2026-11-20', '2026-11-27', '2026-11-28'].map((date, i) => ({
+      id: `delivery-${i}`, itemSku: `SKU-${i}`, quantity: 1, unit: 'units', expectedArrival: date, overdue: i === 0,
+    }));
+    const markup = renderToStaticMarkup(React.createElement(IncomingDeliveriesPanel, { incoming, today: '2026-11-13' }));
+    assert.match(markup, /Incoming deliveries/);
+    assert.match(markup, /Next 2 weeks/);
+    assert.match(markup, /Edit incoming delivery horizon/);
+    assert.doesNotMatch(markup, /<input|<select/);
+    assert.match(markup, /Page 1 of 2/);
+    assert.match(markup, /Overdue/);
+    assert.match(markup, /class="count">4</);
+    assert.doesNotMatch(markup, /SKU-3|SKU-4/);
+    assert.equal((markup.match(/<tr>/g) || []).length, 4);
+    assert.match(markup, /disabled="">Previous/);
+    const empty = renderToStaticMarkup(React.createElement(IncomingDeliveriesPanel, { incoming: [], today: '2026-11-13' }));
+    assert.match(empty, /No incoming deliveries in this window/);
+    assert.doesNotMatch(empty, /Incoming delivery pages/);
+  } finally { await vite.close(); }
+});
