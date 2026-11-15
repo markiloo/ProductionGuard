@@ -20,7 +20,7 @@ export function IncomingHorizonDialog({ value, unit, onClose, onSave }) {
     <dialog ref={dialogRef} className="detail projection-dialog" aria-labelledby="incoming-horizon-title">
       <header className="detail-head">
         <h2 id="incoming-horizon-title">Edit incoming delivery horizon</h2>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="Close horizon form">?</button>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Close horizon form">×</button>
       </header>
       <form className="detail-body" onSubmit={submit}>
         <div className="form-grid">

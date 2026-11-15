@@ -91,10 +91,9 @@ export function IncomingDeliveriesPanel({ incoming, today }) {
       <header className="panel-head record-head">
         <div>
           <h2 id="home-incoming-title">Incoming deliveries</h2>
-          <p className="hint incoming-horizon-summary">Next {windowValue} {windowValue === 1 ? windowUnit.slice(0, -1) : windowUnit} ? Includes overdue</p>
+          <p className="hint incoming-horizon-summary">Next {windowValue} {windowUnit === 'weeks' ? (windowValue === 1 ? 'Week' : 'Weeks') : (windowValue === 1 ? 'Day' : 'Days')}</p>
         </div>
         <div className="projection-actions">
-          <span className="count">{rows.length}</span>
           <button type="button" className="button button-ghost button-small" onClick={() => setEditingHorizon(true)} aria-label="Edit incoming delivery horizon">Edit</button>
         </div>
       </header>
@@ -151,6 +150,7 @@ export function CurrentRunsList({ runs }) {
 export function HomeView({ status, inventory }) {
   const accountId = status.auth.account?.id || '';
   const [data, setData] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [draft, setDraft] = useState(null);
@@ -162,6 +162,7 @@ export function HomeView({ status, inventory }) {
     if (!quiet) setRefreshing(true);
     try {
       setData(await api('/api/dashboard'));
+      setLastUpdated(new Date().toISOString());
       setError('');
     } catch (failure) {
       setError(failure.message);
@@ -173,9 +174,15 @@ export function HomeView({ status, inventory }) {
   useEffect(() => {
     let active = true;
     setData(null);
+    setLastUpdated(null);
     setError('');
     api('/api/dashboard')
-      .then((result) => { if (active) setData(result); })
+      .then((result) => {
+        if (active) {
+          setData(result);
+          setLastUpdated(new Date().toISOString());
+        }
+      })
       .catch((failure) => { if (active) setError(failure.message); });
     return () => { active = false; };
   }, [accountId]);
@@ -229,7 +236,10 @@ export function HomeView({ status, inventory }) {
     <section className="home" id="home" tabIndex={-1} aria-labelledby="home-title">
       <header className="home-head">
         <div>
-          <p className="eyebrow">Dashboard</p>
+          <div className="home-heading-meta">
+            <p className="eyebrow">Dashboard</p>
+            {lastUpdated ? <span className="home-last-updated">Last updated <time dateTime={lastUpdated}>{new Date(lastUpdated).toLocaleString([], { dateStyle: 'medium', timeStyle: 'medium' })}</time></span> : null}
+          </div>
           <h2 id="home-title">Home</h2>
         </div>
         <div className="home-actions">

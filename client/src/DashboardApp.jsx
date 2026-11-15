@@ -675,9 +675,6 @@ export function DashboardApp() {
         </a>
       ) : null}
       {status.auth.connected ? (
-        <p className="signed-in-label">Signed in as {status.auth.account?.username}</p>
-      ) : null}
-      {status.auth.connected ? (
         <div className="dashboard-navigation">
         <nav className="view-tabs" aria-label="Dashboard views" ref={tabsRef}>
           <button type="button" className="view-tab" aria-current={view === 'home' ? 'page' : undefined} onClick={() => showView('home')}>Home</button>
@@ -694,7 +691,10 @@ export function DashboardApp() {
             />
           ) : null}
         </nav>
-        <button type="button" className="view-tab settings-navigation" aria-current={view === 'settings' ? 'page' : undefined} onClick={() => showView('settings')}>Settings</button>
+        <div className="dashboard-account-navigation">
+          <p className="signed-in-label">Signed in as {status.auth.account?.username}</p>
+          <button type="button" className="view-tab settings-navigation" aria-current={view === 'settings' ? 'page' : undefined} onClick={() => showView('settings')}>Settings</button>
+        </div>
         </div>
       ) : null}
 

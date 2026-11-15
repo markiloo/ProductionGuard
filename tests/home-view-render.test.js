@@ -4,6 +4,17 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
 
+test('incoming delivery horizon form displays a close cross instead of a question mark', async () => {
+  const vite = await createServer({ server: { middlewareMode: true, preTransformRequests: false }, optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom' });
+  try {
+    const { IncomingHorizonDialog } = await vite.ssrLoadModule('/client/src/dialogs/IncomingHorizonDialog.jsx');
+    const markup = renderToStaticMarkup(React.createElement(IncomingHorizonDialog, {
+      value: 2, unit: 'weeks', onClose() {}, onSave() {},
+    }));
+    assert.match(markup, /aria-label="Close horizon form">×<\/button>/);
+  } finally { await vite.close(); }
+});
+
 test('home view is the accessible dashboard landing section', async () => {
   const vite = await createServer({ server: { middlewareMode: true, preTransformRequests: false }, optimizeDeps: { noDiscovery: true, include: [] }, appType: 'custom' });
   try {
