@@ -1,7 +1,10 @@
+import { usePagination } from '../hooks/usePagination.js';
+import { ListPagination } from '../components/ListPagination.jsx';
 import { ProductionRow } from '../components/ProductionRow.jsx';
 import { scheduleDate } from '../lib/format.js';
 
 export function ProductionView({ runs, onAdd, onEdit }) {
+  const pagination = usePagination(runs);
   const inProgress = runs ? runs.filter((run) => run.status === 'in_progress').length : 0;
   const nextRun = runs
     ? runs.filter((run) => run.status === 'scheduled' || run.status === 'in_progress').sort((first, second) => first.scheduledDate.localeCompare(second.scheduledDate))[0] || null
@@ -25,7 +28,7 @@ export function ProductionView({ runs, onAdd, onEdit }) {
             <div><span className="metric-label">Next run</span><strong>{nextRun ? scheduleDate(nextRun.scheduledDate) : '—'}</strong></div>
           </div>
           <div className="record-list">
-            {runs.map((run) => <ProductionRow key={run.id} run={run} onEdit={onEdit} />)}
+            {pagination.visible.map((run) => <ProductionRow key={run.id} run={run} onEdit={onEdit} />)}
             {!runs.length ? (
               <div className="empty">
                 <span className="empty-mark" aria-hidden="true">PR</span>
@@ -35,6 +38,7 @@ export function ProductionView({ runs, onAdd, onEdit }) {
               </div>
             ) : null}
           </div>
+          <ListPagination {...pagination} label="Production pages" />
         </>
       )}
     </section>

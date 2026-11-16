@@ -1,6 +1,9 @@
+import { usePagination } from '../hooks/usePagination.js';
+import { ListPagination } from '../components/ListPagination.jsx';
 
 
 export function AssembliesView({ assemblies, onAdd, onEdit }) {
+  const pagination = usePagination(assemblies);
   return (
     <section className="panel record-panel definitions" id="assemblies" tabIndex={-1} aria-labelledby="assemblies-title">
       <header className="panel-head record-head">
@@ -16,7 +19,7 @@ export function AssembliesView({ assemblies, onAdd, onEdit }) {
         <>
           <p className="definition-intro">Define what the plant assembles and the materials each unit needs, selected from Inventory. Each assembly creates its own finished-good Inventory item, and completed production units add to that stock. Production runs scale the per-unit materials by the planned quantity and lock the result.</p>
           <div className="record-list">
-            {assemblies.map((item) => <ProductionItemRow key={item.id} item={item} onEdit={onEdit} />)}
+            {pagination.visible.map((item) => <ProductionItemRow key={item.id} item={item} onEdit={onEdit} />)}
             {!assemblies.length ? (
               <div className="empty">
                 <span className="empty-mark" aria-hidden="true">AS</span>
@@ -26,6 +29,7 @@ export function AssembliesView({ assemblies, onAdd, onEdit }) {
               </div>
             ) : null}
           </div>
+          <ListPagination {...pagination} label="Assemblies pages" />
         </>
       )}
     </section>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ProductionStatusChip } from '../components/Chips.jsx';
 import { ProjectionChart } from '../components/ProjectionChart.jsx';
 import { IncomingHorizonDialog } from '../dialogs/IncomingHorizonDialog.jsx';
@@ -147,7 +147,7 @@ export function CurrentRunsList({ runs }) {
   );
 }
 
-export function HomeView({ status, inventory }) {
+export function HomeView({ status, inventory, active = true }) {
   const accountId = status.auth.account?.id || '';
   const [data, setData] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -158,34 +158,61 @@ export function HomeView({ status, inventory }) {
   const [refreshing, setRefreshing] = useState(false);
   const skuOptions = (inventory || []).filter((item) => item.sku);
 
+  const loader = useRef(null);
+
   async function load({ quiet = false } = {}) {
-    if (!quiet) setRefreshing(true);
-    try {
-      setData(await api('/api/dashboard'));
-      setLastUpdated(new Date().toISOString());
-      setError('');
-    } catch (failure) {
-      setError(failure.message);
-    } finally {
-      if (!quiet) setRefreshing(false);
-    }
+    return loader.current?.(!quiet);
   }
 
   useEffect(() => {
-    let active = true;
+    let disposed = false;
+    let running = null;
+    let queued = false;
+    const controller = new AbortController();
     setData(null);
     setLastUpdated(null);
     setError('');
-    api('/api/dashboard')
-      .then((result) => {
-        if (active) {
-          setData(result);
-          setLastUpdated(new Date().toISOString());
-        }
-      })
-      .catch((failure) => { if (active) setError(failure.message); });
-    return () => { active = false; };
+    async function request(showProgress = false) {
+      if (disposed) return;
+      if (running) {
+        queued = true;
+        return running;
+      }
+      if (showProgress) setRefreshing(true);
+      running = (async () => {
+        do {
+          queued = false;
+          try {
+            const result = await api('/api/dashboard', { signal: controller.signal });
+            if (!disposed) {
+              setData(result);
+              setLastUpdated(new Date().toISOString());
+              setError('');
+            }
+          } catch (failure) {
+            if (!disposed) setError(failure.message);
+          }
+        } while (queued && !disposed);
+      })();
+      try { await running; } finally {
+        running = null;
+        if (!disposed) setRefreshing(false);
+      }
+    }
+    loader.current = request;
+    return () => {
+      disposed = true;
+      controller.abort();
+      loader.current = null;
+    };
   }, [accountId]);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    loader.current?.();
+    const timer = setInterval(() => loader.current?.(), 10000);
+    return () => clearInterval(timer);
+  }, [active, accountId]);
 
   useEffect(() => {
     if (!notice) return undefined;

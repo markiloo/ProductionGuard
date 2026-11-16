@@ -744,7 +744,7 @@ export function DashboardApp() {
         />
         </ViewPane>
         <ViewPane active={view === 'home'}>
-        <HomeView status={status} inventory={inventory} />
+        <HomeView status={status} inventory={inventory} active={view === 'home'} />
         </ViewPane>
         <ViewPane active={view === 'orders'}>
         <>

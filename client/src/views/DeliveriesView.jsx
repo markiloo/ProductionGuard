@@ -1,3 +1,5 @@
+import { usePagination } from '../hooks/usePagination.js';
+import { ListPagination } from '../components/ListPagination.jsx';
 import { scheduleDate, shortDate } from '../lib/format.js';
 
 function DeliveryRow({ delivery, onEdit, onReceive, busy }) {
@@ -34,6 +36,7 @@ function DeliveryRow({ delivery, onEdit, onReceive, busy }) {
 }
 
 export function DeliveriesView({ deliveries, onAdd, onEdit, onReceive, busy }) {
+  const pagination = usePagination(deliveries);
   const incoming = deliveries ? deliveries.filter((delivery) => delivery.status === 'incoming').length : 0;
   return (
     <section className="panel record-panel deliveries" id="deliveries" tabIndex={-1} aria-labelledby="deliveries-title">
@@ -55,7 +58,7 @@ export function DeliveriesView({ deliveries, onAdd, onEdit, onReceive, busy }) {
             <div><span className="metric-label">Received</span><strong>{deliveries.length - incoming}</strong></div>
           </div>
           <div className="record-list">
-            {deliveries.map((delivery) => <DeliveryRow key={delivery.id} delivery={delivery} onEdit={onEdit} onReceive={onReceive} busy={busy} />)}
+            {pagination.visible.map((delivery) => <DeliveryRow key={delivery.id} delivery={delivery} onEdit={onEdit} onReceive={onReceive} busy={busy} />)}
             {!deliveries.length ? (
               <div className="empty">
                 <span className="empty-mark" aria-hidden="true">IN</span>
@@ -64,6 +67,7 @@ export function DeliveriesView({ deliveries, onAdd, onEdit, onReceive, busy }) {
               </div>
             ) : null}
           </div>
+          <ListPagination {...pagination} label="Deliveries pages" />
         </>
       )}
     </section>

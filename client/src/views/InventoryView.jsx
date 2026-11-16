@@ -1,3 +1,5 @@
+import { usePagination } from '../hooks/usePagination.js';
+import { ListPagination } from '../components/ListPagination.jsx';
 import { useState } from 'react';
 import { SearchIcon } from '../components/SearchIcon.jsx';
 import { fullDate, metricDate, shortDate } from '../lib/format.js';
@@ -29,6 +31,7 @@ function InventoryRow({ item, onEdit, onHistory }) {
 export function InventoryView({ items, onAdd, onEdit, onHistory }) {
   const [query, setQuery] = useState('');
   const filtered = items ? items.filter((item) => [item.item, item.sku, item.supplier].some((value) => String(value || '').toLowerCase().includes(query.trim().toLowerCase()))) : null;
+  const pagination = usePagination(filtered);
   const lowStock = filtered ? filtered.filter((item) => item.reorderLevel != null && item.quantity <= item.reorderLevel).length : 0;
   const lastUpdated = items && items.length
     ? items.reduce((latest, item) => (item.updatedAt > latest ? item.updatedAt : latest), items[0].updatedAt)
@@ -58,11 +61,11 @@ export function InventoryView({ items, onAdd, onEdit, onHistory }) {
             <label className="search-field">
               <span className="sr-only">Search inventory</span>
               <SearchIcon />
-              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search item, SKU, or supplier" />
+              <input type="search" value={query} onChange={(event) => { setQuery(event.target.value); pagination.setPage(0); }} placeholder="Search item, SKU, or supplier" />
             </label>
           </div>
           <div className="record-list">
-            {(filtered || []).map((item) => <InventoryRow key={item.id} item={item} onEdit={onEdit} onHistory={onHistory} />)}
+            {pagination.visible.map((item) => <InventoryRow key={item.id} item={item} onEdit={onEdit} onHistory={onHistory} />)}
             {!filtered?.length ? (
               <div className="empty">
                 <span className="empty-mark" aria-hidden="true">ST</span>
@@ -72,6 +75,7 @@ export function InventoryView({ items, onAdd, onEdit, onHistory }) {
               </div>
             ) : null}
           </div>
+          <ListPagination {...pagination} label="Inventory pages" />
         </>
       )}
     </section>
