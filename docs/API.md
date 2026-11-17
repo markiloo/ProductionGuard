@@ -87,3 +87,6 @@ Creating an assembly creates a linked Inventory item at quantity zero with the a
 
 ### Inventory history
 `GET /api/inventory/:id/history?limit=25&offset=0` returns `{ item, items, total, limit, offset }`, newest first. Entries include kind, before_quantity, after_quantity, before_unit, unit, delivery_id, po_id, supplier, and created_at. Requires a connected account; missing or other-account items return 404.
+
+## Production calendar
+`GET /api/dashboard` includes `productionCalendar: { startDate, endDate, runs }`. The inclusive range is plant-local today through today + 29 days. Runs include account-scoped unfinished production runs and their locked requirements, ordered by date and run number.

@@ -115,3 +115,6 @@ Live Gmail connectivity and connected browser workflows were not exercised. Coll
 - Added configurable days/weeks window (default two weeks), including overdue arrivals, with three deliveries per page and Previous/Next controls.
 - Dashboard API returns all account-scoped incoming deliveries.
 - Lint, all 87 tests, and build passed. No browser visual pass performed.
+
+## Home production calendar
+Home offers Overview and Calendar. Calendar shows unfinished runs for 30 days including plant-local today, with a weekly desktop grid and mobile agenda. Selecting a run opens read-only details. Lint and production build passed; browser visual verification remains outstanding.

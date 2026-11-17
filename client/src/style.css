@@ -1583,7 +1583,7 @@ input, select, textarea { font-size: 14px; }
 .home-heading-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
 .home-last-updated { color: var(--ink-3); font-size: 12px; }
 .home-head h2 { margin: 0; font-size: var(--type-title); font-weight: 900; letter-spacing: -0.025em; }
-.home-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.home-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .home-error { margin: 0; padding: 10px 14px; border: 1px solid var(--review-ink); background: var(--review-bg); color: var(--review-ink); font-size: 13px; }
 .home-notice { margin: 0; color: var(--ink-2); font-size: 13px; }
 
@@ -1678,3 +1678,24 @@ input, select, textarea { font-size: 14px; }
 .incoming-horizon-summary { margin-top: 6px; }
 .incoming-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--line); }
 .incoming-pagination span { color: var(--ink-3); font-size: 12px; }
+
+.home-title-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+.home-view-switch { display: flex; gap: 8px; }
+.production-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.calendar-weekday, .calendar-blank, .calendar-day { padding: 10px; border: 1px solid var(--line); min-width: 0; }
+.calendar-weekday { font-weight: 700; }
+.calendar-day { min-height: 140px; }
+.calendar-day h3 { font-size: 12px; margin: 0 0 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.calendar-day [aria-current="date"] { text-decoration: underline; text-underline-offset: 4px; }
+.calendar-run { width: 100%; display: flex; flex-direction: column; align-items: flex-start; white-space: normal; overflow-wrap: anywhere; text-align: left; gap: 5px; margin-bottom: 8px; min-height: 44px; }
+@media (max-width: 800px) {
+  .production-calendar-grid { grid-template-columns: minmax(0, 1fr); }
+  .calendar-weekday, .calendar-blank { display: none; }
+  .calendar-day { min-height: 70px; }
+}
+
+.calendar-day-today { background: var(--surface-2); outline: 2px solid var(--ink); outline-offset: -2px; }
+.calendar-day-today h3 > span { background: var(--ink); color: var(--surface); padding: 2px 6px; font-weight: 900; }
+.calendar-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.calendar-filter select { width: auto; min-height: 44px; }
+.calendar-event-type { font-size: 11px; font-weight: 900; color: var(--ink-2); }

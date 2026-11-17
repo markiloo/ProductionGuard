@@ -1,3 +1,4 @@
+import { listProductionRuns } from './production.js';
 import { randomUUID } from 'node:crypto';
 import { addDays, isValidDate } from './time.js';
 
@@ -167,5 +168,7 @@ export function buildHome(db, accountId, today) {
       percent: run.quantity > 0 ? Math.min(100, Math.round((run.completedQuantity / run.quantity) * 100)) : 0,
     }));
 
-  return { today, widgets, incoming, runs };
+  const endDate = addDays(today, 29);
+  const calendarRuns = listProductionRuns(db, accountId).filter(run => run.status !== 'completed' && run.scheduledDate >= today && run.scheduledDate <= endDate).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.runNumber.localeCompare(b.runNumber));
+  return { today, widgets, incoming, runs, productionCalendar: { startDate: today, endDate, runs: calendarRuns } };
 }

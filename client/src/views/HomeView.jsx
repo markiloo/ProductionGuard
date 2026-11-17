@@ -1,3 +1,4 @@
+import { ProductionCalendar } from '../components/ProductionCalendar.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { ProductionStatusChip } from '../components/Chips.jsx';
 import { ProjectionChart } from '../components/ProjectionChart.jsx';
@@ -32,7 +33,7 @@ export function ProjectionTile({ widget, busy, onEdit, onRemove }) {
       <ProjectionChart projection={projection} />
       <footer className="projection-foot">
         {firstStockout ? (
-          <p className="tile-warning">Projected stockout from {scheduleDate(firstStockout.date)}{projection.stockoutDates.length > 1 ? ` · ${projection.stockoutDates.length} days below zero` : ''}.</p>
+          <p className="tile-warning">Projected stockout from {scheduleDate(firstStockout.date)}{projection.stockoutDates.length > 1 ? ` Â· ${projection.stockoutDates.length} days below zero` : ''}.</p>
         ) : <p>No projected stockout in this horizon.</p>}
         {excluded ? <p>{excluded} record{excluded === 1 ? '' : 's'} excluded for a different unit.</p> : null}
       </footer>
@@ -63,7 +64,7 @@ export function IncomingOrdersTable({ incoming }) {
               <td>{row.poId || 'Manual delivery'}</td>
               <td><strong>{row.itemName || row.itemSku}</strong><span>{row.itemSku}</span></td>
               <td>{row.quantity.toLocaleString()} {row.unit}</td>
-              <td>{row.supplier || '—'}</td>
+              <td>{row.supplier || 'â€”'}</td>
             </tr>
           ))}
         </tbody>
@@ -138,7 +139,7 @@ export function CurrentRunsList({ runs }) {
             >
               <span style={{ width: `${run.percent}%` }} />
             </div>
-            <span className="run-progress-copy">{run.completedQuantity.toLocaleString()} / {run.quantity.toLocaleString()} {run.unit} · {run.percent}%</span>
+            <span className="run-progress-copy">{run.completedQuantity.toLocaleString()} / {run.quantity.toLocaleString()} {run.unit} Â· {run.percent}%</span>
           </div>
           <time className="run-progress-date" dateTime={run.scheduledDate}>{scheduleDate(run.scheduledDate)}</time>
         </li>
@@ -149,6 +150,10 @@ export function CurrentRunsList({ runs }) {
 
 export function HomeView({ status, inventory, active = true }) {
   const accountId = status.auth.account?.id || '';
+  const [homeView, setHomeView] = useState('overview');
+  const [calendarFilter, setCalendarFilter] = useState('both');
+  useEffect(() => setCalendarFilter('both'), [accountId]);
+  useEffect(() => setHomeView('overview'), [accountId]);
   const [data, setData] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState('');
@@ -265,21 +270,22 @@ export function HomeView({ status, inventory, active = true }) {
         <div>
           <div className="home-heading-meta">
             <p className="eyebrow">Dashboard</p>
-            {lastUpdated ? <span className="home-last-updated">Last updated <time dateTime={lastUpdated}>{new Date(lastUpdated).toLocaleString([], { dateStyle: 'medium', timeStyle: 'medium' })}</time></span> : null}
           </div>
-          <h2 id="home-title">Home</h2>
+          <div className="home-title-row"><h2 id="home-title">Home</h2><div className="home-view-switch" role="group" aria-label="Home view">{['overview', 'calendar'].map(value => <button key={value} type="button" className={`button ${homeView === value ? 'button-primary' : 'button-secondary'}`} aria-pressed={homeView === value} onClick={() => setHomeView(value)}>{value === 'overview' ? 'Overview' : 'Calendar'}</button>)}</div></div>
         </div>
         <div className="home-actions">
-          <button type="button" className="button button-primary button-small" onClick={openNew} disabled={busy || !skuOptions.length}>Add visualization</button>
-          <button type="button" className="button button-secondary button-small" onClick={() => load()} disabled={refreshing || !data}>{refreshing ? 'Refreshing…' : 'Refresh'}</button>
+            {lastUpdated ? <span className="home-last-updated">Last updated <time dateTime={lastUpdated}>{new Date(lastUpdated).toLocaleString([], { dateStyle: 'medium', timeStyle: 'medium' })}</time></span> : null}
+          {homeView === 'overview' ? <button type="button" className="button button-primary button-small" onClick={openNew} disabled={busy || !skuOptions.length}>Add visualization</button> : null}
+          <button type="button" className="button button-secondary button-small" onClick={() => load()} disabled={refreshing || !data}>{refreshing ? 'Refreshingâ€¦' : 'Refresh'}</button>
         </div>
       </header>
       {error ? <p className="home-error" role="alert">{error}</p> : null}
       {notice ? <p className="home-notice" role="status">{notice}</p> : null}
       {!data && !error ? (
-        <div className="panel record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading dashboard…</div>
+        <div className="panel record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading dashboardâ€¦</div>
       ) : null}
-      {data ? (
+      {data && homeView === 'calendar' ? <ProductionCalendar calendar={data.productionCalendar} incoming={data.incoming} filter={calendarFilter} onFilterChange={setCalendarFilter} /> : null}
+      {data && homeView === 'overview' ? (
         <>
           <div className="home-grid">
             {data.widgets.map((widget) => (
