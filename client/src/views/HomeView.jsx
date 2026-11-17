@@ -33,7 +33,7 @@ export function ProjectionTile({ widget, busy, onEdit, onRemove }) {
       <ProjectionChart projection={projection} />
       <footer className="projection-foot">
         {firstStockout ? (
-          <p className="tile-warning">Projected stockout from {scheduleDate(firstStockout.date)}{projection.stockoutDates.length > 1 ? ` Â· ${projection.stockoutDates.length} days below zero` : ''}.</p>
+          <p className="tile-warning">Projected stockout from {scheduleDate(firstStockout.date)}{projection.stockoutDates.length > 1 ? ` \u00B7 ${projection.stockoutDates.length} days below zero` : ''}.</p>
         ) : <p>No projected stockout in this horizon.</p>}
         {excluded ? <p>{excluded} record{excluded === 1 ? '' : 's'} excluded for a different unit.</p> : null}
       </footer>
@@ -139,7 +139,7 @@ export function CurrentRunsList({ runs }) {
             >
               <span style={{ width: `${run.percent}%` }} />
             </div>
-            <span className="run-progress-copy">{run.completedQuantity.toLocaleString()} / {run.quantity.toLocaleString()} {run.unit} Â· {run.percent}%</span>
+            <span className="run-progress-copy">{run.completedQuantity.toLocaleString()} / {run.quantity.toLocaleString()} {run.unit} &middot; {run.percent}%</span>
           </div>
           <time className="run-progress-date" dateTime={run.scheduledDate}>{scheduleDate(run.scheduledDate)}</time>
         </li>

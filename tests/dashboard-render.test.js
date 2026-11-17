@@ -53,6 +53,14 @@ test('home dashboard renders projection, incoming, and run progress', async () =
     assert.match(tile, /Today&#x27;s balance/);
     assert.match(tile, /109 units/);
     assert.match(tile, /Projected stockout from/);
+    assert.match(tile, /Projected stockout from Wed, 18 Nov \u00b7 2 days below zero\./);
+    const renderStockouts = (stockoutDates) => renderToStaticMarkup(React.createElement(ProjectionTile, {
+      widget: { id: 'widget-a', projection: { ...projection, stockoutDates } },
+    }));
+    const singleStockout = renderStockouts(projection.stockoutDates.slice(0, 1));
+    assert.match(singleStockout, /Projected stockout from Wed, 18 Nov\./);
+    assert.doesNotMatch(singleStockout, /days below zero/);
+    assert.match(renderStockouts([]), /No projected stockout in this horizon\./);
     assert.match(tile, />Edit</);
     assert.match(tile, />Remove</);
 
@@ -77,6 +85,7 @@ test('home dashboard renders projection, incoming, and run progress', async () =
     assert.match(runs, /aria-valuenow="2"/);
     assert.match(runs, /aria-valuemax="5"/);
     assert.match(runs, /40%/);
+    assert.match(runs, /2 \/ 5 units \u00b7 40%/);
     assert.match(runs, /PR-0001/);
 
     const home = renderToStaticMarkup(React.createElement(HomeView, {
