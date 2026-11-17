@@ -64,7 +64,7 @@ export function IncomingOrdersTable({ incoming }) {
               <td>{row.poId || 'Manual delivery'}</td>
               <td><strong>{row.itemName || row.itemSku}</strong><span>{row.itemSku}</span></td>
               <td>{row.quantity.toLocaleString()} {row.unit}</td>
-              <td>{row.supplier || 'â€”'}</td>
+              <td>{row.supplier || '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -92,9 +92,10 @@ export function IncomingDeliveriesPanel({ incoming, today }) {
       <header className="panel-head record-head">
         <div>
           <h2 id="home-incoming-title">Incoming deliveries</h2>
-          <p className="hint incoming-horizon-summary">Next {windowValue} {windowUnit === 'weeks' ? (windowValue === 1 ? 'Week' : 'Weeks') : (windowValue === 1 ? 'Day' : 'Days')}</p>
+          <p className="hint incoming-horizon-summary">Next {windowValue} {windowUnit === 'weeks' ? (windowValue === 1 ? 'week' : 'weeks') : (windowValue === 1 ? 'day' : 'days')}</p>
         </div>
         <div className="projection-actions">
+          <span className="count">{rows.length}<span className="sr-only"> deliveries in this window</span></span>
           <button type="button" className="button button-ghost button-small" onClick={() => setEditingHorizon(true)} aria-label="Edit incoming delivery horizon">Edit</button>
         </div>
       </header>
@@ -276,13 +277,13 @@ export function HomeView({ status, inventory, active = true }) {
         <div className="home-actions">
             {lastUpdated ? <span className="home-last-updated">Last updated <time dateTime={lastUpdated}>{new Date(lastUpdated).toLocaleString([], { dateStyle: 'medium', timeStyle: 'medium' })}</time></span> : null}
           {homeView === 'overview' ? <button type="button" className="button button-primary button-small" onClick={openNew} disabled={busy || !skuOptions.length}>Add visualization</button> : null}
-          <button type="button" className="button button-secondary button-small" onClick={() => load()} disabled={refreshing || !data}>{refreshing ? 'Refreshingâ€¦' : 'Refresh'}</button>
+          <button type="button" className="button button-secondary button-small" onClick={() => load()} disabled={refreshing || !data}>{refreshing ? 'Refreshing…' : 'Refresh'}</button>
         </div>
       </header>
       {error ? <p className="home-error" role="alert">{error}</p> : null}
       {notice ? <p className="home-notice" role="status">{notice}</p> : null}
       {!data && !error ? (
-        <div className="panel record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading dashboardâ€¦</div>
+        <div className="panel record-loading" role="status"><span className="spinner" aria-hidden="true" />Loading dashboard…</div>
       ) : null}
       {data && homeView === 'calendar' ? <ProductionCalendar calendar={data.productionCalendar} incoming={data.incoming} filter={calendarFilter} onFilterChange={setCalendarFilter} /> : null}
       {data && homeView === 'overview' ? (

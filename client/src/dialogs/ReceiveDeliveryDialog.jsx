@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSheetDialog } from '../hooks/useSheetDialog.js';
+import { scheduleDate } from '../lib/format.js';
 
 export function ReceiveDeliveryDialog({ delivery, busy, onClose, onConfirm }) {
   const dialogRef = useSheetDialog(onClose);
@@ -63,7 +64,7 @@ export function ReceiveDeliveryDialog({ delivery, busy, onClose, onConfirm }) {
           <div className="po-field"><dt>Item SKU</dt><dd className="mono">{delivery.itemSku}</dd></div>
           <div className="po-field"><dt>Planned quantity</dt><dd>{delivery.quantity} {delivery.unit}</dd></div>
           <div className="po-field"><dt>Supplier</dt><dd>{delivery.supplier || '—'}</dd></div>
-          <div className="po-field"><dt>Expected arrival</dt><dd>{delivery.expectedArrival}</dd></div>
+          <div className="po-field"><dt>Expected arrival</dt><dd>{scheduleDate(delivery.expectedArrival)}</dd></div>
           {delivery.poId ? <div className="po-field"><dt>PO</dt><dd className="mono">{delivery.poId}</dd></div> : null}
         </dl>
         <div className="form-grid">

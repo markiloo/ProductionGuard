@@ -1666,6 +1666,8 @@ input, select, textarea { font-size: 14px; }
 .settings-account-row .connection small { max-width: none; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
   .dashboard-navigation { gap: 16px; }
+  .dashboard-account-navigation { max-width: none; gap: 8px; }
+  .signed-in-label { display: none; }
   .settings-account-row { grid-template-columns: 1fr; }
   .settings-account-row .settings-section + .settings-section { border-left: 0; }
 }

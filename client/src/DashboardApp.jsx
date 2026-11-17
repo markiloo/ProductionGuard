@@ -703,7 +703,7 @@ export function DashboardApp() {
           <div className="setup-copy">
             <p className="eyebrow">Gmail setup</p>
             <h2 id="setup-title">Connect your purchase order inbox</h2>
-            <p className="lede">PO Checker reads Inbox mail with subject <strong>PO</strong>, assesses each request against stock, deliveries, and production demand, and keeps everything on this PC.</p>
+            <p className="lede">Prod. Guard reads Inbox mail with subject <strong>PO</strong>, assesses each request against stock, deliveries, and production demand, and keeps everything on this PC.</p>
             <ol className="setup-notes">
               <li><span aria-hidden="true">01</span><span>Turn on Google 2-Step Verification.</span></li>
               <li><span aria-hidden="true">02</span><span>Create a 16-character app password.</span></li>

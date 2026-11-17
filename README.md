@@ -1,6 +1,16 @@
-# PO Checker — purchase order review
+# Prod. Guard — purchase order review
 
 A local Windows dashboard that collects purchase orders from Gmail Inbox messages sent by approved addresses, then assesses each request against stock on hand, incoming deliveries, and outstanding production demand. A message qualifies when its subject is `PO` (ignoring case and surrounding spaces). It uses Gmail's IMAP service, so there is no Microsoft Graph, Microsoft account, or Google Cloud app registration.
+
+## Screens
+
+| Home | All orders |
+| --- | --- |
+| [![Home overview with projected stock charts, incoming deliveries, and production progress](docs/screenshots/home-light.png)](docs/screenshots/home-light.png) | [![All orders queue with assessment chips and order states](docs/screenshots/orders-light.png)](docs/screenshots/orders-light.png) |
+| **PO assessment** | **Receiving station, dark** |
+| [![PO detail sheet showing a Recommended assessment with formatted dates](docs/screenshots/po-detail-light.png)](docs/screenshots/po-detail-light.png) | [![Receiving station in the dark theme](docs/screenshots/receiving-dark.png)](docs/screenshots/receiving-dark.png) |
+
+Captured from the read-only fixture preview with `npm run screenshots`, so they show representative data rather than a live Gmail account. The full set — light and dark, desktop and 390px mobile — is in [`docs/screenshots/`](docs/screenshots/).
 
 Each PO email requests exactly one item:
 

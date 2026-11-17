@@ -1,5 +1,5 @@
 ---
-name: PO Checker
+name: Prod. Guard
 description: Monochrome purchase order operations
 colors:
   backdrop: "rgb(0 0 0 / 0.45)"
@@ -85,7 +85,7 @@ spacing:
   section: "28px"
 ---
 
-# PO Checker visual system
+# Prod. Guard visual system
 
 ## Overview
 

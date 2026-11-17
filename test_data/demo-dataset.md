@@ -1,4 +1,4 @@
-# PO Checker — demo data set
+# Prod. Guard — demo data set
 
 A self-contained data set for exercising every assessment branch: Recommended, Adjust Quantity, Redundant / Overstock, timing conflict, early arrival, duplicate coverage, all Manual Review reasons, and the Unverified queue.
 

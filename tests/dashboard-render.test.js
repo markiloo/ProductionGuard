@@ -75,6 +75,8 @@ test('home dashboard renders projection, incoming, and run progress', async () =
     assert.match(incoming, /PO-0001/);
     assert.match(incoming, /Manual delivery/);
     assert.match(incoming, /Supplier A/);
+    assert.match(incoming, /<td>—<\/td>/);
+    assert.doesNotMatch(incoming, /â€/);
 
     const runs = renderToStaticMarkup(React.createElement(CurrentRunsList, {
       runs: [
@@ -94,7 +96,8 @@ test('home dashboard renders projection, incoming, and run progress', async () =
     }));
     assert.match(home, /id="home"/);
     assert.match(home, /Add visualization/);
-    assert.match(home, /Loading dashboard/);
+    assert.match(home, /Loading dashboard…/);
+    assert.doesNotMatch(home, /â€/);
   } finally { await vite.close(); }
 });
 

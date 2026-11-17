@@ -13,6 +13,9 @@ export function protectWithWindowsUser(value, encrypt) {
   const operation = encrypt
     ? '$result=[Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($value),$entropy,[Security.Cryptography.DataProtectionScope]::CurrentUser);[Console]::Out.Write([Convert]::ToBase64String($result))'
     : '$result=[Security.Cryptography.ProtectedData]::Unprotect([Convert]::FromBase64String($value),$entropy,[Security.Cryptography.DataProtectionScope]::CurrentUser);[Console]::Out.Write([Text.Encoding]::UTF8.GetString($result))';
+  // The entropy text is fixed DPAPI key material from the original product name.
+  // Changing it makes every previously saved app password undecryptable, so it
+  // stays as-is even though the product is now Prod. Guard.
   const script = `Add-Type -AssemblyName System.Security;$value=[Console]::In.ReadToEnd();$entropy=[Text.Encoding]::UTF8.GetBytes('PO Checker Gmail local credential');${operation}`;
   return new Promise((resolve, reject) => {
     const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });

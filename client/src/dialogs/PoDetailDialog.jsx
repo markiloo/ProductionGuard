@@ -202,9 +202,9 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                 <dl className="assessment-grid">
                   <div><dt>Net requirement</dt><dd>{assessment?.requirement ?? '—'}</dd></div>
                   <div><dt>Quantity difference</dt><dd>{assessment?.difference == null ? '—' : `${assessment.difference >= 0 ? '+' : ''}${assessment.difference}`}</dd></div>
-                  <div><dt>Expected arrival</dt><dd>{assessment?.arrival || '—'} <small>{assessment?.provisional ? 'provisional' : 'fixed'}</small></dd></div>
-                  <div><dt>Need date</dt><dd>{assessment?.needDate || '—'}{assessment?.daysEarly > 1 ? ` (${assessment.daysEarly} days early)` : assessment?.daysEarly === 1 ? ' (arriving one day early)' : ''}</dd></div>
-                  <div><dt>Planning end</dt><dd>{assessment?.planningEnd || '—'}</dd></div>
+                  <div><dt>Expected arrival</dt><dd>{assessment?.arrival ? scheduleDate(assessment.arrival) : '—'} <small>{assessment?.provisional ? 'provisional' : 'fixed'}</small></dd></div>
+                  <div><dt>Need date</dt><dd>{assessment?.needDate ? scheduleDate(assessment.needDate) : '—'}{assessment?.daysEarly > 1 ? ` (${assessment.daysEarly} days early)` : assessment?.daysEarly === 1 ? ' (arriving one day early)' : ''}</dd></div>
+                  <div><dt>Planning end</dt><dd>{assessment?.planningEnd ? scheduleDate(assessment.planningEnd) : '—'}</dd></div>
                   <div><dt>Inventory updated</dt><dd>{assessment?.inventory ? metricDate(assessment.inventory.updatedAt) : '—'}</dd></div>
                 </dl>
                 <p className="assessment-note">{assessment?.note}</p>
@@ -236,7 +236,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                     {assessment?.deliveries?.length ? (
                       <ul className="supply-list">
                         {assessment.deliveries.map((delivery) => (
-                          <li key={delivery.id}><span>{delivery.expectedArrival}</span><span>{delivery.quantity} {delivery.unit}</span></li>
+                          <li key={delivery.id}><span>{scheduleDate(delivery.expectedArrival)}</span><span>{delivery.quantity} {delivery.unit}</span></li>
                         ))}
                       </ul>
                     ) : <p className="muted">None</p>}
@@ -245,7 +245,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                         <h4>Provisional coverage</h4>
                         <ul className="supply-list">
                           {assessment.coverage.map((coverage) => (
-                            <li key={coverage.poId}><span>{coverage.poId} · {PO_STATES[coverage.state]}</span><span>{coverage.quantity} due {coverage.arrival}</span></li>
+                            <li key={coverage.poId}><span>{coverage.poId} · {PO_STATES[coverage.state]}</span><span>{coverage.quantity} due {scheduleDate(coverage.arrival)}</span></li>
                           ))}
                         </ul>
                       </>
@@ -254,7 +254,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                     {assessment?.demand?.length ? (
                       <ul className="supply-list">
                         {assessment.demand.map((demand) => (
-                          <li key={demand.id}><span>{demand.runNumber} · {demand.scheduledDate}</span><span>{demand.quantity} {demand.unit}</span></li>
+                          <li key={demand.id}><span>{demand.runNumber} · {scheduleDate(demand.scheduledDate)}</span><span>{demand.quantity} {demand.unit}</span></li>
                         ))}
                       </ul>
                     ) : <p className="muted">None</p>}
@@ -282,7 +282,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
           ) : null}
 
           {po.delivery ? (
-            <p className="review-note">Linked delivery: {po.delivery.quantity} {po.delivery.unit} due {po.delivery.expectedArrival} ({po.delivery.status}).</p>
+            <p className="review-note">Linked delivery: {po.delivery.quantity} {po.delivery.unit} due {scheduleDate(po.delivery.expectedArrival)} ({po.delivery.status}).</p>
           ) : null}
 
           {po.proof || po.state === 'ordered' ? (
@@ -385,7 +385,7 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
                 ) : (
                   <input id="schedule-value" type="date" value={scheduleValue} onChange={(event) => setScheduleValue(event.target.value)} required />
                 )}
-                <p className="field-hint">{po.state === 'approved' ? `Current ETA: ${po.etaDays} days` : `Current delivery date: ${po.expectedArrival}`}</p>
+                <p className="field-hint">{po.state === 'approved' ? `Current ETA: ${po.etaDays} days` : `Current delivery date: ${scheduleDate(po.expectedArrival)}`}</p>
               </div>
               <div className="field">
                 <label htmlFor="schedule-note">Correction note</label>

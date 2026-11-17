@@ -19,7 +19,7 @@ catch (error) {
   try { pid = Number(fs.readFileSync(lockPath, 'utf8')); } catch { /* Treat unreadable lock as stale. */ }
   let running = false;
   if (Number.isInteger(pid) && pid > 0) { try { process.kill(pid, 0); running = true; } catch (probeError) { running = probeError.code === 'EPERM'; } }
-  if (running) throw new Error('Another PO Checker server is already using this data directory.');
+  if (running) throw new Error('Another Prod. Guard server is already using this data directory.');
   fs.rmSync(lockPath, { force: true });
   lockFd = fs.openSync(lockPath, 'wx');
 }

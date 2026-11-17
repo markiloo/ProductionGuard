@@ -32,9 +32,9 @@ export function shortDate(value) {
 }
 
 export function warningText(warning) {
-  if (warning.type === 'early') return `Arriving Early — need date ${warning.needDate}, ${warning.daysEarly} day${warning.daysEarly === 1 ? '' : 's'} early`;
-  if (warning.type === 'timing') return `Timing Conflict / Expedite Needed — ${warning.runNumber} on ${warning.runDate}${warning.stockout ? ' (stockout)' : ''}`;
+  if (warning.type === 'early') return `Arriving Early — need date ${scheduleDate(warning.needDate)}, ${warning.daysEarly} day${warning.daysEarly === 1 ? '' : 's'} early`;
+  if (warning.type === 'timing') return `Timing Conflict / Expedite Needed — ${warning.runNumber} on ${scheduleDate(warning.runDate)}${warning.stockout ? ' (stockout)' : ''}`;
   if (warning.type === 'duplicate') return `Potential Duplicate / Covered by Pending or Approved PO — ${warning.coveredAmount} covered`;
-  if (warning.type === 'stockout') return `Projected Stockout — ${warning.runNumber} on ${warning.runDate} (${warning.balance})`;
+  if (warning.type === 'stockout') return `Projected Stockout — ${warning.runNumber} on ${scheduleDate(warning.runDate)} (${warning.balance})`;
   return warning.label || warning.type;
 }

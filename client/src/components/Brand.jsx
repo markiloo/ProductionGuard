@@ -11,7 +11,7 @@ export function Brand() {
         </g>
       </svg>
       <div>
-        <h1 className="brand-title">PO Checker</h1>
+        <h1 className="brand-title">Prod. Guard</h1>
         <span className="brand-sub">Purchase order review</span>
       </div>
     </div>

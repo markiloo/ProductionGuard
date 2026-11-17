@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-PO Checker is a local, Windows-only purchase order review system. It collects subject-`PO` mail from Gmail Inbox over IMAP (`imap.gmail.com:993`, TLS, Google app password) from an allowlist of exact sender addresses and stores it in SQLite as account-scoped purchase orders. Each valid PO is assessed deterministically against on-hand inventory, incoming deliveries, outstanding production demand, and earlier Pending or Approved POs, producing Recommended, Redundant / Overstock, Adjust Quantity, or a Manual Review Required reason, plus timing, early-arrival, duplicate-coverage, and stockout warnings.
+Prod. Guard is a local, Windows-only purchase order review system. It collects subject-`PO` mail from Gmail Inbox over IMAP (`imap.gmail.com:993`, TLS, Google app password) from an allowlist of exact sender addresses and stores it in SQLite as account-scoped purchase orders. Each valid PO is assessed deterministically against on-hand inventory, incoming deliveries, outstanding production demand, and earlier Pending or Approved POs, producing Recommended, Redundant / Overstock, Adjust Quantity, or a Manual Review Required reason, plus timing, early-arrival, duplicate-coverage, and stockout warnings.
 
 The same database also holds inventory (the SKU item master), assemblies with per-unit material lists, production runs with scaled and locked requirements, incoming deliveries with proof and receipt pictures, and PO review history. Ordering an approved PO fixes its arrival date and creates exactly one linked delivery; receiving a delivery adds the confirmed quantity to stock exactly once.
 
@@ -57,6 +57,7 @@ Run everything from the repository root:
 - `npm test` runs all suites with the built-in Node test runner.
 - `npm run build` creates the production dashboard bundle in `dist/`.
 - `npm start` serves the production app at `http://127.0.0.1:4174`.
+- `npm run screenshots` regenerates `docs/screenshots/` from the read-only fixture preview in `scripts/visual-preview.mjs` using an installed Edge or Chrome; it never reads `data/` or Gmail.
 - `launch.bat` starts the production server, waits for `/api/status`, then opens the dashboard.
 
 `npm run lint` includes `eslint-plugin-react`'s `jsx-uses-vars`, so components referenced only in JSX are not reported as unused.

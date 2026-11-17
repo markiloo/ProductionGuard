@@ -118,3 +118,23 @@ Live Gmail connectivity and connected browser workflows were not exercised. Coll
 
 ## Home production calendar
 Home offers Overview and Calendar. Calendar shows unfinished runs for 30 days including plant-local today, with a weekly desktop grid and mobile agenda. Selecting a run opens read-only details. Lint and production build passed; browser visual verification remains outstanding.
+
+## Home copy, date formatting, and the Prod. Guard name — 2026-11-17
+
+- Removed the last three mojibake strings from Home: the empty-supplier cell renders an em dash, and the refresh and loading copy use real ellipses. A repository sweep for double-encoded text now finds only the detection pattern inside the regression test.
+- Incoming deliveries reads "Next 2 weeks" / "Next 1 week" again, and the window count chip removed during the queue-topbar refactor is restored as `{rows.length}` with screen-reader text "N deliveries in this window". The existing `class="count">4<` assertion had been masked by the earlier copy failure.
+- Every date in the PO detail sheet now goes through `scheduleDate`: assessment arrival, need date, and planning end; incoming deliveries, provisional coverage, outstanding demand, the linked delivery line, and the reschedule hint. `warningText` formats the early-arrival, timing-conflict, and stockout run dates, and the receive sheet formats the expected arrival. Extracted render output shows 0 ISO dates and readable dates such as "Thu, 19 Nov" and "need date Sun, 22 Nov, 3 days early".
+- The product name is **Prod. Guard** in the wordmark, setup copy, receiving screen, README, DESIGN.md, AGENTS.md, `launch.bat`, `design_plan/preview.html`, the demo dataset title, and the server's second-instance error. The DPAPI entropy string, `po-checker.db`, `po-checker-theme`, and the package name are unchanged so saved credentials and preferences keep working; `server/auth.js` documents why.
+- Added `tests/brand-render.test.js` and extended `tests/dashboard-render.test.js` and `tests/order-render.test.js` with regression assertions for the mojibake, the window copy and count, formatted assessment dates, and all three dated warning branches.
+- Passed `npm run lint`, `npm test` (102 passing), and `npm run build`.
+
+## Documentation screenshots and mobile navigation — 2026-11-17
+
+- `scripts/visual-preview.mjs` now serves `/api/dashboard` (widgets, incoming, active runs, and the 30-day production calendar) and gained a third incoming delivery, so the Home overview and Calendar can be captured without a database. Fixture `today` stays pinned at `2026-11-13`; the capture script pins the page clock to the fixture cutoff, so "Last updated" and relative timestamps agree with the data.
+- Added `scripts/screenshots.mjs` and `npm run screenshots`: it starts the fixture preview, drives an installed Edge or Chrome through `playwright-core` (no browser download), clicks into each view, and writes deterministic PNGs. The active view's height sets the crop, so dashboard shots do not inherit the shared height of hidden views and standalone routes no longer carry 900px of empty space.
+- Replaced all twelve documentation screenshots with real PNGs. The previous files were JPEG data stored under `.png` names. The set is now sixteen: Home light and dark, Home Calendar, Orders light and dark, PO detail, Settings, inventory sheet in dark, the receiving station, the production floor, and six 390px mobile screens.
+- The capture surfaced two layout defects, both fixed: below 700px the signed-in label wrapped the account address and squeezed the tab strip, so the label is hidden there and the account stays in Settings; and the standalone routes kept a full-viewport blank area below short content, now cropped.
+- Fixture purchase orders now vary item, SKU, quantity, and supplier instead of repeating one item in five rows.
+- Added `tests/screenshot-assets.test.js`, which asserts the exact sixteen files exist and that each is a real PNG at 1440px or 780px wide.
+- Passed `npm run lint`, `npm test` (103 passing), and `npm run build`.
+

@@ -75,7 +75,7 @@ export function ReceivingApp() {
         <section className="panel setup">
           <div className="setup-copy">
             <p className="eyebrow">Receiving station</p>
-            <h2>Connect PO Checker first</h2>
+            <h2>Connect Prod. Guard first</h2>
             <p className="lede">Open the main dashboard, connect the Gmail account, and set up deliveries before using this receiving interface.</p>
           </div>
         </section>
