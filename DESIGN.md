@@ -1,7 +1,7 @@
 ---
 name: Prod. Guard
 description: Monochrome purchase order operations
-colors:
+colors: 
   backdrop: "rgb(0 0 0 / 0.45)"
   backdrop-solid: "rgb(0 0 0 / 0.72)"
   paper: "#ffffff"
