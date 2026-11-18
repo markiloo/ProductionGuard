@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-## Project Overview 
+## Project Overview
 
 Prod. Guard is a local, Windows-only purchase order review system. It collects subject-`PO` mail from Gmail Inbox over IMAP (`imap.gmail.com:993`, TLS, Google app password) from an allowlist of exact sender addresses and stores it in SQLite as account-scoped purchase orders. Each valid PO is assessed deterministically against on-hand inventory, incoming deliveries, outstanding production demand, and earlier Pending or Approved POs, producing Recommended, Redundant / Overstock, Adjust Quantity, or a Manual Review Required reason, plus timing, early-arrival, duplicate-coverage, and stockout warnings.
 
