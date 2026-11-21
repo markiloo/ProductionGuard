@@ -7,11 +7,11 @@ import { beginCollector, stopCollector, collectionState, startupCutoff, collect 
 import { normalizeSender, isValidSender } from './rules.js';
 import { parsePagination } from './pagination.js';
 import { clearSavedEmails } from './email-maintenance.js';
-import { inventoryHistory, listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
+import { inventoryHistory, inventoryUnitDependencies, listInventory, createInventoryItem, updateInventoryItem, deleteInventoryItem, parseInventoryInput } from './inventory.js';
 import { updateProductionProgress, listActiveProductionRuns, listProductionRuns, createProductionRun, updateProductionRun, deleteProductionRun, nextProductionRunNumber, parseProductionInput } from './production.js';
 import { listProductionItems, createProductionItem, updateProductionItem, deleteProductionItem, parseProductionItemInput } from './production-items.js';
 import { listPos, getPo, transitionPo, correctPo, createManualPo, authorizeQueuedMail, setPoProof, schedulePo } from './pos.js';
-import { listDeliveries, createDelivery, createDeliveryWithProof, updateDelivery, receiveDelivery, setDeliveryProof, getDeliveryProof, parseDeliveryInput } from './deliveries.js';
+import { closeDelivery, listDeliveries, createDelivery, createDeliveryWithProof, updateDelivery, receiveDelivery, setDeliveryProof, getDeliveryProof, getDeliveryReceipt, parseDeliveryInput } from './deliveries.js';
 import { buildHome, createDashboardWidget, deleteDashboardWidget, parseWidgetInput, updateDashboardWidget } from './dashboard.js';
 import { resetAccountData } from './reset.js';
 import { getPlantTimeZone, plantToday, resolveTimeZone, setPlantTimeZone } from './time.js';
@@ -112,6 +112,13 @@ app.get('/api/inventory/:id/history', (req, res) => {
   res.json(result);
 });
 
+app.get('/api/inventory/:id/unit-dependencies', (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const result = inventoryUnitDependencies(db, aid, req.params.id);
+  if (!result) return res.status(404).json({ error: 'Inventory item not found.' });
+  res.json(result);
+});
+
 app.get('/api/inventory', (_req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   res.json({ items: listInventory(db, aid) });
@@ -133,7 +140,7 @@ app.put('/api/inventory/:id', (req, res) => {
     if (!item) return res.status(404).json({ error: 'Inventory item not found.' });
     res.json({ ok: true, item });
   } catch (failure) {
-    res.status(failure.status || 500).json({ error: failure.message || 'Could not save inventory item.' });
+    sendActionError(res, failure, 'Could not save inventory item.');
   }
 });
 app.delete('/api/inventory/:id', (req, res) => {
@@ -236,7 +243,11 @@ function nowAndToday() {
 }
 
 function sendActionError(res, failure, fallback) {
-  res.status(failure.status || 500).json({ error: failure.status && failure.status < 500 ? failure.message : fallback });
+  res.status(failure.status || 500).json({
+    error: failure.status && failure.status < 500 ? failure.message : fallback,
+    ...(failure.unitDependencies && { unitDependencies: failure.unitDependencies }),
+    ...(failure.delivery && { delivery: failure.delivery }),
+  });
 }
 
 const PROOF_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -431,7 +442,7 @@ app.put('/api/deliveries/:id', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
   try {
     const input = parseDeliveryInput(db, aid, req.body);
-    const item = updateDelivery(db, aid, req.params.id, input, isoNow(), req.body?.correctionNote);
+    const item = updateDelivery(db, aid, req.params.id, input, isoNow(), req.body?.correctionNote, req.body?.expectedReceived);
     if (!item) return res.status(404).json({ error: 'Delivery not found.' });
     res.json({ ok: true, item });
   } catch (failure) {
@@ -444,8 +455,13 @@ app.post('/api/deliveries/:id/receive', express.raw({ type: [...PROOF_TYPES], li
   const proof = readProof(req, res); if (!proof) return;
   const quantity = Number(req.get('x-received-quantity'));
   if (!Number.isInteger(quantity) || quantity <= 0) return res.status(400).json({ error: 'Enter the confirmed received quantity.' });
+  const expected = req.get('x-expected-received-quantity');
+  const expectedReceived = /^\d+$/.test(expected ?? '') ? Number(expected) : undefined;
+  if (!Number.isSafeInteger(expectedReceived)) return res.status(400).json({ error: 'Provide the received quantity shown in the form.' });
+  const requestId = req.get('x-receipt-request-id');
+  const expectedUpdatedAt = req.get('x-delivery-updated-at');
   try {
-    const result = receiveDelivery(db, aid, req.params.id, isoNow(), { quantity, proof });
+    const result = receiveDelivery(db, aid, req.params.id, isoNow(), { quantity, proof, expectedReceived, requestId, expectedUpdatedAt });
     if (!result) return res.status(404).json({ error: 'Delivery not found.' });
     res.json({ ok: true, ...result });
   } catch (failure) {
@@ -453,9 +469,20 @@ app.post('/api/deliveries/:id/receive', express.raw({ type: [...PROOF_TYPES], li
   }
 });
 
-app.get('/api/deliveries/:id/receipt', (req, res) => {
+app.post('/api/deliveries/:id/close', (req, res) => {
   const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
-  const row = db.prepare('SELECT mime_type, data FROM delivery_receipts WHERE account_id=? AND delivery_id=?').get(aid, req.params.id);
+  try {
+    const item = closeDelivery(db, aid, req.params.id, req.body, isoNow());
+    if (!item) return res.status(404).json({ error: 'Delivery not found.' });
+    res.json({ ok: true, item });
+  } catch (failure) {
+    sendActionError(res, failure, 'Could not close the delivery balance.');
+  }
+});
+
+app.get(['/api/deliveries/:id/receipt', '/api/deliveries/:id/receipts/:receiptId'], (req, res) => {
+  const aid = accountId(); if (!aid) return res.status(401).json({ error: 'Connect your Gmail account first.' });
+  const row = getDeliveryReceipt(db, aid, req.params.id, req.params.receiptId);
   if (!row) return res.status(404).json({ error: 'Receipt picture not found.' });
   res.set('Content-Type', row.mime_type);
   res.set('X-Content-Type-Options', 'nosniff');

@@ -6,12 +6,12 @@ export function resetAccountData(db, accountId, clearedAt) {
   return db.transaction(() => {
     if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='inventory_history'").get()) db.prepare('DELETE FROM inventory_history WHERE account_id=?').run(accountId);
     const counts = {
+      receipts: db.prepare('DELETE FROM delivery_receipts WHERE account_id=?').run(accountId).changes,
       events: db.prepare('DELETE FROM po_events WHERE account_id=?').run(accountId).changes,
       proofs: db.prepare('DELETE FROM po_proofs WHERE account_id=?').run(accountId).changes,
       emails: db.prepare('DELETE FROM emails WHERE account_id=?').run(accountId).changes,
       deliveries: db.prepare('DELETE FROM incoming_deliveries WHERE account_id=?').run(accountId).changes,
       deliveryProofs: db.prepare('DELETE FROM delivery_proofs WHERE account_id=?').run(accountId).changes,
-      receipts: db.prepare('DELETE FROM delivery_receipts WHERE account_id=?').run(accountId).changes,
       inventory: db.prepare('DELETE FROM inventory WHERE account_id=?').run(accountId).changes,
       requirements: db.prepare('DELETE FROM production_requirements WHERE account_id=?').run(accountId).changes,
       runs: db.prepare('DELETE FROM production_runs WHERE account_id=?').run(accountId).changes,

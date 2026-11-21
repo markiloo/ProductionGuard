@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { recordStockHistory } from './inventory.js';
+import { recordStockHistory, sameInventoryUnit } from './inventory.js';
 import { getProductionItem } from './production-items.js';
 
 const MAX_RUN_NUMBER = 40;
@@ -128,6 +128,7 @@ function applyAssemblyStock(db, accountId, run, nextCompleted, now) {
   if (!assembly?.inventoryId) return;
   const inventory = db.prepare('SELECT id, quantity, unit FROM inventory WHERE account_id=? AND id=?').get(accountId, assembly.inventoryId);
   if (!inventory) throw conflict('The assembly finished-good inventory item no longer exists.');
+  if (!sameInventoryUnit(run.unit, inventory.unit)) throw conflict('This run uses a different finished-good unit than the current inventory item.');
   const after = inventory.quantity + delta;
   if (after < 0) throw conflict(`Completed units cannot be reduced below the ${inventory.quantity} ${inventory.unit} currently in assembly stock.`);
   recordStockHistory(db, accountId, inventory.id, delta > 0 ? 'Assembly completed' : 'Completion corrected', inventory, { quantity: after, unit: inventory.unit }, now);
@@ -191,7 +192,7 @@ export function createProductionRun(db, accountId, input, now) {
     db.prepare('INSERT INTO production_runs(account_id,id,run_number,item,quantity,unit,status,scheduled_date,notes,production_item_id,completed_quantity,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(
       accountId, id, resolved.runNumber, resolved.item, resolved.quantity, resolved.unit, resolved.status, resolved.scheduledDate, resolved.notes, resolved.productionItemId, completedQuantity, now, now,
     );
-    applyAssemblyStock(db, accountId, { completedQuantity: 0, productionItemId: resolved.productionItemId }, completedQuantity, now);
+    applyAssemblyStock(db, accountId, { completedQuantity: 0, productionItemId: resolved.productionItemId, unit: resolved.unit }, completedQuantity, now);
     saveRequirements(db, accountId, id, resolved.effectiveRequirements || [], now);
     return getProductionRun(db, accountId, id);
   })();
@@ -204,6 +205,10 @@ export function updateProductionRun(db, accountId, id, input, now) {
   if (!existing) return null;
   if (input.quantity < existing.completedQuantity) throw invalid('Planned quantity cannot be less than completed units.');
   const resolved = resolveProductionItem(db, accountId, input, existing.requirements || []);
+  if (existing.productionItemId && existing.productionItemId === resolved.productionItemId
+    && !sameInventoryUnit(existing.unit, resolved.unit)) {
+    throw conflict('This run uses a different finished-good unit than the current assembly.');
+  }
   validateRequirements(db, accountId, resolved.effectiveRequirements || []);
   // Completing a run means the full planned quantity was produced.
   const nextCompleted = resolved.status === 'completed' ? resolved.quantity : (existing.completedQuantity || 0);

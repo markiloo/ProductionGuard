@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { deleteInventoryItem, recordStockHistory } from './inventory.js';
+import { checkInventoryUnitChange, deleteInventoryItem, recordStockHistory, sameInventoryUnit } from './inventory.js';
 
 const MAX_NAME = 120;
 const MAX_SKU = 60;
@@ -134,23 +134,29 @@ export function updateProductionItem(db, accountId, id, input, now) {
   if (existing.sku && input.sku && existing.sku.toLowerCase() !== input.sku.toLowerCase()) {
     throw fail('The SKU cannot be changed on an existing assembly.', 409);
   }
-  if (existing.unit.toLowerCase() !== input.unit.toLowerCase() && existing.stock > 0) {
-    throw fail(`Change the unit only while ${existing.name} has zero stock in Inventory.`, 409);
-  }
   if (existing.sku && input.requirements.some((requirement) => requirement.itemSku.toLowerCase() === existing.sku.toLowerCase())) {
     throw fail('An assembly cannot use its own finished-good SKU as a material.');
   }
   validateMaterials(db, accountId, input.requirements);
   return db.transaction(() => {
+    const unitChanged = !sameInventoryUnit(existing.unit, input.unit);
+    const unit = unitChanged ? input.unit : existing.unit;
+    const inventoryBefore = existing.inventoryId && unitChanged
+      ? checkInventoryUnitChange(db, accountId, existing.inventoryId, unit, existing.stock, true)
+      : null;
     db.prepare('UPDATE production_items SET name=?, unit=?, notes=?, updated_at=? WHERE account_id=? AND id=?')
-      .run(input.name, input.unit, input.notes, now, accountId, id);
+      .run(input.name, unit, input.notes, now, accountId, id);
     if (existing.inventoryId) {
-      db.prepare('UPDATE inventory SET item=?, unit=?, updated_at=? WHERE account_id=? AND id=?')
-        .run(input.name, input.unit, now, accountId, existing.inventoryId);
+      db.prepare('UPDATE inventory SET item=?, unit=coalesce(?, unit), updated_at=? WHERE account_id=? AND id=?')
+        .run(input.name, inventoryBefore ? unit : null, now, accountId, existing.inventoryId);
+      if (inventoryBefore && !sameInventoryUnit(inventoryBefore.unit, unit)) {
+        recordStockHistory(db, accountId, existing.inventoryId, 'Unit changed',
+          inventoryBefore, { quantity: inventoryBefore.quantity, unit }, now);
+      }
     }
     saveRequirements(db, accountId, id, input.requirements, now);
     return getProductionItem(db, accountId, id);
-  })();
+  }).immediate();
 }
 
 /** Delete an assembly only when no run references it and its finished-good stock is zero. */

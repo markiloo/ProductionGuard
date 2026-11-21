@@ -218,6 +218,56 @@ export function migrate() {
     `ALTER TABLE production_items ADD COLUMN sku TEXT;
      ALTER TABLE production_items ADD COLUMN inventory_id TEXT;
      CREATE UNIQUE INDEX production_items_sku ON production_items(account_id, sku COLLATE NOCASE) WHERE trim(sku) <> '';`,
+    `CREATE TABLE incoming_deliveries_next (
+       account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+       id TEXT NOT NULL,
+       item_sku TEXT NOT NULL CHECK (length(trim(item_sku)) > 0),
+       quantity INTEGER NOT NULL CHECK (quantity > 0),
+       unit TEXT NOT NULL CHECK (length(trim(unit)) > 0),
+       expected_arrival TEXT NOT NULL,
+       supplier TEXT NOT NULL DEFAULT '',
+       status TEXT NOT NULL CHECK (status IN ('incoming', 'received', 'canceled')),
+       received_at TEXT,
+       po_id TEXT,
+       notes TEXT NOT NULL DEFAULT '',
+       created_at TEXT NOT NULL,
+       updated_at TEXT NOT NULL,
+       received_quantity INTEGER CHECK (received_quantity >= 0),
+       canceled_quantity INTEGER NOT NULL DEFAULT 0 CHECK (canceled_quantity >= 0),
+       closed_at TEXT,
+       close_reason TEXT,
+       schedule_note TEXT,
+       remaining_quantity INTEGER GENERATED ALWAYS AS (
+         CASE WHEN status = 'incoming' THEN max(0, quantity - coalesce(received_quantity, 0)) ELSE 0 END
+       ) VIRTUAL,
+       PRIMARY KEY(account_id, id)
+     );
+     INSERT INTO incoming_deliveries_next
+       (account_id,id,item_sku,quantity,unit,expected_arrival,supplier,status,received_at,po_id,notes,created_at,updated_at,received_quantity)
+       SELECT account_id,id,item_sku,quantity,unit,expected_arrival,supplier,status,received_at,po_id,notes,created_at,updated_at,received_quantity
+       FROM incoming_deliveries;
+     DROP TABLE incoming_deliveries;
+     ALTER TABLE incoming_deliveries_next RENAME TO incoming_deliveries;
+     CREATE UNIQUE INDEX deliveries_po ON incoming_deliveries(account_id, po_id) WHERE po_id IS NOT NULL;
+     CREATE INDEX deliveries_arrival ON incoming_deliveries(account_id, expected_arrival);
+     CREATE INDEX deliveries_sku ON incoming_deliveries(account_id, item_sku COLLATE NOCASE);
+     CREATE TABLE delivery_receipts_next (
+       account_id TEXT NOT NULL,
+       delivery_id TEXT NOT NULL,
+       id TEXT NOT NULL,
+       quantity INTEGER NOT NULL CHECK (quantity > 0),
+       mime_type TEXT NOT NULL,
+       file_name TEXT NOT NULL DEFAULT '',
+       data BLOB NOT NULL,
+       created_at TEXT NOT NULL,
+       PRIMARY KEY(account_id, delivery_id, id),
+       FOREIGN KEY(account_id, delivery_id) REFERENCES incoming_deliveries(account_id, id) ON DELETE CASCADE
+     );
+     INSERT INTO delivery_receipts_next (account_id,delivery_id,id,quantity,mime_type,file_name,data,created_at)
+       SELECT r.account_id,r.delivery_id,'legacy:receipt',coalesce(d.received_quantity,d.quantity),r.mime_type,r.file_name,r.data,r.created_at
+       FROM delivery_receipts r JOIN incoming_deliveries d ON d.account_id=r.account_id AND d.id=r.delivery_id;
+     DROP TABLE delivery_receipts;
+     ALTER TABLE delivery_receipts_next RENAME TO delivery_receipts;`,
   ];
   for (let i = 0; i < migrations.length; i += 1) {
     const version = i + 1;

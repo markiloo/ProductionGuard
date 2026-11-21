@@ -81,7 +81,7 @@ export function projectStock(db, accountId, sku, horizonDays, today) {
   const endDate = addDays(today, horizon);
   if (!endDate) return null;
 
-  const deliveries = db.prepare(`SELECT id, quantity, unit, expected_arrival AS expectedArrival, supplier, po_id AS poId
+  const deliveries = db.prepare(`SELECT id, remaining_quantity AS quantity, unit, expected_arrival AS expectedArrival, supplier, po_id AS poId
     FROM incoming_deliveries WHERE account_id=? AND item_sku=? COLLATE NOCASE AND status='incoming' AND expected_arrival <= ?
     ORDER BY expected_arrival, id`).all(accountId, inventory.sku, endDate)
     .filter((delivery) => isValidDate(delivery.expectedArrival));
@@ -150,7 +150,7 @@ export function buildHome(db, accountId, today) {
     projection: projectStock(db, accountId, widget.sku, widget.horizonDays, today),
   })).filter((widget) => widget.projection);
 
-  const incoming = db.prepare(`SELECT d.id, d.item_sku AS itemSku, i.item AS itemName, d.quantity, d.unit,
+  const incoming = db.prepare(`SELECT d.id, d.item_sku AS itemSku, i.item AS itemName, d.remaining_quantity AS quantity, d.unit,
     d.expected_arrival AS expectedArrival, d.supplier, d.po_id AS poId
     FROM incoming_deliveries d
     LEFT JOIN inventory i ON i.account_id = d.account_id AND i.sku = d.item_sku COLLATE NOCASE

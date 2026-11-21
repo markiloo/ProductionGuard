@@ -1280,10 +1280,17 @@ input[readonly] { background: var(--surface-2); color: var(--ink-2); }
 .delivery-main { display: grid; flex: 1; min-width: 0; gap: 3px; }
 .delivery-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .delivery-main strong { font-family: var(--mono); font-size: 14px; }
-.delivery-meta { color: var(--ink-3); font-size: 12px; }
+.delivery-meta { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
 .delivery-po { padding: 2px 6px; border: 1px solid var(--line); border-radius: 0; color: var(--ink-3); font: 700 10px/1.5 var(--mono); }
 .delivery-side { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
 .delivery-actions { display: flex; flex: none; gap: 6px; }
+.delivery-amounts { display: grid; gap: 2px; color: var(--ink-3); font-size: 12px; }
+.delivery-amounts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.delivery-receipts { width: fit-content; max-width: 100%; color: var(--ink-2); font-size: 12px; }
+.delivery-receipts summary { cursor: pointer; }
+.delivery-receipts ul, .unit-dependencies ul { padding-inline-start: 18px; list-style: disc; }
+.delivery-receipts a, .unit-dependencies li { overflow-wrap: anywhere; }
+.linked-delivery { display: grid; justify-items: start; gap: 6px; }
 .alert-success { border-color: color-mix(in oklab, var(--valid-ink) 24%, var(--line)); background: var(--valid-bg); color: var(--valid-ink); }
 .alert-success .alert-message { color: var(--valid-ink); }
 

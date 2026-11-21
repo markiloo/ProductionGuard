@@ -91,6 +91,8 @@
 
 /**
  * @typedef {Object} DeliveryReceipt
+ * @property {string} id Stable batch receipt ID.
+ * @property {number} quantity Stock added by this batch.
  * @property {string} mimeType Stored receipt image MIME type.
  * @property {string} fileName Original file name, or an empty string.
  * @property {string} createdAt UTC upload time.
@@ -101,16 +103,22 @@
  * @property {string} id Stable delivery ID.
  * @property {string} itemSku Item code matching an inventory SKU.
  * @property {number} quantity Whole-number planned delivery quantity.
- * @property {number|null} receivedQuantity Confirmed received quantity, or null while incoming.
+ * @property {number|null} receivedQuantity Cumulative quantity received, or null before the first batch.
+ * @property {number} remainingQuantity Balance still expected as incoming supply.
+ * @property {number} canceledQuantity Quantity removed from expected supply when the balance was closed.
  * @property {string} unit Unit matching the item's inventory unit.
  * @property {string} expectedArrival YYYY-MM-DD expected arrival date.
  * @property {string} supplier Optional supplier name.
- * @property {'incoming'|'received'} status Delivery status.
- * @property {string|null} receivedAt UTC receipt time, or null while incoming.
+ * @property {'incoming'|'received'|'canceled'} status Incoming includes deliveries with an open partial balance.
+ * @property {string|null} receivedAt UTC time of the latest receipt, or null before any batches.
+ * @property {string|null} closedAt UTC closure time, or null.
+ * @property {string|null} closeReason Reason the balance was closed, or null.
+ * @property {string|null} scheduleNote Most recent rescheduling note, or null.
  * @property {string|null} poId Linked PO ID for an ordered PO, or null for a manual delivery.
  * @property {string} notes Optional local notes.
  * @property {PoProof|null} proof Incoming proof metadata for a manual delivery or its linked PO, or null.
- * @property {DeliveryReceipt|null} receipt Receipt picture metadata after receiving, or null.
+ * @property {DeliveryReceipt[]} receipts Batch receipt metadata in recording order.
+ * @property {DeliveryReceipt|null} receipt Latest batch receipt metadata, or null.
  * @property {string} createdAt UTC creation timestamp.
  * @property {string} updatedAt UTC last-edit timestamp.
  */

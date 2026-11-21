@@ -76,6 +76,60 @@ function hasColumn(db, table, column) {
   return hasTable(db, table) && db.prepare(`PRAGMA table_info(${table})`).all().some((row) => row.name === column);
 }
 
+export function sameInventoryUnit(left, right) {
+  return text(left).toLowerCase() === text(right).toLowerCase();
+}
+
+/** Return live records that depend on the SKU's unit. */
+export function inventoryUnitDependencies(db, accountId, id) {
+  const item = getInventoryItem(db, accountId, id);
+  if (!item) return null;
+  const dependencies = [];
+  if (hasTable(db, 'incoming_deliveries')) {
+    dependencies.push(...db.prepare(`SELECT 'delivery' AS kind, id, coalesce(po_id, id) AS label,
+      supplier, expected_arrival AS date, remaining_quantity AS quantity, unit
+      FROM incoming_deliveries WHERE account_id=? AND item_sku=? COLLATE NOCASE AND status='incoming'
+      ORDER BY expected_arrival, id`).all(accountId, item.sku));
+  }
+  if (hasTable(db, 'production_requirements')) {
+    dependencies.push(...db.prepare(`SELECT 'requirement' AS kind, r.id, p.run_number AS label, r.quantity, r.unit, p.scheduled_date AS date
+      FROM production_requirements r JOIN production_runs p ON p.account_id=r.account_id AND p.id=r.run_id
+      WHERE r.account_id=? AND r.item_sku=? COLLATE NOCASE AND r.status='outstanding' AND p.status<>'completed'
+      ORDER BY p.scheduled_date, p.run_number, r.id`).all(accountId, item.sku));
+  }
+  if (hasTable(db, 'production_item_requirements')) {
+    dependencies.push(...db.prepare(`SELECT 'assembly_material' AS kind, r.id, p.name AS label, r.quantity, r.unit
+      FROM production_item_requirements r JOIN production_items p ON p.account_id=r.account_id AND p.id=r.production_item_id
+      WHERE r.account_id=? AND r.item_sku=? COLLATE NOCASE ORDER BY p.name COLLATE NOCASE, r.id`).all(accountId, item.sku));
+  }
+  const assembly = hasColumn(db, 'production_items', 'inventory_id')
+    ? db.prepare('SELECT id, name FROM production_items WHERE account_id=? AND inventory_id=?').get(accountId, id) || null
+    : null;
+  if (assembly && hasColumn(db, 'production_runs', 'production_item_id')) {
+    dependencies.push(...db.prepare(`SELECT 'assembly_run' AS kind, id, run_number AS label, quantity, unit, scheduled_date AS date
+      FROM production_runs WHERE account_id=? AND production_item_id=? AND status<>'completed'
+      ORDER BY scheduled_date, run_number`).all(accountId, assembly.id));
+  }
+  return { unit: item.unit, quantity: item.quantity, assembly, dependencies };
+}
+
+export function checkInventoryUnitChange(db, accountId, id, unit, quantity, fromAssembly = false) {
+  const context = inventoryUnitDependencies(db, accountId, id);
+  if (!context || (!fromAssembly && sameInventoryUnit(context.unit, unit))) return context;
+  const blockers = context.dependencies.filter((record) => !sameInventoryUnit(record.unit, unit));
+  const needsZeroStock = context.quantity !== 0 || quantity !== 0;
+  const assembly = fromAssembly ? null : context.assembly;
+  if (!needsZeroStock && !assembly && !blockers.length) return context;
+  const message = assembly
+    ? `Change the finished-good unit for ${assembly.name} in Assemblies.`
+    : needsZeroStock ? 'Change the unit only while this item has zero stock in Inventory.'
+      : 'Resolve the open records that use a different unit before changing this unit.';
+  const error = new Error(message);
+  error.status = 409;
+  error.unitDependencies = { ...context, needsZeroStock, blockers };
+  throw error;
+}
+
 /** Create an inventory item for one account. Adding it defines the SKU, name, and unit. */
 export function createInventoryItem(db, accountId, input, now) {
   if (skuTaken(db, accountId, input.sku)) throw skuConflict();
@@ -92,20 +146,25 @@ export function createInventoryItem(db, accountId, input, now) {
 /** Update an account-owned inventory item; returns null when the item is missing or owned by another account. */
 export function updateInventoryItem(db, accountId, id, input, now) {
   return db.transaction(() => {
-  const existing = getInventoryItem(db, accountId, id);
-  if (!existing) return null;
-  if (existing.sku && existing.sku.toLowerCase() !== input.sku.toLowerCase()) {
-    const error = new Error('The SKU cannot be changed on an existing inventory item.');
-    error.status = 409;
-    throw error;
-  }
-  if (skuTaken(db, accountId, input.sku, id)) throw skuConflict();
-  const result = db.prepare('UPDATE inventory SET item=?, sku=?, quantity=?, unit=?, supplier=?, reorder_level=?, notes=?, updated_at=? WHERE account_id=? AND id=?').run(
-    input.item, input.sku, input.quantity, input.unit, input.supplier, input.reorderLevel, input.notes, now, accountId, id,
-  );
-  if (existing.quantity !== input.quantity) recordStockHistory(db, accountId, id, 'Quantity edited', existing, input, now);
-  return result.changes ? getInventoryItem(db, accountId, id) : null;
-  })();
+    const existing = getInventoryItem(db, accountId, id);
+    if (!existing) return null;
+    if (existing.sku && existing.sku.toLowerCase() !== input.sku.toLowerCase()) {
+      const error = new Error('The SKU cannot be changed on an existing inventory item.');
+      error.status = 409;
+      throw error;
+    }
+    if (skuTaken(db, accountId, input.sku, id)) throw skuConflict();
+    const unitChanged = !sameInventoryUnit(existing.unit, input.unit);
+    if (unitChanged) checkInventoryUnitChange(db, accountId, id, input.unit, input.quantity);
+    const next = { ...input, unit: unitChanged ? input.unit : existing.unit };
+    db.prepare('UPDATE inventory SET item=?, sku=?, quantity=?, unit=?, supplier=?, reorder_level=?, notes=?, updated_at=? WHERE account_id=? AND id=?').run(
+      next.item, next.sku, next.quantity, next.unit, next.supplier, next.reorderLevel, next.notes, now, accountId, id,
+    );
+    if (unitChanged || existing.quantity !== next.quantity) {
+      recordStockHistory(db, accountId, id, unitChanged ? 'Unit changed' : 'Quantity edited', existing, next, now);
+    }
+    return getInventoryItem(db, accountId, id);
+  }).immediate();
 }
 
 /** Delete an account-owned inventory item only when nothing still references its SKU. */

@@ -23,20 +23,23 @@ All routes are served from the same loopback origin as the dashboard. State-chan
 | `POST /api/pos/:poId/resubmit` | `{}` | `{ ok: true, po }`; Rejected → Pending Review after validation and sender authorization |
 | `GET /api/inventory` | None | `{ items: InventoryItem[] }` for the connected account, sorted by item |
 | `POST /api/inventory` | `{ item, sku, quantity, unit, supplier, reorderLevel, notes }` | `{ ok: true, item: InventoryItem }`; adding this row defines the item, and the SKU must be unique per account |
-| `PUT /api/inventory/:id` | Same body as create | `{ ok: true, item: InventoryItem }`; the SKU is immutable; returns 404 when missing, 409 for a duplicate or changed SKU |
+| `PUT /api/inventory/:id` | Same body as create | `{ ok: true, item: InventoryItem }`. The SKU is immutable. A unit conflict returns 409 with `unitDependencies`. |
+| `GET /api/inventory/:id/unit-dependencies` | Inventory item ID | `{ unit, quantity, assembly, dependencies }`. Returns account-scoped open delivery, production requirement, and assembly references, or 404. |
 | `DELETE /api/inventory/:id` | None | `{ ok: true }`; returns 404 when missing, 409 while assemblies, production demand, deliveries, or POs still use the SKU |
 | `GET /api/production-items` | None | `{ items: ProductionItem[] }`; assemblies with their per-unit materials |
 | `POST /api/production-items` | `{ name, sku, unit, notes, requirements: [{ itemSku, quantity, unit }] }` | `{ ok: true, item: ProductionItem }`; creates the finished-good Inventory item at zero stock, and materials must be existing inventory SKUs with matching units |
-| `PUT /api/production-items/:id` | Same body as create | `{ ok: true, item: ProductionItem }`; syncs the Inventory name/unit and replaces per-unit materials. The SKU is immutable, and a unit change is rejected while finished-good stock is above zero |
+| `PUT /api/production-items/:id` | Same body as create | `{ ok: true, item: ProductionItem }`. Syncs the Inventory name and unit and replaces per-unit materials. The SKU is immutable. A finished-good unit change checks stock and live dependencies, including runs that produce the item. |
 | `DELETE /api/production-items/:id` | None | `{ ok: true }`; returns 409 while a production run references the assembly, while its finished-good stock is above zero, or while another record uses the item |
-| `GET /api/deliveries` | None | `{ items: Delivery[] }`; incoming first, then received |
+| `GET /api/deliveries` | None | `{ items: Delivery[] }`. Open deliveries first, followed by received and canceled deliveries. |
 | `POST /api/deliveries` | `{ itemSku, quantity, unit, expectedArrival, supplier, notes }` | `{ ok: true, item: Delivery }`; the unit must match inventory (low-level create without proof) |
 | `POST /api/deliveries/manual` | Query `itemSku`, `quantity`, `unit`, `expectedArrival`, `supplier`, `notes`; raw image body with optional `X-File-Name` | `{ ok: true, item: Delivery }`; creates a manual delivery with its required incoming proof |
 | `PUT /api/deliveries/:id/proof` | Raw image body (`image/jpeg`, `image/png`, or `image/webp`, max 5 MB) with optional `X-File-Name` | `{ ok: true, item: Delivery }`; replaces a manual delivery's incoming proof; linked deliveries use the PO proof endpoint |
 | `GET /api/deliveries/:id/proof` | Delivery ID | The incoming proof bytes, falling back to the linked PO proof, or 404 |
-| `PUT /api/deliveries/:id` | Same body as create, plus `correctionNote` when the expected arrival changes | `{ ok: true, item: Delivery }`; unreceived only; linked deliveries keep their SKU, update the PO ETA, and record the correction note |
-| `POST /api/deliveries/:id/receive` | Raw image body (`image/jpeg`, `image/png`, or `image/webp`, max 5 MB) with `X-Received-Quantity` and optional `X-File-Name` | `{ ok: true, delivery, alreadyReceived }`; adds the confirmed quantity to stock once and stores the receipt picture |
-| `GET /api/deliveries/:id/receipt` | Delivery ID | The stored receipt image bytes, or 404 |
+| `PUT /api/deliveries/:id` | Same body as create, plus `correctionNote` for an arrival date change and optional `expectedReceived` | `{ ok: true, item: Delivery }`. Edits an open balance. The first receipt fixes the SKU, unit, and planned quantity. Linked schedule changes also update the PO and its history. |
+| `POST /api/deliveries/:id/receive` | Raw JPEG, PNG, or WebP (max 5 MB) with `X-Received-Quantity` for this batch, `X-Expected-Received-Quantity` for the prior cumulative total, and `X-Receipt-Request-ID`. Optional headers are `X-File-Name` and `X-Delivery-Updated-At`. | `{ ok: true, delivery, receipt, alreadyReceived }`. Retrying the same request ID uses the existing batch. A stale balance returns 409 with the current `delivery`. |
+| `POST /api/deliveries/:id/close` | `{ reason, expectedReceived }` | `{ ok: true, item: Delivery }`. Records the canceled balance and leaves received stock and receipt pictures available. |
+| `GET /api/deliveries/:id/receipt` | Delivery ID | The latest receipt image, or 404. |
+| `GET /api/deliveries/:id/receipts/:receiptId` | Delivery and batch receipt IDs | The specified receipt image, or 404. |
 | `GET /api/dashboard` | None | `{ today, widgets, incoming, runs }` for the Home dashboard: saved inventory projections, all unreceived deliveries, and in-progress or scheduled-today runs |
 | `POST /api/dashboard/widgets` | `{ sku, horizonDays }` | `{ ok: true, widget }`; appends a Home visualization after validating the SKU and a 1–365 day horizon |
 | `PUT /api/dashboard/widgets/:id` | Same body as create | `{ ok: true, widget }`; returns 404 when missing |
@@ -50,7 +53,7 @@ All routes are served from the same loopback origin as the dashboard. State-chan
 | `PUT /api/settings` | `{ plantTimeZone: string }` | `{ ok: true, plantTimeZone, today }`; rejects invalid IANA zones |
 | `POST /api/reset` | `{ confirm: true }` | `{ ok: true, counts, clearedAt }`; deletes the account's POs, proof pictures, event history, inventory, deliveries and receipt pictures, production runs/requirements, and assembly definitions; keeps the Gmail connection, approved senders, and plant time zone and records a cutoff so older Inbox mail stays excluded |
 
-Errors use `{ error: string }` JSON. Pagination defaults to 25 rows and clamps offsets to one million. PO search covers PO ID, item/SKU, supplier, sender address/name, subject, received date, expected arrival, and ETA. Inventory and production records are local to the connected account and are never read from or written to Gmail.
+Errors include `{ error: string }` JSON and may include the latest delivery or current unit dependencies. Pagination defaults to 25 rows and clamps offsets to one million. PO search covers PO ID, item/SKU, supplier, sender address/name, subject, received date, expected arrival, and ETA. Inventory and production records are local to the connected account.
 
 ## Purchase order shape
 
@@ -67,7 +70,11 @@ Errors use `{ error: string }` JSON. Pagination defaults to 25 rows and clamps o
 
 ## Supporting shapes
 
-`InventoryItem` includes `id`, `item`, `sku`, `quantity`, `unit`, `supplier`, `reorderLevel` (null when unset), `notes`, `createdAt`, and `updatedAt`; adding an inventory row defines the item. `ProductionItem` (an assembly) includes `id`, `name`, `sku`, `inventoryId`, `stock`, `unit`, `notes`, timestamps, and `requirements[]` (`id`, `productionItemId`, `itemSku`, `quantity`, `unit`), where each material is an inventory SKU and its quantity is per unit of the assembly. Each assembly owns one finished-good Inventory item at its `sku`; completed production units increase that item's `quantity`. `Delivery` includes `id`, `itemSku`, `quantity`, `receivedQuantity` (the confirmed count after receipt, or null), `unit`, `expectedArrival`, `supplier`, `status` (`incoming` or `received`), `receivedAt`, `poId` (null for manual deliveries), `notes`, `proof` (`{ mimeType, fileName, createdAt }` or null; a manual delivery's own proof or the linked PO's proof), `receipt` (`{ mimeType, fileName, createdAt }` or null for the receipt picture), `createdAt`, and `updatedAt`. `ProductionRun` includes `id`, `runNumber`, `productionItemId`, `item`, `quantity`, `unit`, `status` (`scheduled`, `in_progress`, `completed`, or `on_hold`), `scheduledDate`, `notes`, `createdAt`, `updatedAt`, and `requirements[]` (`id`, `runId`, `itemSku`, `quantity`, `unit`, `status`, timestamps); run requirement quantities are the assembly's per-unit material quantities multiplied by the planned quantity and are maintained by the server. Status, connection, run, sender, inventory, assembly, production, delivery, PO, and page shapes are documented with JSDoc in `server/types.js`.
+`InventoryItem`, `ProductionItem`, and `ProductionRun` fields are documented with JSDoc in `server/types.js`. An assembly owns one finished-good inventory item. Its material quantities are per unit, and production run requirements scale those quantities by the planned run size.
+
+Delivery records use `quantity` for the plan, `receivedQuantity` for the cumulative count (null before the first batch), and `remainingQuantity` for open supply. `status` is `incoming` while a balance is open, `received` on completion, or `canceled` after closing the balance. Each entry in `receipts` has an `id`, `quantity`, `mimeType`, `fileName`, and `createdAt`. The delivery also includes `canceledQuantity`, `closedAt`, `closeReason`, and `scheduleNote`. See the `Delivery` typedef in `server/types.js` for the other fields.
+
+The inventory dependency lookup returns the current unit and stock, the owning assembly when present, and live references. Each dependency carries `kind`, `id`, `label`, `unit`, and `quantity`, plus a date or supplier where applicable. A unit conflict includes `needsZeroStock` and `blockers` in `unitDependencies`.
 
 ## Production route families
 

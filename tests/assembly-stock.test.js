@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { createProductionItem, deleteProductionItem, getProductionItem, parseProductionItemInput, updateProductionItem } from '../server/production-items.js';
 import { createProductionRun, deleteProductionRun, parseProductionInput, updateProductionProgress, updateProductionRun } from '../server/production.js';
-import { createInventoryItem, deleteInventoryItem, parseInventoryInput } from '../server/inventory.js';
+import { createInventoryItem, deleteInventoryItem, inventoryHistory, inventoryUnitDependencies, parseInventoryInput, updateInventoryItem } from '../server/inventory.js';
+import { closeDelivery, createDelivery } from '../server/deliveries.js';
 import { buildHome, createDashboardWidget, parseWidgetInput } from '../server/dashboard.js';
 
 const NOW = '2026-11-13T09:00:00.000Z';
@@ -82,6 +83,42 @@ test('assembly edits sync the inventory item and respect stock and SKU guards', 
 
   assert.throws(() => updateProductionItem(db, ACCOUNT, assembly.id, assemblyInput('Glass Case Stock', 'ASM-NEW', 'cases'), NOW), /SKU cannot be changed/);
   assert.throws(() => updateProductionItem(db, ACCOUNT, assembly.id, assemblyInput('Glass Case Stock', 'ASM-CASE', 'cases', [{ itemSku: 'ASM-CASE', quantity: 1, unit: 'cases' }]), NOW), /cannot use its own/);
+});
+
+test('unit changes list open deliveries, runs and assembly materials and preserve historical units', () => {
+  const { db } = loaded;
+  const material = createInventoryItem(db, ACCOUNT, parseInventoryInput({ item: 'Unit test stock', sku: 'UNIT-MAT', quantity: 2, unit: 'pieces' }), NOW);
+  const assembly = createProductionItem(db, ACCOUNT, assemblyInput('Unit test assembly', 'ASM-UNIT', 'pieces', [
+    { itemSku: material.sku, quantity: 3, unit: 'pieces' },
+  ]), NOW);
+  const run = createProductionRun(db, ACCOUNT, parseProductionInput({
+    runNumber: 'PR-0099', productionItemId: assembly.id, quantity: 2, status: 'on_hold', scheduledDate: TODAY,
+  }), NOW);
+  const delivery = createDelivery(db, ACCOUNT, { itemSku: material.sku, quantity: 7, unit: 'pieces', expectedArrival: TODAY, supplier: 'Supplier', notes: '' }, NOW);
+  const unrelated = 'gmail:other-units@example.com';
+  db.prepare('INSERT INTO accounts(id,display_name,email,created_at) VALUES(?,?,?,?)').run(unrelated, '', 'other-units@example.com', NOW);
+  createDelivery(db, unrelated, { itemSku: material.sku, quantity: 14, unit: 'pieces', expectedArrival: TODAY, supplier: 'Other account', notes: '' }, NOW);
+  assert.equal(inventoryUnitDependencies(db, unrelated, material.id), null);
+  assert.deepEqual(inventoryUnitDependencies(db, ACCOUNT, material.id).dependencies.map(({ kind, label, quantity }) => [kind, label, quantity]), [
+    ['delivery', delivery.id, 7], ['requirement', 'PR-0099', 6], ['assembly_material', assembly.name, 3],
+  ]);
+  const change = { ...material, unit: 'boxes', quantity: 0 };
+  assert.throws(() => updateInventoryItem(db, ACCOUNT, material.id, change, NOW),
+    (failure) => failure.status === 409 && failure.unitDependencies.needsZeroStock && failure.unitDependencies.blockers.length === 3);
+  const saved = updateInventoryItem(db, ACCOUNT, material.id, { ...change, unit: ' PIECES ', notes: 'Edited with dependencies' }, NOW);
+  assert.equal(saved.unit, 'pieces');
+  assert.equal(saved.quantity, 0);
+  assert.equal(saved.notes, 'Edited with dependencies');
+  assert.throws(() => updateProductionItem(db, ACCOUNT, assembly.id, assemblyInput(assembly.name, assembly.sku, 'boxes', assembly.requirements), NOW),
+    (failure) => failure.status === 409 && failure.unitDependencies.blockers.some(({ kind, label }) => kind === 'assembly_run' && label === 'PR-0099'));
+  closeDelivery(db, ACCOUNT, delivery.id, { reason: 'Canceled by supplier', expectedReceived: 0 }, NOW);
+  updateProductionProgress(db, ACCOUNT, run.id, { completedQuantity: 2 }, NOW);
+  updateProductionItem(db, ACCOUNT, assembly.id, assemblyInput(assembly.name, assembly.sku, 'pieces'), NOW);
+  assert.equal(updateInventoryItem(db, ACCOUNT, material.id, change, NOW).unit, 'boxes');
+  const history = inventoryHistory(db, ACCOUNT, material.id, 25, 0).items[0];
+  assert.deepEqual([history.kind, history.before_unit, history.unit, history.before_quantity, history.after_quantity], ['Unit changed', 'pieces', 'boxes', 0, 0]);
+  assert.equal(db.prepare('SELECT unit FROM incoming_deliveries WHERE account_id=? AND id=?').get(ACCOUNT, delivery.id).unit, 'pieces');
+  assert.equal(db.prepare('SELECT unit FROM production_requirements WHERE account_id=? AND run_id=?').get(ACCOUNT, run.id).unit, 'pieces');
 });
 
 test('completed units add to and remove from assembly stock exactly once', () => {

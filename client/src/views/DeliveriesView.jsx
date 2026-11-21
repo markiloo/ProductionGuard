@@ -1,28 +1,27 @@
 import { usePagination } from '../hooks/usePagination.js';
 import { ListPagination } from '../components/ListPagination.jsx';
-import { scheduleDate, shortDate } from '../lib/format.js';
+import { DeliveryAmounts, DeliveryReceiptLinks, DeliveryStatus, DeliveryTiming } from '../components/DeliveryDetails.jsx';
 
 function DeliveryRow({ delivery, onEdit, onReceive, busy }) {
-  const received = delivery.status === 'received';
+  const open = delivery.status === 'incoming';
   return (
     <div className="delivery-row">
       <div className="delivery-main">
         <div className="delivery-top">
           <strong>{delivery.itemSku}</strong>
-          <span className={`status-chip ${received ? 'completed' : 'scheduled'}`}>{received ? 'Received' : 'Incoming'}</span>
+          <DeliveryStatus delivery={delivery} />
           {delivery.poId ? <span className="delivery-po">{delivery.poId}</span> : <span className="delivery-po">Manual</span>}
           {delivery.proof ? <span className="status-chip valid">Proof</span> : null}
-          {delivery.receipt ? <span className="status-chip valid">Receipt</span> : null}
         </div>
-        <span className="delivery-meta">{delivery.supplier || 'No supplier'} · arrives {scheduleDate(delivery.expectedArrival)}</span>
+        <span className="delivery-meta">{delivery.supplier || 'No supplier'}</span>
+        <DeliveryTiming delivery={delivery} />
+        <DeliveryReceiptLinks delivery={delivery} />
       </div>
       <div className="delivery-side">
-        <span className="inventory-qty">{received ? delivery.receivedQuantity ?? delivery.quantity : delivery.quantity}<small>{delivery.unit}</small></span>
-        {received && delivery.receivedQuantity != null && delivery.receivedQuantity !== delivery.quantity ? <span className="inventory-updated">Planned {delivery.quantity} {delivery.unit}</span> : null}
-        {received ? <time className="inventory-updated" dateTime={delivery.receivedAt}>Received {shortDate(delivery.receivedAt)}</time> : null}
+        <DeliveryAmounts delivery={delivery} />
       </div>
       <div className="delivery-actions">
-        {received ? (
+        {!open ? (
           delivery.poId ? <button type="button" className="button button-ghost button-small" onClick={() => onEdit(delivery)} disabled={busy}>Proof</button> : null
         ) : (
           <>
@@ -38,6 +37,7 @@ function DeliveryRow({ delivery, onEdit, onReceive, busy }) {
 export function DeliveriesView({ deliveries, onAdd, onEdit, onReceive, busy }) {
   const pagination = usePagination(deliveries);
   const incoming = deliveries ? deliveries.filter((delivery) => delivery.status === 'incoming').length : 0;
+  const received = deliveries ? deliveries.filter((delivery) => delivery.status === 'received').length : 0;
   return (
     <section className="panel record-panel deliveries" id="deliveries" tabIndex={-1} aria-labelledby="deliveries-title">
       <header className="panel-head record-head">
@@ -55,7 +55,7 @@ export function DeliveriesView({ deliveries, onAdd, onEdit, onReceive, busy }) {
           <div className="record-summary">
             <div><span className="metric-label">Deliveries</span><strong>{deliveries.length}</strong></div>
             <div><span className="metric-label">Awaiting receipt</span><strong>{incoming}</strong></div>
-            <div><span className="metric-label">Received</span><strong>{deliveries.length - incoming}</strong></div>
+            <div><span className="metric-label">Received</span><strong>{received}</strong></div>
           </div>
           <div className="record-list">
             {pagination.visible.map((delivery) => <DeliveryRow key={delivery.id} delivery={delivery} onEdit={onEdit} onReceive={onReceive} busy={busy} />)}

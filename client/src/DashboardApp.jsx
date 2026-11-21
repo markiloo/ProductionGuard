@@ -11,6 +11,7 @@ import { ReceiveDeliveryDialog } from './dialogs/ReceiveDeliveryDialog.jsx';
 import { ManualPoDialog } from './dialogs/ManualPoDialog.jsx';
 import { PoDetailDialog } from './dialogs/PoDetailDialog.jsx';
 import { api } from './lib/api.js';
+import { recordDeliveryReceipt } from './lib/delivery.js';
 import { DEFAULT_ORDER_FILTER } from './lib/constants.js';
 import { todayDate } from './lib/format.js';
 import { AssembliesView } from './views/AssembliesView.jsx';
@@ -565,7 +566,7 @@ export function DashboardApp() {
     setDeliveryBusy(true);
     try {
       const editing = Boolean(deliveryDraft?.id);
-      const received = deliveryDraft?.status === 'received';
+      const received = editing && deliveryDraft.status !== 'incoming';
       if (received && !proofFile) throw new Error('Choose a new proof picture to save.');
       if (!editing) {
         if (!proofFile) throw new Error('Upload a picture of proof that the delivery is incoming.');
@@ -586,7 +587,7 @@ export function DashboardApp() {
           body: proofFile,
         });
       } else if (!received) {
-        await api(`/api/deliveries/${encodeURIComponent(deliveryDraft.id)}`, { method: 'PUT', body: JSON.stringify({ ...values, correctionNote }) });
+        await api(`/api/deliveries/${encodeURIComponent(deliveryDraft.id)}`, { method: 'PUT', body: JSON.stringify({ ...values, correctionNote, expectedReceived: deliveryDraft.receivedQuantity ?? 0 }) });
         if (proofFile) {
           const proofUrl = deliveryDraft.poId
             ? `/api/pos/${encodeURIComponent(deliveryDraft.poId)}/proof`
@@ -615,6 +616,30 @@ export function DashboardApp() {
       setNotice(received ? 'Proof picture updated.' : proofFile ? (editing ? 'Delivery and proof saved.' : 'Delivery added with incoming proof.') : editing ? 'Delivery saved.' : 'Delivery added.');
       setDeliveryRevision((revision) => revision + 1);
       setInventoryRevision((revision) => revision + 1);
+    } catch (failure) {
+      if (failure.data?.delivery) setDeliveryRevision((revision) => revision + 1);
+      throw failure;
+    } finally {
+      setDeliveryBusy(false);
+    }
+  }
+
+  async function closeDeliveryBalance(delivery, reason) {
+    setDeliveryBusy(true);
+    try {
+      await api(`/api/deliveries/${encodeURIComponent(delivery.id)}/close`, {
+        method: 'POST',
+        body: JSON.stringify({ reason, expectedReceived: delivery.receivedQuantity ?? 0 }),
+      });
+      setDeliveryDraft(null);
+      setDeliveryRevision((revision) => revision + 1);
+      setNotice('Delivery balance closed.');
+    } catch (failure) {
+      if (failure.data?.delivery) {
+        setDeliveryDraft(failure.data.delivery);
+        setDeliveryRevision((revision) => revision + 1);
+      }
+      throw failure;
     } finally {
       setDeliveryBusy(false);
     }
@@ -624,27 +649,17 @@ export function DashboardApp() {
     setReceivingDelivery(delivery);
   }
 
-  async function confirmReceive(quantity, file) {
-    if (!receivingDelivery) return;
+  async function confirmReceive(delivery, quantity, file, requestId) {
     setReceiveBusy(true);
     setError('');
     try {
-      const result = await api(`/api/deliveries/${encodeURIComponent(receivingDelivery.id)}/receive`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': file.type,
-          'X-File-Name': encodeURIComponent(file.name || 'receipt'),
-          'X-Received-Quantity': String(quantity),
-        },
-        body: file,
-      });
-      const unit = receivingDelivery.unit;
+      const result = await recordDeliveryReceipt(delivery, quantity, file, requestId);
       setReceivingDelivery(null);
-      setNotice(result.alreadyReceived ? 'This delivery was already received; stock was not added again.' : `Received ${quantity} ${unit}. Stock updated.`);
+      setNotice(result.alreadyReceived ? 'This batch is already recorded.' : `Received ${quantity} ${delivery.unit}. Stock updated.`);
       setDeliveryRevision((revision) => revision + 1);
       setInventoryRevision((revision) => revision + 1);
     } catch (failure) {
-      setError(failure.message);
+      if (failure.data?.delivery) setDeliveryRevision((revision) => revision + 1);
       throw failure;
     } finally {
       setReceiveBusy(false);
@@ -822,7 +837,7 @@ export function DashboardApp() {
         <ProductionDialog draft={productionDraft} productionItems={productionItems || []} busy={productionBusy} onClose={() => { if (!productionBusy) setProductionDraft(null); }} onSave={saveProductionRun} onDelete={removeProductionRun} />
       ) : null}
       {deliveryDraft ? (
-        <DeliveryDialog draft={deliveryDraft} skuOptions={inventoryOptions} busy={deliveryBusy} onClose={() => { if (!deliveryBusy) setDeliveryDraft(null); }} onSave={saveDelivery} />
+        <DeliveryDialog draft={deliveryDraft} skuOptions={inventoryOptions} busy={deliveryBusy} onClose={() => { if (!deliveryBusy) setDeliveryDraft(null); }} onSave={saveDelivery} onCloseBalance={closeDeliveryBalance} />
       ) : null}
       {receivingDelivery ? (
         <ReceiveDeliveryDialog delivery={receivingDelivery} busy={receiveBusy} onClose={() => { if (!receiveBusy) setReceivingDelivery(null); }} onConfirm={confirmReceive} />

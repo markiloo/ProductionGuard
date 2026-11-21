@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSheetDialog } from '../hooks/useSheetDialog.js';
+import { InventoryUnitDependencies, useInventoryUnitDependencies } from '../components/InventoryUnitDependencies.jsx';
 
 export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, onSave, onDelete }) {
   const dialogRef = useSheetDialog(onClose);
@@ -14,6 +15,7 @@ export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, on
     unit: requirement.unit,
   })));
   const [formError, setFormError] = useState('');
+  const unitChange = useInventoryUnitDependencies(draft.inventoryId, draft, unit, draft.stock ?? 0, true);
 
   function updateRequirement(index, patch) {
     setRequirements((current) => current.map((requirement, row) => (row === index ? { ...requirement, ...patch } : requirement)));
@@ -26,6 +28,7 @@ export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, on
 
   async function submit(event) {
     event.preventDefault();
+    if (unitChange.blocked) return;
     setFormError('');
     try {
       await onSave({
@@ -35,7 +38,10 @@ export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, on
         notes,
         requirements: requirements.map((requirement) => ({ itemSku: requirement.itemSku, quantity: Number(requirement.quantity), unit: requirement.unit })),
       });
-    } catch (failure) { setFormError(failure.message); }
+    } catch (failure) {
+      unitChange.updateFromError(failure);
+      setFormError(failure.message);
+    }
   }
 
   async function remove() {
@@ -63,8 +69,9 @@ export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, on
           </div>
           <div className="field">
             <label htmlFor="production-item-unit">Unit</label>
-            <input id="production-item-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="production-item-units" required />
+            <input id="production-item-unit" value={unit} onChange={(event) => { setUnit(event.target.value); setFormError(''); }} maxLength={20} list="production-item-units" required aria-describedby={unitChange.changing ? 'assembly-unit-dependencies' : undefined} />
             <datalist id="production-item-units"><option value="units" /><option value="kg" /><option value="boxes" /><option value="liters" /></datalist>
+            <InventoryUnitDependencies id="assembly-unit-dependencies" state={unitChange} />
           </div>
           <div className="field field-wide">
             <label htmlFor="production-item-notes">Notes</label>
@@ -95,7 +102,7 @@ export function ProductionItemDialog({ draft, skuOptions = [], busy, onClose, on
         <div className="dialog-actions">
           {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Define assembly'}</button>
+          <button type="submit" className="button button-primary" disabled={busy || unitChange.blocked}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Define assembly'}</button>
         </div>
       </form>
     </dialog>

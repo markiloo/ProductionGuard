@@ -33,6 +33,8 @@ function manual(reason, extra = {}) {
 export function assessPo({ po, inventory, deliveries = [], requirements = [], earlierPos = [], today }) {
   const provisional = po.state !== 'ordered';
   const arrival = provisional ? addDays(today, po.etaDays) : po.expectedArrival;
+  const supplyQuantity = po.supplyQuantity ?? po.quantity;
+  const hasSupply = supplyQuantity > 0;
   const base = { arrival: isValidDate(arrival) ? arrival : null, provisional };
   if (po.poStatus !== 'valid') return manual(`${MANUAL} — Invalid PO`, { ...base, note: po.poError || 'The PO data is incomplete.' });
   if (!inventory) {
@@ -43,28 +45,28 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
         : 'Map this item to an inventory SKU before assessment.',
     });
   }
-  if (!sameUnit(po.unit, inventory.unit)) {
+  if (hasSupply && !sameUnit(po.unit, inventory.unit)) {
     return manual(`${MANUAL} — Unit Mismatch`, { ...base, inventory, note: `The PO uses ${po.unit || 'no unit'} but inventory for ${inventory.sku} uses ${inventory.unit}.` });
   }
-  const conflictingDelivery = deliveries.find((delivery) => delivery.status !== 'received' && !sameUnit(delivery.unit, inventory.unit));
+  const incoming = deliveries.filter((delivery) => delivery.status === 'incoming' && isValidDate(delivery.expectedArrival));
+  const conflictingDelivery = incoming.find((delivery) => !sameUnit(delivery.unit, inventory.unit));
   if (conflictingDelivery) {
     return manual(`${MANUAL} — Unit Mismatch`, {
       ...base, inventory,
       note: `Delivery ${conflictingDelivery.id} uses ${conflictingDelivery.unit} but inventory for ${inventory.sku} uses ${inventory.unit}.`,
     });
   }
-  const conflictingRequirement = requirements.find((requirement) => !sameUnit(requirement.unit, inventory.unit));
+  const demand = requirements
+    .filter((requirement) => requirement.status === 'outstanding' && requirement.runStatus !== 'completed')
+    .sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate) || left.id.localeCompare(right.id));
+  const conflictingRequirement = demand.find((requirement) => !sameUnit(requirement.unit, inventory.unit));
   if (conflictingRequirement) {
     return manual(`${MANUAL} — Unit Mismatch`, {
       ...base, inventory,
       note: `Production run ${conflictingRequirement.runNumber} uses ${conflictingRequirement.unit} but inventory for ${inventory.sku} uses ${inventory.unit}.`,
     });
   }
-  if (!isValidDate(arrival)) return manual(`${MANUAL} — Invalid Arrival`, { ...base, inventory, note: 'The ETA or ordered date could not be resolved.' });
-
-  const demand = requirements
-    .filter((requirement) => requirement.status === 'outstanding' && requirement.runStatus !== 'completed')
-    .sort((left, right) => left.scheduledDate.localeCompare(right.scheduledDate) || left.id.localeCompare(right.id));
+  if (hasSupply && !isValidDate(arrival)) return manual(`${MANUAL} — Invalid Arrival`, { ...base, inventory, note: 'The ETA or ordered date could not be resolved.' });
   const planningEnd = demand.length ? demand[demand.length - 1].scheduledDate : null;
   if (!demand.length) {
     return manual(`${MANUAL} — No Scheduled Demand`, {
@@ -73,7 +75,6 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
     });
   }
 
-  const incoming = deliveries.filter((delivery) => delivery.status === 'incoming' && isValidDate(delivery.expectedArrival));
   const coverage = earlierPos.filter((earlier) => isValidDate(earlier.arrival));
 
   function balanceAt(date, { includePo = true, excludeEarlier = false, excludeArrivalsOnOrAfter = null } = {}) {
@@ -89,13 +90,13 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
       }
     }
     for (const requirement of demand) if (requirement.scheduledDate <= date) total -= requirement.quantity;
-    if (includePo && arrival <= date && !po.quantityInStock) total += po.quantity;
+    if (includePo && hasSupply && arrival <= date) total += supplyQuantity;
     return total;
   }
 
   const runDates = demand.map((requirement) => requirement.scheduledDate);
-  const evaluationDates = [...new Set([arrival, ...runDates.filter((date) => date >= arrival)])].sort();
-  const balanceDates = [...new Set([arrival, ...runDates])].sort();
+  const evaluationDates = hasSupply ? [...new Set([arrival, ...runDates.filter((date) => date >= arrival)])].sort() : runDates;
+  const balanceDates = [...new Set(hasSupply ? [arrival, ...runDates] : runDates)].sort();
   const balances = balanceDates.map((date) => ({
     date,
     before: balanceAt(date, { includePo: false }),
@@ -103,19 +104,19 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
   }));
   const lowest = Math.min(...evaluationDates.map((date) => balanceAt(date, { includePo: false })));
   const requirement = Math.max(0, -lowest);
-  const difference = po.quantity - requirement;
+  const difference = supplyQuantity - requirement;
 
   let decision = 'Adjust Quantity';
   let flag = 'adjust';
   if (requirement === 0) { decision = 'Redundant / Overstock'; flag = 'redundant'; }
-  else if (po.quantity === requirement) { decision = 'Recommended'; flag = 'recommended'; }
+  else if (supplyQuantity === requirement) { decision = 'Recommended'; flag = 'recommended'; }
 
   const withoutEarlier = evaluationDates.map((date) => balanceAt(date, { includePo: false, excludeEarlier: true }));
   const requirementWithoutEarlier = Math.max(0, -Math.min(...withoutEarlier));
   const coveredAmount = Math.max(0, requirementWithoutEarlier - requirement);
 
-  const needDate = runDates.filter((date) => date >= arrival).find((date) => balanceAt(date, { includePo: false }) < 0) || null;
-  const daysEarly = needDate ? daysBetween(arrival, needDate) : null;
+  const needDate = runDates.find((date) => (!hasSupply || date >= arrival) && balanceAt(date, { includePo: false }) < 0) || null;
+  const daysEarly = needDate && hasSupply ? daysBetween(arrival, needDate) : null;
 
   const warnings = [];
   const timingConflicts = [];
@@ -124,7 +125,7 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
     const withoutLate = balanceAt(runDate, { excludeArrivalsOnOrAfter: runDate, includePo: arrival < runDate });
     if (withoutLate >= 0) continue;
     const lateSources = [];
-    if (arrival >= runDate) lateSources.push({ source: 'po', label: po.poId, arrival });
+    if (hasSupply && arrival >= runDate) lateSources.push({ source: 'po', label: po.poId, arrival });
     for (const delivery of incoming) if (delivery.expectedArrival >= runDate) lateSources.push({ source: 'delivery', label: delivery.id, arrival: delivery.expectedArrival });
     if (!lateSources.length) continue;
     lateSources.sort((left, right) => left.arrival.localeCompare(right.arrival));
@@ -176,7 +177,8 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
 
   const parts = [];
   if (needDate) parts.push(`Needed by ${needDate}${daysEarly > 1 ? ` (${daysEarly} days early)` : daysEarly === 1 ? ' (arriving one day early)' : ''}.`);
-  parts.push(`Net requirement ${requirement}; this PO requests ${po.quantity} (${difference >= 0 ? '+' : ''}${difference}).`);
+  const supplyLabel = po.supplyQuantity == null ? 'this PO requests' : 'this delivery has remaining';
+  parts.push(`Net requirement ${requirement}; ${supplyLabel} ${supplyQuantity} (${difference >= 0 ? '+' : ''}${difference}).`);
   if (timingConflicts.length) parts.push(`Late arrival is flagged for ${timingConflicts.map((conflict) => conflict.runDate).join(', ')}.`);
 
   return {
@@ -186,7 +188,7 @@ export function assessPo({ po, inventory, deliveries = [], requirements = [], ea
     reason: null,
     requirement,
     difference,
-    arrival,
+    arrival: base.arrival,
     provisional,
     planningEnd,
     needDate,

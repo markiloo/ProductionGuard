@@ -34,7 +34,7 @@ test('migration adds suppliers to saved POs and flags older messages missing the
     assert.equal(db.prepare("SELECT po_state FROM emails WHERE message_id='po'").get().po_state, 'pending_review');
     assert.equal(clearSavedEmails(db, 'a', '2026-01-04T00:00:00.000Z'), 2);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM emails').get().count, 1);
-    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 22);
+    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 23);
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inventory'").get());
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_runs'").get());
     assert.ok(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'production_requirements'").get());
@@ -56,7 +56,7 @@ test('migration adds suppliers to saved POs and flags older messages missing the
   }
 });
 
-test('migration gives existing assemblies finished-good inventory items and SKUs', async () => {
+test('migration gives existing assemblies SKUs and preserves historically closed short receipts', async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'po-checker-assembly-migration-'));
   const prior = process.env.DATA_DIR;
   const old = new Database(path.join(directory, 'po-checker.db'));
@@ -65,8 +65,12 @@ test('migration gives existing assemblies finished-good inventory items and SKUs
     CREATE TABLE production_items(account_id TEXT NOT NULL,id TEXT NOT NULL,name TEXT NOT NULL,unit TEXT NOT NULL,notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(account_id,id));
     CREATE TABLE inventory(account_id TEXT NOT NULL,id TEXT NOT NULL,item TEXT NOT NULL,sku TEXT NOT NULL DEFAULT '',quantity INTEGER NOT NULL DEFAULT 0,unit TEXT NOT NULL DEFAULT 'units',supplier TEXT NOT NULL DEFAULT '',reorder_level INTEGER,notes TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(account_id,id));
     CREATE TABLE inventory_history(id INTEGER PRIMARY KEY AUTOINCREMENT,account_id TEXT NOT NULL,inventory_id TEXT NOT NULL,kind TEXT NOT NULL,before_quantity INTEGER NOT NULL,after_quantity INTEGER NOT NULL,before_unit TEXT NOT NULL,unit TEXT NOT NULL,delivery_id TEXT,po_id TEXT,supplier TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
+    CREATE TABLE incoming_deliveries(account_id TEXT NOT NULL,id TEXT NOT NULL,item_sku TEXT NOT NULL,quantity INTEGER NOT NULL,unit TEXT NOT NULL,expected_arrival TEXT NOT NULL,supplier TEXT NOT NULL,status TEXT NOT NULL,received_at TEXT,po_id TEXT,notes TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,received_quantity INTEGER,PRIMARY KEY(account_id,id));
+    CREATE TABLE delivery_receipts(account_id TEXT NOT NULL,delivery_id TEXT NOT NULL,mime_type TEXT NOT NULL,file_name TEXT NOT NULL,data BLOB NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(account_id,delivery_id));
     INSERT INTO accounts VALUES('a','','a@example.com','2026-01-01');
     INSERT INTO inventory(account_id,id,item,sku,quantity,unit,created_at,updated_at) VALUES('a','existing','Existing Box','ASM-PACKAGING-BOX',5,'units','2026-01-01','2026-01-01');
+    INSERT INTO incoming_deliveries VALUES('a','legacy','ASM-PACKAGING-BOX',10,'units','2026-01-02','','received','2026-01-02','PO-0001','','2026-01-01','2026-01-02',5);
+    INSERT INTO delivery_receipts VALUES('a','legacy','image/png','legacy.png',X'010203','2026-01-02');
     INSERT INTO production_items(account_id,id,name,unit,notes,created_at,updated_at) VALUES
       ('a','item-1','Packaging Box','units','','2026-01-02','2026-01-02'),
       ('a','item-2','Custom Widget','kg','','2026-01-03','2026-01-03');`);
@@ -86,7 +90,14 @@ test('migration gives existing assemblies finished-good inventory items and SKUs
     assert.equal(db.prepare('SELECT quantity FROM inventory WHERE account_id=? AND id=?').get('a', 'existing').quantity, 5, 'existing inventory keeps its stock');
     const history = db.prepare('SELECT kind, before_quantity AS before, after_quantity AS after, unit FROM inventory_history WHERE account_id=? AND inventory_id=?').all('a', second.inventoryId);
     assert.deepEqual(history, [{ kind: 'Starting balance', before: 0, after: 0, unit: 'kg' }]);
-    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 22);
+    assert.equal(db.prepare('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1').get().version, 23);
+    const legacy = db.prepare('SELECT status, received_quantity, remaining_quantity FROM incoming_deliveries WHERE account_id=? AND id=?').get('a', 'legacy');
+    assert.deepEqual(legacy, { status: 'received', received_quantity: 5, remaining_quantity: 0 });
+    const { getDeliveryReceipt } = await import('../server/deliveries.js');
+    assert.deepEqual(getDeliveryReceipt(db, 'a', 'legacy'), { mime_type: 'image/png', data: Buffer.from([1, 2, 3]) });
+    assert.deepEqual(getDeliveryReceipt(db, 'a', 'legacy', 'legacy:receipt'), getDeliveryReceipt(db, 'a', 'legacy'));
+    assert.equal(db.prepare('SELECT quantity FROM delivery_receipts WHERE account_id=? AND delivery_id=?').get('a', 'legacy').quantity, 5);
+    assert.deepEqual(db.pragma('foreign_key_check'), []);
   } finally {
     try { loaded?.db.close(); } catch { /* Already closed. */ }
     try { loaded?.releaseInstanceLock(); } catch { /* Already released. */ }

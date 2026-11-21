@@ -11,6 +11,7 @@ const message = (uid, at, address = 'orders@example.com', subject = 'PO') => ({ 
 function fixture(fetchMessage, download = async () => ({ content: Readable.from([Buffer.from('ITEM: Steel\nQUANTITY: 2\nUNIT: kg\nETA: 1 week\nSUPPLIER: Acme Supply')]) })) {
   const db = new Database(':memory:');
   db.exec("CREATE TABLE runs(id TEXT PRIMARY KEY,account_id TEXT,cutoff TEXT,started_at TEXT,last_success_at TEXT,error TEXT,status TEXT);CREATE TABLE senders(account_id TEXT,address TEXT,normalized_address TEXT,created_at TEXT,PRIMARY KEY(account_id,normalized_address));CREATE TABLE inventory(account_id TEXT,id TEXT,item TEXT,sku TEXT,quantity INTEGER,unit TEXT,updated_at TEXT,PRIMARY KEY(account_id,id));CREATE TABLE emails(account_id TEXT,message_id TEXT,run_id TEXT,sender_address TEXT,sender_name TEXT,recipients TEXT,subject TEXT,received_at TEXT,preview TEXT,body TEXT,has_attachments INTEGER,item TEXT,quantity INTEGER,unit TEXT,eta TEXT,supplier TEXT,po_status TEXT,po_error TEXT,po_id TEXT,po_state TEXT,mapped_sku TEXT,eta_days INTEGER,expected_arrival TEXT,ordered_at TEXT,PRIMARY KEY(account_id,message_id));CREATE TABLE account_clears(account_id TEXT PRIMARY KEY,cleared_at TEXT NOT NULL);");
+  db.exec('CREATE TABLE incoming_deliveries(account_id TEXT, po_id TEXT)');
   db.prepare('INSERT INTO senders VALUES(?,?,?,?)').run('gmail:a@gmail.com', 'orders@example.com', 'orders@example.com', cutoff);
   let account = 'gmail:a@gmail.com';
   const calls = { searches: [], downloads: [], closes: 0 };

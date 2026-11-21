@@ -118,6 +118,61 @@ test('local API validates setup, connection state, and cross-origin writes', asy
     const deletedWidget = await fetch(`${base}/api/dashboard/widgets/${encodeURIComponent(widget.id)}`, { method: 'DELETE', headers: { Origin: base } });
     assert.equal(deletedWidget.status, 200);
     assert.deepEqual((await (await fetch(`${base}/api/dashboard`)).json()).widgets, []);
+
+    const jsonHeaders = { Origin: base, 'Content-Type': 'application/json' };
+    const deliveryInput = { itemSku: 'SKU-W', quantity: 100, unit: 'units', expectedArrival: '2026-12-15', supplier: 'Supplier', notes: '' };
+    const createdDelivery = await fetch(`${base}/api/deliveries`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify(deliveryInput) });
+    assert.equal(createdDelivery.status, 201);
+    const delivery = (await createdDelivery.json()).item;
+    const deliveryUrl = `${base}/api/deliveries/${delivery.id}`;
+    const dependencies = await (await fetch(`${base}/api/inventory/seed-inventory/unit-dependencies`)).json();
+    assert.deepEqual(dependencies.dependencies.map(({ id, quantity }) => [id, quantity]), [[delivery.id, 100]]);
+    const unitConflict = await fetch(`${base}/api/inventory/seed-inventory`, {
+      method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ item: 'Widget Item', sku: 'SKU-W', quantity: 0, unit: 'boxes' }),
+    });
+    assert.equal(unitConflict.status, 409);
+    assert.equal((await unitConflict.json()).unitDependencies.blockers[0].id, delivery.id);
+
+    const picture = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    const receiptHeaders = { Origin: base, 'Content-Type': 'image/png', 'X-Received-Quantity': '60', 'X-Expected-Received-Quantity': '0' };
+    const sendReceipt = (headers) => fetch(`${deliveryUrl}/receive`, { method: 'POST', headers, body: picture });
+    const missingRequestId = await sendReceipt(receiptHeaders);
+    assert.equal(missingRequestId.status, 400);
+    assert.match((await missingRequestId.json()).error, /request ID/);
+    const receipt = await sendReceipt({ ...receiptHeaders, 'X-Receipt-Request-ID': 'receipt-a' });
+    assert.equal(receipt.status, 200);
+    const recorded = await receipt.json();
+    assert.equal(recorded.delivery.receivedQuantity, 60);
+    assert.equal(recorded.delivery.remainingQuantity, 40);
+    const replay = await sendReceipt({ ...receiptHeaders, 'X-Receipt-Request-ID': 'receipt-a' });
+    assert.equal((await replay.json()).alreadyReceived, true);
+    const stale = await sendReceipt({ ...receiptHeaders, 'X-Receipt-Request-ID': 'receipt-b' });
+    assert.equal(stale.status, 409);
+    assert.equal((await stale.json()).delivery.remainingQuantity, 40);
+    for (const endpoint of ['receipt', 'receipts/receipt-a']) {
+      const storedPicture = await fetch(`${deliveryUrl}/${endpoint}`);
+      assert.equal(storedPicture.status, 200);
+      assert.deepEqual(Buffer.from(await storedPicture.arrayBuffer()), picture);
+    }
+    const shifted = await fetch(deliveryUrl, {
+      method: 'PUT', headers: jsonHeaders,
+      body: JSON.stringify({ ...deliveryInput, expectedArrival: '2026-12-20', correctionNote: 'Second truck', expectedReceived: 60 }),
+    });
+    assert.equal(shifted.status, 200);
+    assert.equal((await shifted.json()).item.scheduleNote, 'Second truck');
+    const projected = await (await fetch(`${base}/api/dashboard`)).json();
+    assert.deepEqual(projected.incoming.map(({ quantity, expectedArrival }) => [quantity, expectedArrival]), [[40, '2026-12-20']]);
+    const denyClose = await fetch(`${deliveryUrl}/close`, { method: 'POST', headers: { ...jsonHeaders, Origin: 'https://attacker.invalid' }, body: '{}' });
+    assert.equal(denyClose.status, 403);
+    const missingReason = await fetch(`${deliveryUrl}/close`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ reason: ' ', expectedReceived: 60 }) });
+    assert.equal(missingReason.status, 400);
+    const closedDelivery = await fetch(`${deliveryUrl}/close`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ reason: 'Remainder canceled by supplier', expectedReceived: 60 }) });
+    assert.equal(closedDelivery.status, 200);
+    const closed = (await closedDelivery.json()).item;
+    assert.deepEqual([closed.status, closed.receivedQuantity, closed.canceledQuantity, closed.remainingQuantity], ['canceled', 60, 40, 0]);
+    assert.equal((await (await fetch(`${base}/api/inventory`)).json()).items[0].quantity, 70);
+    assert.deepEqual((await (await fetch(`${base}/api/dashboard`)).json()).incoming, []);
+
     const clear = await fetch(`${base}/api/emails`, { method: 'DELETE', headers: { Origin: base } });
     assert.equal(clear.status, 200);
     assert.deepEqual(await clear.json(), { ok: true, deletedCount: 1 });

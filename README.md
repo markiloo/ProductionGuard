@@ -28,7 +28,7 @@ Complete POs from approved senders enter **Pending Review**. Unauthorized, incom
 
 ## Home
 
-The dashboard opens on **Home**. **Add visualization** charts a selected inventory item's projected on-hand balance over a horizon the manager chooses in days or weeks (1–365 days). Projections use confirmed supply only: on-hand stock plus unreceived deliveries, minus outstanding production demand; completed runs and received deliveries are excluded, and records whose unit differs from the inventory unit are skipped and noted. Each chart shows the current and lowest projected balance, a stockout warning, and its reorder level when one is set. Charts can be edited or removed, and the layout is saved per connected account.
+The dashboard opens on **Home**. **Add visualization** charts a selected inventory item's projected on-hand balance over a horizon the manager chooses in days or weeks (1–365 days). Projections use on-hand stock plus the open balance of incoming deliveries, minus outstanding production demand. Records whose unit differs from the inventory unit are skipped and noted. Each chart shows the current and lowest projected balance, a stockout warning, and its reorder level when one is set. Charts can be edited or removed, and the layout is saved per connected account.
 
 Below the charts, Home lists incoming deliveries in a configurable window (two weeks by default), including overdue deliveries, with three per page with arrival, PO or manual source, item, quantity, supplier, and an overdue flag, plus the completion progress of runs currently on the production floor (in progress or scheduled today). Home is a summary view; the Orders assessment remains authoritative. Visualizations survive **Clear saved orders** and are removed by **Settings → Clear all data**.
 
@@ -48,17 +48,21 @@ Approve keeps the ETA provisional; reject requires a reason and preserves the hi
 
 The **Inventory** view is the item master and stock list for the connected Gmail account. Adding an inventory item defines its SKU, item name, unit, quantity, supplier, reorder level, and notes. The SKU is required and unique per account, becomes the join key for POs, deliveries, assemblies, and demand, and cannot be changed after the item is created. Items at or below their reorder level are marked **Low stock**. Inventory lives in the same local SQLite database and is never sent to Gmail.
 
+Changing an item's unit requires zero stock. The form lists open deliveries, outstanding production requirements, and assembly materials that use a conflicting unit. Edit a finished-good unit in **Assemblies**, where open runs that produce the SKU are also checked. **History** records the previous and new units.
+
 ## Assemblies
 
 The **Assemblies** view, next to Production, defines what the plant assembles. Each assembly has a name, a required finished-good SKU, a unit, and a per-unit material list selected from **Inventory**. Creating an assembly creates its finished-good Inventory item at zero stock; completed production units add to that item, and corrections remove them. The finished-good SKU stays fixed, a unit change is blocked while stock remains, and an assembly cannot be deleted while a production run references it, its stock is above zero, or its Inventory item is used elsewhere. An inventory item cannot be deleted while an assembly, run, delivery, or PO uses its SKU. Existing item-definition SKUs are copied into Inventory at zero quantity during the database upgrade, so existing assemblies keep their materials.
 
 ## Incoming deliveries
 
-The **Deliveries** view lists incoming and received deliveries with their item SKU, quantity, expected arrival, supplier, and linked PO. Adding a delivery manually asks for an incoming proof picture, which is stored locally and can be replaced from the edit view. Ordering a PO creates one linked delivery automatically. The delivery edit view previews the linked incoming proof and lets you replace it; received linked deliveries keep a **Proof** action for corrections. **Receive** asks you to confirm the quantity physically received and requires a receipt picture; stock increases by the confirmed amount, so missing or extra items are recorded correctly. Received deliveries stay visible with their confirmed quantity and receipt, and their delivery fields cannot be edited; correct stock through inventory instead.
+The **Deliveries** view shows the planned, received, and remaining quantities, with separate pictures for each receipt. Adding a manual delivery requires incoming proof. Ordering a PO creates one linked delivery and stores its proof. Use **Receive** to enter the physical count and attach a receipt picture for each batch. The stock balance increases by that batch, including any overage, and a short receipt leaves the remainder due at its existing date.
+
+In the dashboard, open **Edit** to reschedule the remaining quantity with a note or choose **Close balance** and enter a reason. Closing removes the unreceived quantity from projections and preserves existing batches and stock. Once receiving starts, the SKU, unit, and planned quantity are fixed. Existing single-receipt records retain their saved quantity, picture, and completed status after upgrade.
 
 ## Receiving station
 
-Opening `http://127.0.0.1:4174/deliveries` loads a restricted receiving interface. It lists only incoming and received deliveries. The only actions are **Receive** (confirm the actual quantity and upload a receipt picture) and viewing a stored receipt. It has no access to add or edit deliveries, inventory, production, settings, or order review. Use the link in the Deliveries view to open it.
+Open `http://127.0.0.1:4174/deliveries` to record receipt batches and view saved receipt pictures. Open the dashboard's **Deliveries** tab to reschedule or close an open balance.
 
 ## Production schedule
 

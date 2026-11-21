@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { assessPo } from './assessment.js';
+import { getPoDelivery } from './deliveries.js';
 import { parseEtaDays } from './po.js';
 import { normalizeSender } from './rules.js';
 import { addDays, isValidDate } from './time.js';
@@ -18,8 +19,11 @@ function fail(message, status = 409) {
 
 /** Suggest the next sequential PO ID for an account. */
 export function nextPoId(db, accountId) {
-  const row = db.prepare("SELECT po_id FROM emails WHERE account_id=? AND po_id IS NOT NULL ORDER BY po_id DESC LIMIT 1").get(accountId);
-  const last = row ? Number(String(row.po_id).replace(/\D/g, '')) : 0;
+  const { last } = db.prepare(`SELECT coalesce(max(number), 0) AS last FROM (
+    SELECT max(CAST(substr(po_id, 4) AS INTEGER)) AS number FROM emails WHERE account_id=? AND po_id IS NOT NULL
+    UNION ALL
+    SELECT max(CAST(substr(po_id, 4) AS INTEGER)) FROM incoming_deliveries WHERE account_id=? AND po_id IS NOT NULL
+  )`).get(accountId, accountId);
   return `PO-${String(last + 1).padStart(4, '0')}`;
 }
 
@@ -28,7 +32,7 @@ function inventoryRows(db, accountId) {
 }
 
 function deliveryRows(db, accountId) {
-  return db.prepare(`SELECT id, item_sku AS itemSku, quantity, unit, expected_arrival AS expectedArrival, supplier,
+  return db.prepare(`SELECT id, item_sku AS itemSku, remaining_quantity AS quantity, unit, expected_arrival AS expectedArrival, supplier,
     status, received_at AS receivedAt, po_id AS poId, notes FROM incoming_deliveries WHERE account_id=? ORDER BY expected_arrival, id`).all(accountId);
 }
 
@@ -68,8 +72,9 @@ export function assessWithContext(context, po, today) {
   const key = sku.toLowerCase();
   const inventory = context.inventoryBySku.get(key) || null;
   const unit = inventory?.unit;
-  const deliveries = context.deliveries.filter((delivery) => delivery.itemSku.toLowerCase() === key && delivery.poId !== po.poId);
-  const linkedDelivery = context.deliveries.find((delivery) => delivery.itemSku.toLowerCase() === key && delivery.poId === po.poId);
+  const matchingDeliveries = context.deliveries.filter((delivery) => delivery.itemSku.toLowerCase() === key);
+  const linkedDelivery = po.state === 'ordered' ? matchingDeliveries.find((delivery) => delivery.poId === po.poId) : null;
+  const deliveries = matchingDeliveries.filter((delivery) => delivery !== linkedDelivery);
   const requirements = context.requirements.filter((requirement) => requirement.itemSku.toLowerCase() === key);
   const earlierPos = context.pos.filter((candidate) => {
     if (candidate.id === po.id) return false;
@@ -82,7 +87,7 @@ export function assessWithContext(context, po, today) {
     return order < 0;
   }).map((candidate) => ({ poId: candidate.poId, quantity: candidate.quantity, arrival: candidate.arrival, state: candidate.state }));
   return assessPo({
-    po: { ...po, quantityInStock: linkedDelivery?.status === 'received' },
+    po: { ...po, ...(linkedDelivery && { supplyQuantity: linkedDelivery.quantity, unit: linkedDelivery.unit }) },
     inventory,
     deliveries,
     requirements,
@@ -162,8 +167,7 @@ export function getPo(db, accountId, poId, today) {
   if (!po) return null;
   const assessment = assessWithContext(context, po, today);
   const events = db.prepare('SELECT id, type, reason, created_at AS createdAt FROM po_events WHERE account_id=? AND po_id=? ORDER BY created_at, id').all(accountId, po.poId);
-  const delivery = db.prepare(`SELECT id, item_sku AS itemSku, quantity, unit, expected_arrival AS expectedArrival, supplier, status, received_at AS receivedAt
-    FROM incoming_deliveries WHERE account_id=? AND po_id=?`).get(accountId, po.poId) || null;
+  const delivery = po.state === 'ordered' ? getPoDelivery(db, accountId, po.poId) : null;
   const proof = db.prepare('SELECT mime_type AS mimeType, file_name AS fileName, created_at AS createdAt FROM po_proofs WHERE account_id=? AND po_id=?').get(accountId, po.poId) || null;
   return { ...po, assessment, events, delivery, proof };
 }
@@ -211,10 +215,10 @@ export function schedulePo(db, accountId, poId, input, { today, now }) {
     if (!isValidDate(input?.expectedArrival)) throw fail('Choose a valid delivery date.', 400);
     if (input.expectedArrival === po.expectedArrival) throw fail('The delivery date has not changed.', 400);
     const delivery = db.prepare('SELECT id, status FROM incoming_deliveries WHERE account_id=? AND po_id=?').get(accountId, po.poId);
-    if (delivery?.status === 'received') throw fail('Received deliveries cannot be rescheduled.', 409);
+    if (delivery && delivery.status !== 'incoming') throw fail('This delivery has no open balance to reschedule.', 409);
     db.transaction(() => {
       db.prepare('UPDATE emails SET expected_arrival=? WHERE account_id=? AND po_id=?').run(input.expectedArrival, accountId, po.poId);
-      if (delivery) db.prepare('UPDATE incoming_deliveries SET expected_arrival=?, updated_at=? WHERE account_id=? AND id=?').run(input.expectedArrival, now, accountId, delivery.id);
+      if (delivery) db.prepare('UPDATE incoming_deliveries SET expected_arrival=?, schedule_note=?, updated_at=? WHERE account_id=? AND id=?').run(input.expectedArrival, note, now, accountId, delivery.id);
       recordEvent(db, accountId, po.poId, 'corrected', `Delivery date changed from ${po.expectedArrival || 'none'} to ${input.expectedArrival} — ${note}`, now);
     })();
   } else {
@@ -246,15 +250,12 @@ export function transitionPo(db, accountId, poId, action, { reason = '', today, 
     if (!Number.isInteger(po.etaDays) || po.etaDays <= 0) throw fail('This PO has no valid ETA duration.');
     const expectedArrival = addDays(today, po.etaDays);
     db.transaction(() => {
-      db.prepare("UPDATE emails SET po_state='ordered', ordered_at=?, expected_arrival=? WHERE account_id=? AND po_id=?").run(now, expectedArrival, accountId, po.poId);
-      const existing = db.prepare('SELECT id FROM incoming_deliveries WHERE account_id=? AND po_id=?').get(accountId, po.poId);
-      if (existing) {
-        db.prepare('UPDATE incoming_deliveries SET item_sku=?, quantity=?, unit=?, expected_arrival=?, supplier=?, updated_at=? WHERE account_id=? AND id=?')
-          .run(enriched.sku, po.quantity, po.unit, expectedArrival, po.supplier || '', now, accountId, existing.id);
-      } else {
-        db.prepare(`INSERT INTO incoming_deliveries(account_id,id,item_sku,quantity,unit,expected_arrival,supplier,status,received_at,po_id,notes,created_at,updated_at)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(accountId, randomUUID(), enriched.sku, po.quantity, po.unit, expectedArrival, po.supplier || '', 'incoming', null, po.poId, '', now, now);
+      if (db.prepare('SELECT 1 FROM incoming_deliveries WHERE account_id=? AND po_id=?').get(accountId, po.poId)) {
+        throw fail('A delivery already uses this PO number. Add a new PO to order this request.');
       }
+      db.prepare("UPDATE emails SET po_state='ordered', ordered_at=?, expected_arrival=? WHERE account_id=? AND po_id=?").run(now, expectedArrival, accountId, po.poId);
+      db.prepare(`INSERT INTO incoming_deliveries(account_id,id,item_sku,quantity,unit,expected_arrival,supplier,status,received_at,po_id,notes,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(accountId, randomUUID(), enriched.sku, po.quantity, po.unit, expectedArrival, po.supplier || '', 'incoming', null, po.poId, '', now, now);
       db.prepare(`INSERT INTO po_proofs(account_id,po_id,mime_type,file_name,data,created_at) VALUES(?,?,?,?,?,?)
         ON CONFLICT(account_id,po_id) DO UPDATE SET mime_type=excluded.mime_type, file_name=excluded.file_name, data=excluded.data, created_at=excluded.created_at`)
         .run(accountId, po.poId, proof.mimeType || 'image/jpeg', proof.fileName || '', proof.data, now);

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSheetDialog } from '../hooks/useSheetDialog.js';
+import { InventoryUnitDependencies, useInventoryUnitDependencies } from '../components/InventoryUnitDependencies.jsx';
 
 export function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
   const dialogRef = useSheetDialog(onClose);
@@ -12,13 +13,16 @@ export function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
   const [reorderLevel, setReorderLevel] = useState(draft.reorderLevel == null ? '' : String(draft.reorderLevel));
   const [notes, setNotes] = useState(draft.notes || '');
   const [formError, setFormError] = useState('');
+  const unitChange = useInventoryUnitDependencies(draft.id, draft, unit, quantity);
 
   async function submit(event) {
     event.preventDefault();
+    if (unitChange.blocked) return;
     setFormError('');
     try {
       await onSave({ item, sku, quantity: Number(quantity), unit, supplier, reorderLevel: reorderLevel === '' ? null : Number(reorderLevel), notes });
     } catch (failure) {
+      unitChange.updateFromError(failure);
       setFormError(failure.message);
     }
   }
@@ -56,8 +60,9 @@ export function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
           </div>
           <div className="field">
             <label htmlFor="inventory-unit">Unit</label>
-            <input id="inventory-unit" value={unit} onChange={(event) => setUnit(event.target.value)} maxLength={20} list="inventory-units" required />
+            <input id="inventory-unit" value={unit} onChange={(event) => { setUnit(event.target.value); setFormError(''); }} maxLength={20} list="inventory-units" required aria-describedby={unitChange.changing ? 'inventory-unit-dependencies' : undefined} />
             <datalist id="inventory-units"><option value="units" /><option value="kg" /><option value="boxes" /><option value="liters" /></datalist>
+            <InventoryUnitDependencies id="inventory-unit-dependencies" state={unitChange} />
           </div>
           <div className="field">
             <label htmlFor="inventory-reorder">Reorder level</label>
@@ -72,7 +77,7 @@ export function InventoryDialog({ draft, busy, onClose, onSave, onDelete }) {
         <div className="dialog-actions">
           {editing ? <button type="button" className="button button-danger-ghost dialog-delete" onClick={remove} disabled={busy}>Delete</button> : null}
           <button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" className="button button-primary" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add item'}</button>
+          <button type="submit" className="button button-primary" disabled={busy || unitChange.blocked}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add item'}</button>
         </div>
       </form>
     </dialog>

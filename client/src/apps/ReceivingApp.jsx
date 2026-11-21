@@ -1,57 +1,55 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Brand } from '../components/Brand.jsx';
 import { ToastStack } from '../components/ToastStack.jsx';
 import { ReceiveDeliveryDialog } from '../dialogs/ReceiveDeliveryDialog.jsx';
+import { DeliveryAmounts, DeliveryReceiptLinks, DeliveryStatus, DeliveryTiming } from '../components/DeliveryDetails.jsx';
 import { api } from '../lib/api.js';
-import { fullDate, scheduleDate } from '../lib/format.js';
+import { recordDeliveryReceipt } from '../lib/delivery.js';
 
 export function ReceivingApp() {
   const [status, setStatus] = useState(null);
   const [deliveries, setDeliveries] = useState(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [receiving, setReceiving] = useState(null);
   const [busy, setBusy] = useState(false);
+  const loadSequence = useRef(0);
 
   async function load() {
+    const sequence = ++loadSequence.current;
     try {
       const current = await api('/api/status');
+      if (sequence !== loadSequence.current) return;
       setStatus(current);
       if (current.auth.connected) {
         const data = await api('/api/deliveries');
+        if (sequence !== loadSequence.current) return;
         setDeliveries(data.items);
       } else {
         setDeliveries([]);
       }
       setError('');
     } catch (failure) {
-      setError(failure.message);
+      if (sequence === loadSequence.current) setError(failure.message);
     }
   }
 
   useEffect(() => {
     load();
     const timer = setInterval(load, 5000);
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); loadSequence.current += 1; };
   }, []);
 
-  async function confirmReceive(quantity, file) {
-    if (!receiving) return;
+  async function confirmReceive(delivery, quantity, file, requestId) {
     setBusy(true);
     setError('');
     try {
-      await api(`/api/deliveries/${encodeURIComponent(receiving.id)}/receive`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': file.type,
-          'X-File-Name': encodeURIComponent(file.name || 'receipt'),
-          'X-Received-Quantity': String(quantity),
-        },
-        body: file,
-      });
+      const result = await recordDeliveryReceipt(delivery, quantity, file, requestId);
       setReceiving(null);
+      setNotice(result.alreadyReceived ? 'This batch is already recorded.' : `Received ${quantity} ${delivery.unit}. Stock updated.`);
       await load();
     } catch (failure) {
-      setError(failure.message);
+      if (failure.data?.delivery) setDeliveries((items) => items?.map((item) => item.id === delivery.id ? failure.data.delivery : item));
       throw failure;
     } finally {
       setBusy(false);
@@ -59,6 +57,7 @@ export function ReceivingApp() {
   }
 
   const incoming = deliveries ? deliveries.filter((delivery) => delivery.status === 'incoming').length : 0;
+  const received = deliveries ? deliveries.filter((delivery) => delivery.status === 'received').length : 0;
 
   return (
     <main className="shell receiving-shell">
@@ -91,41 +90,31 @@ export function ReceivingApp() {
             <>
               <div className="record-summary">
                 <div><span className="metric-label">Awaiting receipt</span><strong>{incoming}</strong></div>
-                <div><span className="metric-label">Received</span><strong>{deliveries.length - incoming}</strong></div>
+                <div><span className="metric-label">Received</span><strong>{received}</strong></div>
                 <div><span className="metric-label">Total</span><strong>{deliveries.length}</strong></div>
               </div>
               <div className="record-list">
                 {deliveries.map((delivery) => {
-                  const received = delivery.status === 'received';
-                  const receivedQuantity = delivery.receivedQuantity ?? delivery.quantity;
+                  const open = delivery.status === 'incoming';
                   return (
                     <div className="delivery-row" key={delivery.id}>
                       <div className="delivery-main">
                         <div className="delivery-top">
                           <strong>{delivery.itemSku}</strong>
-                          <span className={`status-chip ${received ? 'completed' : 'scheduled'}`}>{received ? 'Received' : 'Incoming'}</span>
+                          <DeliveryStatus delivery={delivery} />
                           {delivery.poId ? <span className="delivery-po">{delivery.poId}</span> : <span className="delivery-po">Manual</span>}
                         </div>
-                        <span className="delivery-meta">{delivery.supplier || 'No supplier'} · arrives {scheduleDate(delivery.expectedArrival)}</span>
-                        {received ? (
-                          <span className="delivery-meta">
-                            Received {receivedQuantity} {delivery.unit}
-                            {delivery.receivedQuantity != null && delivery.receivedQuantity !== delivery.quantity ? ` (planned ${delivery.quantity} ${delivery.unit})` : ''}
-                            {' '}on {fullDate(delivery.receivedAt)}
-                          </span>
-                        ) : null}
+                        <span className="delivery-meta">{delivery.supplier || 'No supplier'}</span>
+                        <DeliveryTiming delivery={delivery} />
+                        <DeliveryReceiptLinks delivery={delivery} />
                       </div>
                       <div className="delivery-side">
-                        <span className="inventory-qty">{received ? receivedQuantity : delivery.quantity}<small>{delivery.unit}</small></span>
+                        <DeliveryAmounts delivery={delivery} />
                       </div>
                       <div className="delivery-actions">
-                        {received ? (
-                          delivery.receipt
-                            ? <a className="text-link" href={`/api/deliveries/${encodeURIComponent(delivery.id)}/receipt?v=${encodeURIComponent(delivery.receipt.createdAt)}`} target="_blank" rel="noreferrer">Receipt ↗</a>
-                            : <span className="muted">No receipt</span>
-                        ) : (
+                        {open ? (
                           <button type="button" className="button button-primary button-small" onClick={() => setReceiving(delivery)} disabled={busy}>Receive</button>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -146,7 +135,10 @@ export function ReceivingApp() {
       {receiving ? (
         <ReceiveDeliveryDialog delivery={receiving} busy={busy} onClose={() => { if (!busy) setReceiving(null); }} onConfirm={confirmReceive} />
       ) : null}
-      <ToastStack toasts={error ? [{ id: 'error', tone: 'error', message: error }] : []} onDismiss={() => setError('')} />
+      <ToastStack toasts={[
+        ...(error ? [{ id: 'error', tone: 'error', message: error }] : []),
+        ...(notice ? [{ id: 'notice', tone: 'success', message: notice }] : []),
+      ]} onDismiss={(id) => { if (id === 'error') setError(''); else setNotice(''); }} />
     </main>
   );
 }

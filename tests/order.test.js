@@ -12,8 +12,9 @@ test('ordering an approved PO requires and stores an incoming proof picture', as
   try {
     loaded = await import('../server/db.js?order-test');
     const { db, isoNow, releaseInstanceLock } = loaded;
-    const { getPo, transitionPo, setPoProof, schedulePo } = await import('../server/pos.js');
-    const { listDeliveries, updateDelivery, parseDeliveryInput } = await import('../server/deliveries.js');
+    const { getPo, transitionPo, setPoProof, schedulePo, nextPoId } = await import('../server/pos.js');
+    const { closeDelivery, listDeliveries, receiveDelivery, updateDelivery, parseDeliveryInput } = await import('../server/deliveries.js');
+    const { buildHome, projectStock } = await import('../server/dashboard.js');
 
     const account = 'gmail:test@example.com';
     const today = '2026-11-04';
@@ -87,7 +88,35 @@ test('ordering an approved PO requires and stores an incoming proof picture', as
     assert.equal(getPo(db, account, 'PO-0001', today).state, 'ordered');
     assert.deepEqual(db.prepare('SELECT data FROM po_proofs WHERE account_id=? AND po_id=?').get(account, 'PO-0001').data, corrected);
 
-    db.prepare('DELETE FROM emails WHERE account_id=? AND po_id=?').run(account, 'PO-0001');
+    const deliveryId = deliveries[0].id;
+    receiveDelivery(db, account, deliveryId, now, { quantity: 6, requestId: 'batch-1', expectedReceived: 0, proof: { data: proof } });
+    assert.deepEqual(buildHome(db, account, today).incoming.map(({ quantity }) => quantity), [4]);
+    const partial = schedulePo(db, account, 'PO-0001', { expectedArrival: '2026-11-12', note: 'Balance on a second truck' }, { today, now });
+    assert.equal(partial.delivery.receivedQuantity, 6);
+    assert.equal(partial.delivery.remainingQuantity, 4);
+    assert.equal(partial.delivery.scheduleNote, 'Balance on a second truck');
+    assert.equal(partial.assessment.decision, 'Recommended');
+    assert.deepEqual(partial.assessment.balances.at(-1), { date: '2026-11-13', before: -4, after: 0 });
+    assert.equal(projectStock(db, account, 'SKU-0001', 30, today).endBalance, 0);
+    assert.throws(() => updateDelivery(db, account, deliveryId, { ...deliveryInput, quantity: 9 }, now, 'Count updated'), /fixed after the first receipt/);
+    assert.throws(() => closeDelivery(db, account, deliveryId, { reason: 'Supplier canceled', expectedReceived: 0 }, now), /updated balance/i);
+    const closed = closeDelivery(db, account, deliveryId, { reason: 'Supplier canceled', expectedReceived: 6 }, now);
+    assert.equal(closed.status, 'canceled');
+    assert.equal(closed.canceledQuantity, 4);
+    assert.equal(closed.remainingQuantity, 0);
+    assert.equal(closed.receipts[0].quantity, 6);
+    assert.deepEqual(buildHome(db, account, today).incoming, []);
+    assert.equal(projectStock(db, account, 'SKU-0001', 30, today).endBalance, -4);
+    const closedPo = getPo(db, account, 'PO-0001', today);
+    assert.equal(closedPo.quantity, 10);
+    assert.deepEqual(closedPo.assessment.balances.at(-1), { date: '2026-11-13', before: -4, after: -4 });
+    assert.deepEqual(closedPo.assessment.timingConflicts, []);
+    assert.match(closedPo.events.map(({ reason }) => reason).join('\n'), /Closed 4 units.*Supplier canceled/);
+    assert.throws(() => schedulePo(db, account, 'PO-0001', { expectedArrival: '2026-11-15', note: 'New date' }, { today, now }), /no open balance/);
+
+    const { clearSavedEmails } = await import('../server/email-maintenance.js');
+    clearSavedEmails(db, account, now);
+    assert.equal(nextPoId(db, account), 'PO-0002', 'a new PO cannot inherit the delivery or receipts of a cleared PO');
     const afterClear = setPoProof(db, account, 'PO-0001', { mimeType: 'image/png', fileName: 'after-clear.png', data: proof }, now);
     assert.equal(afterClear.fileName, 'after-clear.png', 'a linked delivery can keep its proof correctable after saved orders are cleared');
 

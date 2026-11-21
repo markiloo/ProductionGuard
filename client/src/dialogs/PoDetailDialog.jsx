@@ -3,6 +3,7 @@ import { AssessmentChip, StateChip } from '../components/Chips.jsx';
 import { PO_STATES } from '../lib/constants.js';
 import { fullDate, metricDate, scheduleDate, warningText } from '../lib/format.js';
 import { useSheetDialog } from '../hooks/useSheetDialog.js';
+import { DeliveryAmounts, DeliveryReceiptLinks, DeliveryStatus, DeliveryTiming } from '../components/DeliveryDetails.jsx';
 
 export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, onClose, onAction, onOrder, onUpdateProof, onReschedule, onCorrect }) {
   const dialogRef = useSheetDialog(onClose);
@@ -282,7 +283,12 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
           ) : null}
 
           {po.delivery ? (
-            <p className="review-note">Linked delivery: {po.delivery.quantity} {po.delivery.unit} due {scheduleDate(po.delivery.expectedArrival)} ({po.delivery.status}).</p>
+            <section className="linked-delivery" aria-label="Linked delivery">
+              <div><strong>Linked delivery</strong> <DeliveryStatus delivery={po.delivery} /></div>
+              <DeliveryAmounts delivery={po.delivery} />
+              <DeliveryTiming delivery={po.delivery} />
+              <DeliveryReceiptLinks delivery={po.delivery} />
+            </section>
           ) : null}
 
           {po.proof || po.state === 'ordered' ? (
@@ -429,9 +435,9 @@ export function PoDetailDialog({ po, loading, error, busy, message, skuOptions, 
             ) : null}
             {po.state === 'ordered' ? (
               <>
-                {po.delivery?.status === 'received' ? null : (
+                {!po.delivery || po.delivery.status === 'incoming' ? (
                   <button type="button" className="button button-secondary button-small" onClick={openReschedule} disabled={busy}>Reschedule delivery…</button>
-                )}
+                ) : null}
                 <button type="button" className="button button-secondary button-small" onClick={() => { setReplacingProof(true); setOrdering(false); setRescheduling(false); setProofError(''); setProofFile(null); setProofPreview(''); }}>
                   {po.proof ? 'Replace proof…' : 'Add proof…'}
                 </button>
